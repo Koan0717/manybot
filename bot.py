@@ -132,7 +132,7 @@ class MultiGuildBot(commands.Bot):
         except Exception as e:
             print(f"[ERROR] Failed to load antigrief settings: {e}")
 
-        # Cogsのロード（Phase 1）
+        # Cogsのロード
         cogs_to_load = [
             "cogs.evaluation",
             "cogs.interview",
@@ -140,6 +140,9 @@ class MultiGuildBot(commands.Bot):
             "cogs.ranking",
             "cogs.logging_cog",
             "cogs.admin",
+            "cogs.reaction_roles",
+            "cogs.tickets",
+            "cogs.utility",
         ]
         for cog in cogs_to_load:
             try:
