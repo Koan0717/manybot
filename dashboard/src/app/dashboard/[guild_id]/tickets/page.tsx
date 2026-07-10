@@ -1,0 +1,1 @@
+export default function Page() { return <div className='max-w-4xl mx-auto'><h1 className='text-3xl font-bold mb-8'>Tickets 設定</h1><div className='text-zinc-400'>開発中...</div></div>; }
