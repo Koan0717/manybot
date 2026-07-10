@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Evalia Dashboard",
-  description: "Dashboard for Discord Bot",
+  title: "Many Dashboard",
+  description: "Web Dashboard for Many BOT",
 };
 
 export default function RootLayout({

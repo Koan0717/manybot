@@ -22,10 +22,9 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-zinc-900 text-white">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm">
-        <h1 className="text-4xl font-bold mb-8 text-center text-red-500">Evalia BOT Dashboard</h1>
-        
-        <div className="bg-zinc-800 p-6 rounded-xl shadow-lg border border-zinc-700">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-4xl font-bold mb-8 text-center text-red-500">Many bot Dashboard</h1>
+        <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700">
           <h2 className="text-2xl mb-4 border-b border-zinc-600 pb-2">サーバー設定</h2>
           
           <div className="space-y-4">
