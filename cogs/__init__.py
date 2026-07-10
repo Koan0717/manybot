@@ -1,1 +1,1 @@
-# cogs package
+# Cogs package

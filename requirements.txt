@@ -1,6 +1,7 @@
 discord.py>=2.3.0
-asyncpg
 python-dotenv
-Pillow
-aiohttp
+aiosqlite
+asyncpg
 flask
+Pillow
+

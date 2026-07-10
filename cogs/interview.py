@@ -1,106 +1,69 @@
-"""
-cogs/interview.py - 面接・入界フロー
-"""
 import discord
 from discord.ext import commands
 from discord import app_commands
 import database
 from helpers import (
-    get_setting, get_role_by_setting,
-    has_interviewer_role, has_admin_role, send_log
+    get_setting, get_role_by_setting, has_interviewer_role,
+    NEW_MEMBER_ROLE_NAME, PENDING_MEMBER_ROLE_NAME, INITIAL_COINS, send_log
 )
-from config import INITIAL_COINS_DEFAULT
 
-
-# ============================================================
-# 入界手続きモーダル（自己入界ボタン用）
-# ============================================================
 class InterviewNicknameModal(discord.ui.Modal, title='入界手続き：名前の設定'):
-    name_input = discord.ui.TextInput(
-        label='サーバーでの名前（ニックネーム）',
-        placeholder='例: ヤマダ太郎',
-        max_length=32,
-        required=True
-    )
-
+    name_input = discord.ui.TextInput(label='サーバーでの名前（ニックネーム）', placeholder='例: ヤマダ太郎', max_length=32, required=True)
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         bot = interaction.client
-        guild = interaction.guild
-        guild_id = guild.id
-        user = interaction.user
-
-        new_role_id = get_setting(bot, guild_id, "NEW_MEMBER_ROLE_ID")
-        pending_role_id = get_setting(bot, guild_id, "PENDING_MEMBER_ROLE_ID")
-        new_role     = guild.get_role(int(new_role_id))     if new_role_id     else None
-        pending_role = guild.get_role(int(pending_role_id)) if pending_role_id else None
-
+        new_role = get_role_by_setting(bot, interaction.guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
+        pending_role = get_role_by_setting(bot, interaction.guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
+        
         if not new_role:
-            return await interaction.followup.send("エラー: 新メンバーロールが設定されていません。管理者に連絡してください。", ephemeral=True)
-        if new_role in user.roles:
-            return await interaction.followup.send("既に手続きは完了しています。", ephemeral=True)
-
-        # 初期コイン発行済みチェック
-        if await database.is_initial_issued(guild_id, user.id):
-            return await interaction.followup.send("既に初期通貨が発行されています。", ephemeral=True)
-
+            await interaction.followup.send(f"エラー: ロール「{NEW_MEMBER_ROLE_NAME}」が見つかりません。", ephemeral=True)
+            return
+        if new_role in interaction.user.roles:
+            await interaction.followup.send("既に手続きは完了しています。", ephemeral=True)
+            return
+            
         try:
-            nick_ok = True
+            nick_success = True
             try:
-                await user.edit(nick=self.name_input.value)
+                await interaction.user.edit(nick=self.name_input.value)
             except discord.Forbidden:
-                nick_ok = False
+                nick_success = False
 
-            await user.add_roles(new_role)
-            if pending_role and pending_role in user.roles:
-                await user.remove_roles(pending_role)
+            await interaction.user.add_roles(new_role)
+            if pending_role and pending_role in interaction.user.roles:
+                await interaction.user.remove_roles(pending_role)
+                
+            initial_coins = get_setting(bot, "INITIAL_COINS") or INITIAL_COINS
+            currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
+            await database.add_balance(interaction.guild.id, interaction.user.id, initial_coins)
+            await database.mark_initial_issued(interaction.user.id)
 
-            initial_coins = get_setting(bot, guild_id, "INITIAL_COINS") or INITIAL_COINS_DEFAULT
-            currency_name = get_setting(bot, guild_id, "CURRENCY_NAME") or "コイン"
-            await database.add_balance(guild_id, user.id, int(initial_coins))
-            await database.mark_initial_issued(guild_id, user.id)
-
-            # 通貨ログ
-            log_embed = discord.Embed(
-                title="🪙 初期給与（自己入界）",
+            # 通貨ログ送信
+            embed_log = discord.Embed(
+                title="🪙 初期給与 (自己入界)",
+                description="新規ユーザーの自己入界手続きに伴い、初期給与が発行されました。",
                 color=discord.Color.gold(),
                 timestamp=discord.utils.utcnow()
             )
-            log_embed.add_field(name="対象者", value=f"{user.mention} (ID:{user.id})", inline=True)
-            log_embed.add_field(name="発行額", value=f"{int(initial_coins):,} {currency_name}", inline=True)
-            await send_log(bot, guild, "currency", log_embed)
-
-            msg = (
-                f"✅ 完了！名前を「{self.name_input.value}」にし、{int(initial_coins):,} {currency_name} を発行しました。"
-                if nick_ok else
-                f"✅ 完了！{int(initial_coins):,} {currency_name} を発行しました。（名前変更は権限不足のためスキップ）"
-            )
-            await interaction.followup.send(msg, ephemeral=True)
-
+            embed_log.add_field(name="対象者", value=f"{interaction.user.mention} ({interaction.user.id})", inline=True)
+            embed_log.add_field(name="発行額", value=f"{initial_coins:,} {currency_name}", inline=True)
+            await send_log(bot, interaction.guild, "currency", embed_log)
+            
+            if nick_success:
+                await interaction.followup.send(f"✅ 完了！名前を「{self.name_input.value}」にし、{initial_coins} {currency_name} を発行しました。", ephemeral=True)
+            else:
+                await interaction.followup.send(f"✅ 完了！{initial_coins} {currency_name} を発行しました。（名前変更は権限不足のためスキップされました）", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
+            await interaction.followup.send(f"❌ エラーが発生しました: {e}。Botのロール順位等を確認してください。", ephemeral=True)
 
-
-# ============================================================
-# 入界手続きパネルView（persistent）
-# ============================================================
 class InterviewPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-
-    @discord.ui.button(
-        label="入界手続きを開始",
-        style=discord.ButtonStyle.success,
-        emoji="📝",
-        custom_id="persistent_interview_btn"
-    )
-    async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        
+    @discord.ui.button(label="入界手続きを開始", style=discord.ButtonStyle.success, emoji="📝", custom_id="persistent_interview_btn")
+    async def start_button(self, interaction, button):
         await interaction.response.send_modal(InterviewNicknameModal())
 
-
-# ============================================================
-# /面接官 コマンドグループ
-# ============================================================
 class InterviewerGroup(app_commands.Group):
     def __init__(self, bot):
         super().__init__(name="面接官", description="面接官専用コマンド")
@@ -109,166 +72,148 @@ class InterviewerGroup(app_commands.Group):
     @app_commands.command(name="help", description="面接官コマンドの使い方を表示します")
     async def show_help(self, interaction: discord.Interaction):
         embed = discord.Embed(
-            title="🎤 面接官コマンド一覧",
+            title="🎤 面接官用コマンドの使い方",
+            description="新規メンバーの入界手続きの処理を行うことができます。",
             color=discord.Color.blue()
         )
-        embed.add_field(
-            name="/面接官 入界許可 <ユーザー>",
-            value="待機メンバーの入界手続き（ロール付与・初期通貨発行）を完了します。",
-            inline=False
-        )
-        embed.add_field(
-            name="/面接官 入界パネル設置",
-            value="自己入界ボタンパネルをこのチャンネルに設置します。",
-            inline=False
-        )
+        embed.add_field(name="1. /面接官 入界許可 <ユーザー>", value="待機メンバーの入界手続き（仮ロール付与、初期通貨付与、ログ出力など）を完了します。", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="入界許可", description="【面接官専用】待機メンバーの入界手続きを完了します")
+    def has_interviewer_permission(self):
+        async def predicate(interaction: discord.Interaction):
+            if not interaction.guild: return False
+            if has_interviewer_role(self.bot, interaction.user):
+                return True
+            await interaction.response.send_message("このコマンドを実行する権限がありません（面接官ロールが必要です）。", ephemeral=True)
+            return False
+        return app_commands.check(predicate)
+
+    @app_commands.command(name="入界許可", description="【面接官専用】待機メンバーの入界手続き（仮ロール付与、初期通貨付与など）を完了します")
     @app_commands.describe(user="入界を許可するユーザー")
     async def execute_interview(self, interaction: discord.Interaction, user: discord.Member):
-        if not has_interviewer_role(self.bot, interaction.user):
-            return await interaction.response.send_message("面接官ロールが必要です。", ephemeral=True)
-        if not interaction.guild:
-            return
-
+        bot = self.bot
+        if not has_interviewer_role(bot, interaction.user):
+            return await interaction.response.send_message("このコマンドを実行する権限がありません（面接官ロールが必要です）。", ephemeral=True)
+            
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        guild_id = guild.id
-
-        new_role_id     = get_setting(self.bot, guild_id, "NEW_MEMBER_ROLE_ID")
-        pending_role_id = get_setting(self.bot, guild_id, "PENDING_MEMBER_ROLE_ID")
-        new_role     = guild.get_role(int(new_role_id))     if new_role_id     else None
-        pending_role = guild.get_role(int(pending_role_id)) if pending_role_id else None
-
+        new_role = get_role_by_setting(bot, interaction.guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
+        pending_role = get_role_by_setting(bot, interaction.guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
+        
         if not new_role:
-            return await interaction.followup.send("エラー: 新メンバーロールが設定されていません。", ephemeral=True)
+            return await interaction.followup.send(f"エラー: ロール「{NEW_MEMBER_ROLE_NAME}」が見つかりません。", ephemeral=True)
+            
         if new_role in user.roles:
             return await interaction.followup.send(f"{user.display_name} は既に手続きが完了しています。", ephemeral=True)
-
-        # 初期コイン発行済みチェック
-        if await database.is_initial_issued(guild_id, user.id):
-            return await interaction.followup.send(f"{user.display_name} には既に初期通貨が発行されています。", ephemeral=True)
-
+            
         try:
-            # チャンネル履歴から希望ニックネームを取得
+            # --- 追加：チャンネル履歴から希望する名前（ニックネーム）を取得 ---
             proposed_nick = None
-            nick_status = ""
-            duplicate_warning = ""
-
             try:
-                async for msg in interaction.channel.history(limit=50):
-                    if msg.author.id == user.id and msg.content.strip():
-                        proposed_nick = msg.content.strip()[:32]
-                        break
+                async for message in interaction.channel.history(limit=50):
+                    if message.author.id == user.id:
+                        content = message.content.strip()
+                        if content:
+                            proposed_nick = content
+                            break
             except Exception as e:
-                print(f"[WARN] History fetch for nick: {e}")
+                print(f"[WARNING] Failed to fetch channel history for nickname: {e}")
 
+            nick_change_status = ""
+            duplicate_warning = ""
+            
             if proposed_nick:
-                # 重複ニックネームチェック
-                dup_member = None
-                for m in guild.members:
-                    if m.id == user.id:
+                if len(proposed_nick) > 32:
+                    proposed_nick = proposed_nick[:32]
+                
+                # 重複ユーザーの検索 (対象ユーザー自身は除く、かつ入界待ちロールを持っていない人)
+                duplicate_member = None
+                target_name_lower = proposed_nick.lower()
+                for member in interaction.guild.members:
+                    if member.id == user.id:
                         continue
-                    if pending_role and pending_role in m.roles:
+                    # 入界待ちロールを持っている人は重複チェックから除外する
+                    if pending_role and pending_role in member.roles:
                         continue
-                    names = {(m.nick or "").lower(), m.display_name.lower(), m.name.lower()}
-                    if proposed_nick.lower() in names:
-                        dup_member = m
+                        
+                    m_nick = (member.nick or "").strip().lower()
+                    m_disp = (member.display_name or "").strip().lower()
+                    m_name = (member.name or "").strip().lower()
+                    
+                    if m_nick == target_name_lower or m_disp == target_name_lower or m_name == target_name_lower:
+                        duplicate_member = member
                         break
-
-                if dup_member:
-                    duplicate_warning = f"\n⚠️ 同名ユーザー {dup_member.mention} ({dup_member.display_name}) が存在します。"
+                
+                # 重複が見つかった場合の処理
+                if duplicate_member:
+                    # 面接官にだけ見える警告文
+                    duplicate_warning = f"\n⚠️ **警告**: サーバー内に既に同名（または類似名）のユーザー {duplicate_member.mention} ({duplicate_member.display_name}) が存在します。"
+                    
+                    # 実行した場所に送信する全体向け警告文（使用中のメンバーは書かない）
                     try:
                         await interaction.channel.send(
-                            f"⚠️ **名前重複警告**: {user.mention} が希望した名前「{proposed_nick}」は既に使用されています。"
+                            f"⚠️ **名前重複の警告**:\n新規入界者 {user.mention} が希望した名前「{proposed_nick}」は、既に使用されている名前です。"
                         )
-                    except Exception:
-                        pass
-
+                    except Exception as e:
+                        print(f"[WARNING] Failed to send duplicate warning message to channel: {e}")
+                
                 try:
                     await user.edit(nick=proposed_nick)
-                    nick_status = f"\n✅ 名前を「{proposed_nick}」に変更しました。{duplicate_warning}"
+                    nick_change_status = f"\n✅ 名前を「{proposed_nick}」に変更しました。{duplicate_warning}"
                 except discord.Forbidden:
-                    nick_status = f"\n⚠️ 権限不足で名前を変更できませんでした。{duplicate_warning}"
+                    nick_change_status = f"\n⚠️ 権限不足のため名前を変更できませんでした（Botのロール順位や権限を確認してください）。{duplicate_warning}"
                 except Exception as e:
-                    nick_status = f"\n❌ 名前変更エラー: {e}{duplicate_warning}"
+                    nick_change_status = f"\n❌ 名前変更中にエラーが発生しました: {e}{duplicate_warning}"
             else:
-                nick_status = "\nℹ️ チャンネル履歴にメッセージが見つからなかったため名前変更はスキップ。"
+                nick_change_status = "\nℹ️ チャンネル履歴に対象ユーザーのメッセージが見つからなかったため、名前変更はスキップされました。"
 
-            # ロール付与
             await user.add_roles(new_role)
             if pending_role and pending_role in user.roles:
                 await user.remove_roles(pending_role)
+                
+            initial_coins = get_setting(bot, "INITIAL_COINS") or INITIAL_COINS
+            currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
+            await database.add_balance(interaction.guild.id, user.id, initial_coins)
+            await database.mark_initial_issued(user.id)
+            
+            await interaction.followup.send(f"✅ {user.mention} の入界手続きを完了しました！（{initial_coins} {currency_name} 発行済み）{nick_change_status}", ephemeral=True)
 
-            initial_coins = get_setting(self.bot, guild_id, "INITIAL_COINS") or INITIAL_COINS_DEFAULT
-            currency_name = get_setting(self.bot, guild_id, "CURRENCY_NAME") or "コイン"
-            await database.add_balance(guild_id, user.id, int(initial_coins))
-            await database.mark_initial_issued(guild_id, user.id)
-
-            await interaction.followup.send(
-                f"✅ {user.mention} の入界手続きを完了！（{int(initial_coins):,} {currency_name} 発行済み）{nick_status}",
-                ephemeral=True
-            )
-
-            # 通貨ログ
-            cur_embed = discord.Embed(
-                title="🪙 初期給与（面接官許可）",
+            # 通貨ログ送信
+            embed_log = discord.Embed(
+                title="🪙 初期給与 (面接官許可)",
+                description="面接官による入界許可に伴い、初期給与が発行されました。",
                 color=discord.Color.gold(),
                 timestamp=discord.utils.utcnow()
             )
-            cur_embed.add_field(name="面接官", value=f"{interaction.user.mention} (ID:{interaction.user.id})", inline=True)
-            cur_embed.add_field(name="対象者", value=f"{user.mention} (ID:{user.id})", inline=True)
-            cur_embed.add_field(name="発行額", value=f"{int(initial_coins):,} {currency_name}", inline=True)
-            await send_log(self.bot, guild, "currency", cur_embed)
+            embed_log.add_field(name="面接官", value=f"{interaction.user.mention} ({interaction.user.id})", inline=True)
+            embed_log.add_field(name="対象者", value=f"{user.mention} ({user.id})", inline=True)
+            embed_log.add_field(name="発行額", value=f"{initial_coins:,} {currency_name}", inline=True)
+            await send_log(bot, interaction.guild, "currency", embed_log)
 
-            # 面接ログ記録
-            await database.add_interviewer_log(guild_id, interaction.user.id, user.id)
-            count = await database.get_interviewer_count(guild_id, interaction.user.id)
-
+            # 面接実績の記録と累計取得
+            await database.add_interviewer_log(interaction.user.id, user.id, interaction.guild.id)
+            interviewer_count = await database.get_interviewer_count(interaction.user.id)
+            
+            # 接続VC名の取得
             vc_name = "❌ VC未接続"
             if interaction.user.voice and interaction.user.voice.channel:
                 vc_name = f"🔊 {interaction.user.voice.channel.name}"
 
-            iv_embed = discord.Embed(
+            # 面接官ログ送信
+            embed_interviewer = discord.Embed(
                 title="📝 面接官アクション: 入界許可",
+                description="面接官による入界許可アクションが実行されました。",
                 color=discord.Color.purple(),
                 timestamp=discord.utils.utcnow()
             )
-            iv_embed.add_field(name="面接官",       value=f"{interaction.user.mention} (ID:{interaction.user.id})", inline=False)
-            iv_embed.add_field(name="許可されたユーザー", value=f"{user.mention} (ID:{user.id})", inline=False)
-            iv_embed.add_field(name="実行場所",     value=vc_name, inline=True)
-            iv_embed.add_field(name="対応実績",     value=f"累計 {count} 人目", inline=True)
-            await send_log(self.bot, guild, "interviewer", iv_embed)
-
+            embed_interviewer.add_field(name="面接官", value=f"{interaction.user.mention} (ID: {interaction.user.id})", inline=False)
+            embed_interviewer.add_field(name="許可されたユーザー", value=f"{user.mention} (ID: {user.id})", inline=False)
+            embed_interviewer.add_field(name="実行場所", value=vc_name, inline=True)
+            embed_interviewer.add_field(name="対応実績", value=f"累計 {interviewer_count} 人目の対応", inline=True)
+            
+            await send_log(bot, interaction.guild, "interviewer", embed_interviewer)
         except Exception as e:
-            await interaction.followup.send(f"❌ エラー: {e}", ephemeral=True)
+            await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
-    @app_commands.command(name="入界パネル設置", description="【管理者専用】自己入界ボタンパネルをこのチャンネルに設置します")
-    async def setup_panel(self, interaction: discord.Interaction):
-        if not has_admin_role(self.bot, interaction.user):
-            return await interaction.response.send_message("管理者専用です。", ephemeral=True)
-        if not interaction.guild:
-            return
-
-        currency_name = get_setting(self.bot, interaction.guild.id, "CURRENCY_NAME") or "コイン"
-        initial_coins = get_setting(self.bot, interaction.guild.id, "INITIAL_COINS") or INITIAL_COINS_DEFAULT
-
-        embed = discord.Embed(
-            title="📝 入界手続き",
-            description=(
-                f"下のボタンを押して、サーバーでの名前（ニックネーム）を入力してください。\n"
-                f"手続き完了後、**{int(initial_coins):,} {currency_name}** が付与されます。"
-            ),
-            color=discord.Color.green()
-        )
-        await interaction.response.send_message("✅ パネルを設置しました。", ephemeral=True)
-        await interaction.channel.send(embed=embed, view=InterviewPanelView())
-
-
-# ============================================================
-# Cog 本体
-# ============================================================
 class Interview(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -279,7 +224,6 @@ class Interview(commands.Cog):
 
     async def cog_unload(self):
         self.bot.tree.remove_command("面接官")
-
 
 async def setup(bot):
     await bot.add_cog(Interview(bot))
