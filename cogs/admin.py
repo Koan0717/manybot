@@ -385,13 +385,13 @@ class EconomySettingsModal(discord.ui.Modal, title='経済設定の変更'):
             vc_coins = int(self.vc_coins.value)
             if coins < 0 or vc_coins < 0: raise ValueError
             
-            await database.save_setting("CURRENCY_NAME", self.cur_name.value)
-            await database.save_setting("INITIAL_COINS", coins)
-            await database.save_setting("VC_COINS_PER_MIN", vc_coins)
+            await database.save_setting(interaction.guild.id, "CURRENCY_NAME", self.cur_name.value)
+            await database.save_setting(interaction.guild.id, "INITIAL_COINS", coins)
+            await database.save_setting(interaction.guild.id, "VC_COINS_PER_MIN", vc_coins)
             
-            bot.bot_settings["CURRENCY_NAME"] = self.cur_name.value
-            bot.bot_settings["INITIAL_COINS"] = coins
-            bot.bot_settings["VC_COINS_PER_MIN"] = vc_coins
+            bot.bot_settings.setdefault(interaction.guild.id, {})["CURRENCY_NAME"] = self.cur_name.value
+            bot.bot_settings.setdefault(interaction.guild.id, {})["INITIAL_COINS"] = coins
+            bot.bot_settings.setdefault(interaction.guild.id, {})["VC_COINS_PER_MIN"] = vc_coins
             
             await interaction.response.send_message("✅ 経済設定を更新しました！", ephemeral=True)
             await update_main_admin_panel(interaction)
@@ -1531,8 +1531,8 @@ class TCRankToggleView(discord.ui.View):
     @discord.ui.button(style=discord.ButtonStyle.primary)
     async def toggle_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_val = not self.current_val
-        await database.save_setting("ENABLE_TC_RANK", self.current_val)
-        interaction.client.bot_settings["ENABLE_TC_RANK"] = self.current_val
+        await database.save_setting(interaction.guild.id, "ENABLE_TC_RANK", self.current_val)
+        interaction.client.bot_settings.setdefault(interaction.guild.id, {})["ENABLE_TC_RANK"] = self.current_val
         self.update_button()
         await interaction.response.edit_message(view=self)
         try:
@@ -1553,8 +1553,8 @@ class VCCoinsToggleView(discord.ui.View):
     @discord.ui.button(style=discord.ButtonStyle.primary)
     async def toggle_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_val = not self.current_val
-        await database.save_setting("ENABLE_VC_COINS", self.current_val)
-        interaction.client.bot_settings["ENABLE_VC_COINS"] = self.current_val
+        await database.save_setting(interaction.guild.id, "ENABLE_VC_COINS", self.current_val)
+        interaction.client.bot_settings.setdefault(interaction.guild.id, {})["ENABLE_VC_COINS"] = self.current_val
         self.update_button()
         await interaction.response.edit_message(view=self)
         try:
@@ -1580,8 +1580,8 @@ class MinusPunishmentToggleView(discord.ui.View):
         else:
             self.current_val = "evaluation_failure"
             
-        await database.save_setting("MINUS_PUNISHMENT_TYPE", self.current_val)
-        interaction.client.bot_settings["MINUS_PUNISHMENT_TYPE"] = self.current_val
+        await database.save_setting(interaction.guild.id, "MINUS_PUNISHMENT_TYPE", self.current_val)
+        interaction.client.bot_settings.setdefault(interaction.guild.id, {})["MINUS_PUNISHMENT_TYPE"] = self.current_val
         self.update_button()
         await interaction.response.edit_message(view=self)
         try:
@@ -1605,8 +1605,8 @@ class VCCoinsInputModal(discord.ui.Modal, title='VC浮上コイン数の設定')
         try:
             val = int(self.coins_input.value)
             if val < 0: raise ValueError
-            await database.save_setting("VC_COINS_PER_MIN", val)
-            interaction.client.bot_settings["VC_COINS_PER_MIN"] = val
+            await database.save_setting(interaction.guild.id, "VC_COINS_PER_MIN", val)
+            interaction.client.bot_settings.setdefault(interaction.guild.id, {})["VC_COINS_PER_MIN"] = val
             await interaction.response.send_message(f"✅ VC浮上コイン数を {val} に設定しました。", ephemeral=True)
             await update_main_admin_panel(interaction)
         except:
@@ -1633,12 +1633,12 @@ class BotSetupRoleSelect(discord.ui.RoleSelect):
         
         if "IDS" in self.key:
             ids = [r.id for r in val]
-            await database.save_setting(self.key, ids)
-            bot.bot_settings[self.key] = ids
+            await database.save_setting(interaction.guild.id, self.key, ids)
+            bot.bot_settings.setdefault(interaction.guild.id, {})[self.key] = ids
         else:
             rid = val[0].id
-            await database.save_setting(self.key, rid)
-            bot.bot_settings[self.key] = rid
+            await database.save_setting(interaction.guild.id, self.key, rid)
+            bot.bot_settings.setdefault(interaction.guild.id, {})[self.key] = rid
             
         await update_main_admin_panel(interaction)
 
@@ -1651,8 +1651,8 @@ class BotSetupChannelSelect(discord.ui.ChannelSelect):
         await interaction.response.defer(ephemeral=True)
         bot = interaction.client
         chan = self.values[0]
-        await database.save_setting(self.key, chan.id)
-        bot.bot_settings[self.key] = chan.id
+        await database.save_setting(interaction.guild.id, self.key, chan.id)
+        bot.bot_settings.setdefault(interaction.guild.id, {})[self.key] = chan.id
         await update_main_admin_panel(interaction)
 
 class BotSetupMainSelect(discord.ui.Select):

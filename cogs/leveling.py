@@ -43,7 +43,7 @@ class Leveling(commands.Cog):
                     if in_correct_category:
                         xp_reward = elapsed_minutes * VC_XP_PER_MIN
                         print(f"[DEBUG] VC XP Awarding: {member.display_name}")
-                        new_lv = await database.add_xp(interaction.guild.id, user_id, xp_reward, "vc")
+                        new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
                         if new_lv:
                             lv_channel = self.bot.get_channel(get_setting(self.bot, "LEVEL_UP_CHANNEL_ID"))
                             if lv_channel:
@@ -56,7 +56,7 @@ class Leveling(commands.Cog):
                         if coins_per_min is None: coins_per_min = 12
                         coins_reward = elapsed_minutes * coins_per_min
                         if coins_reward > 0:
-                            await database.add_balance(interaction.guild.id, user_id, coins_reward)
+                            await database.add_balance(member.guild.id, user_id, coins_reward)
                             print(f"[DEBUG] VC Coins Awarding: {member.display_name} - {coins_reward} coins")
                     
                     if member.voice.channel and member.voice.channel.category:
@@ -86,7 +86,7 @@ class Leveling(commands.Cog):
         if in_correct_category:
             last_xp_time = self.tc_xp_cooldowns.get(user_id)
             if not last_xp_time or (now - last_xp_time).total_seconds() > TC_XP_COOLDOWN:
-                new_lv = await database.add_xp(interaction.guild.id, user_id, TC_XP_REWARD, "tc")
+                new_lv = await database.add_xp(message.guild.id, user_id, TC_XP_REWARD, "tc")
                 self.tc_xp_cooldowns[user_id] = now
                 if new_lv:
                     lv_channel = self.bot.get_channel(get_setting(self.bot, "LEVEL_UP_CHANNEL_ID"))

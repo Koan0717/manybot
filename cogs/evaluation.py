@@ -227,7 +227,7 @@ class Evaluation(commands.Cog):
         bot = self.bot
         human_role = get_role_by_setting(bot, after.guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
         if human_role and human_role in after.roles and human_role not in before.roles:
-            existing = await database.get_evaluation_period(interaction.guild.id, after.id)
+            existing = await database.get_evaluation_period(after.guild.id, after.id)
             if not existing:
                 now = datetime.datetime.now(JST)
                 if 23 <= now.hour <= 23:
@@ -236,7 +236,7 @@ class Evaluation(commands.Cog):
                     start_time = now + datetime.timedelta(minutes=5)
                 
                 end_time = start_time + datetime.timedelta(days=14)
-                await database.add_evaluation_period(interaction.guild.id, after.id, start_time, end_time)
+                await database.add_evaluation_period(after.guild.id, after.id, start_time, end_time)
                 print(f"[Evaluation] Started for {after.display_name}: {start_time} to {end_time}")
 
         # 評価落ちロール付与検知
@@ -304,7 +304,7 @@ class Evaluation(commands.Cog):
                             )
                             
                             if not duplicate:
-                                period = await database.get_evaluation_period(interaction.guild.id, message.author.id)
+                                period = await database.get_evaluation_period(message.guild.id, message.author.id)
                                 if period:
                                     start_str = format_evaluation_datetime(period['start_time'])
                                     end_str = format_evaluation_datetime(period['end_time'])

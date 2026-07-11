@@ -1313,30 +1313,30 @@ async def save_auto_expectation_rates(bot, game_key, E):
         p_hif = 0.11 * k_lose
         p_los = 0.445 * k_lose
         
-        await database.save_setting("GAMBLE_CHINCHIRO_RATE_PINZORO", p_pin)
-        await database.save_setting("GAMBLE_CHINCHIRO_RATE_ARASHI", p_ara)
-        await database.save_setting("GAMBLE_CHINCHIRO_RATE_SHIGORO", p_shig)
-        await database.save_setting("GAMBLE_CHINCHIRO_RATE_NORMAL_WIN", p_norm)
-        await database.save_setting("GAMBLE_CHINCHIRO_RATE_HIFUMI", p_hif)
-        await database.save_setting("GAMBLE_CHINCHIRO_RATE_LOSE", p_los)
+        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_PINZORO", p_pin)
+        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_ARASHI", p_ara)
+        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_SHIGORO", p_shig)
+        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_NORMAL_WIN", p_norm)
+        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_HIFUMI", p_hif)
+        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_LOSE", p_los)
         
-        bot.bot_settings["GAMBLE_CHINCHIRO_RATE_PINZORO"] = p_pin
-        bot.bot_settings["GAMBLE_CHINCHIRO_RATE_ARASHI"] = p_ara
-        bot.bot_settings["GAMBLE_CHINCHIRO_RATE_SHIGORO"] = p_shig
-        bot.bot_settings["GAMBLE_CHINCHIRO_RATE_NORMAL_WIN"] = p_norm
-        bot.bot_settings["GAMBLE_CHINCHIRO_RATE_HIFUMI"] = p_hif
-        bot.bot_settings["GAMBLE_CHINCHIRO_RATE_LOSE"] = p_los
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_CHINCHIRO_RATE_PINZORO"] = p_pin
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_CHINCHIRO_RATE_ARASHI"] = p_ara
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_CHINCHIRO_RATE_SHIGORO"] = p_shig
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_CHINCHIRO_RATE_NORMAL_WIN"] = p_norm
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_CHINCHIRO_RATE_HIFUMI"] = p_hif
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_CHINCHIRO_RATE_LOSE"] = p_los
         
     elif game_key == "coinflip":
         p_win, _, _ = calculate_gamble_win_rates("coinflip", E)
         p_win_dec = p_win / 100.0
         p_lose_dec = max(0.0, 1.0 - p_win_dec)
         
-        await database.save_setting("GAMBLE_COINFLIP_RATE_WIN", p_win_dec)
-        await database.save_setting("GAMBLE_COINFLIP_RATE_LOSE", p_lose_dec)
+        await database.save_setting(interaction.guild.id, "GAMBLE_COINFLIP_RATE_WIN", p_win_dec)
+        await database.save_setting(interaction.guild.id, "GAMBLE_COINFLIP_RATE_LOSE", p_lose_dec)
         
-        bot.bot_settings["GAMBLE_COINFLIP_RATE_WIN"] = p_win_dec
-        bot.bot_settings["GAMBLE_COINFLIP_RATE_LOSE"] = p_lose_dec
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_COINFLIP_RATE_WIN"] = p_win_dec
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_COINFLIP_RATE_LOSE"] = p_lose_dec
         
     elif game_key == "slot":
         base_expected = 285.0 / 512.0
@@ -1346,15 +1346,15 @@ async def save_auto_expectation_rates(bot, game_key, E):
         p_triple = (6.0 / 512.0) * k
         p_double = (168.0 / 512.0) * k
         
-        await database.save_setting("GAMBLE_SLOT_RATE_7", p_7)
-        await database.save_setting("GAMBLE_SLOT_RATE_STAR", p_star)
-        await database.save_setting("GAMBLE_SLOT_RATE_THREE", p_triple)
-        await database.save_setting("GAMBLE_SLOT_RATE_TWO", p_double)
+        await database.save_setting(interaction.guild.id, "GAMBLE_SLOT_RATE_7", p_7)
+        await database.save_setting(interaction.guild.id, "GAMBLE_SLOT_RATE_STAR", p_star)
+        await database.save_setting(interaction.guild.id, "GAMBLE_SLOT_RATE_THREE", p_triple)
+        await database.save_setting(interaction.guild.id, "GAMBLE_SLOT_RATE_TWO", p_double)
         
-        bot.bot_settings["GAMBLE_SLOT_RATE_7"] = p_7
-        bot.bot_settings["GAMBLE_SLOT_RATE_STAR"] = p_star
-        bot.bot_settings["GAMBLE_SLOT_RATE_THREE"] = p_triple
-        bot.bot_settings["GAMBLE_SLOT_RATE_TWO"] = p_double
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_SLOT_RATE_7"] = p_7
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_SLOT_RATE_STAR"] = p_star
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_SLOT_RATE_THREE"] = p_triple
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_SLOT_RATE_TWO"] = p_double
         
     elif game_key == "blackjack":
         p_win, _, p_draw = calculate_gamble_win_rates("blackjack", E)
@@ -1366,28 +1366,28 @@ async def save_auto_expectation_rates(bot, game_key, E):
         p_bj = 0.05 * k_win
         p_los = max(0.0, 1.0 - p_win_dec - p_draw_dec)
         
-        await database.save_setting("GAMBLE_BLACKJACK_RATE_NORMAL_WIN", p_norm)
-        await database.save_setting("GAMBLE_BLACKJACK_RATE_BJ_WIN", p_bj)
-        await database.save_setting("GAMBLE_BLACKJACK_RATE_DRAW", p_draw_dec)
-        await database.save_setting("GAMBLE_BLACKJACK_RATE_LOSE", p_los)
+        await database.save_setting(interaction.guild.id, "GAMBLE_BLACKJACK_RATE_NORMAL_WIN", p_norm)
+        await database.save_setting(interaction.guild.id, "GAMBLE_BLACKJACK_RATE_BJ_WIN", p_bj)
+        await database.save_setting(interaction.guild.id, "GAMBLE_BLACKJACK_RATE_DRAW", p_draw_dec)
+        await database.save_setting(interaction.guild.id, "GAMBLE_BLACKJACK_RATE_LOSE", p_los)
         
-        bot.bot_settings["GAMBLE_BLACKJACK_RATE_NORMAL_WIN"] = p_norm
-        bot.bot_settings["GAMBLE_BLACKJACK_RATE_BJ_WIN"] = p_bj
-        bot.bot_settings["GAMBLE_BLACKJACK_RATE_DRAW"] = p_draw_dec
-        bot.bot_settings["GAMBLE_BLACKJACK_RATE_LOSE"] = p_los
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_BLACKJACK_RATE_NORMAL_WIN"] = p_norm
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_BLACKJACK_RATE_BJ_WIN"] = p_bj
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_BLACKJACK_RATE_DRAW"] = p_draw_dec
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_BLACKJACK_RATE_LOSE"] = p_los
         
     elif game_key == "roulette":
         r_win_2x = min(E / 2.0, 1.0)
         r_win_3x = min(E / 3.0, 1.0)
         r_win_36x = min(E / 36.0, 1.0)
         
-        await database.save_setting("GAMBLE_ROULETTE_WIN_RATE_2X", r_win_2x)
-        await database.save_setting("GAMBLE_ROULETTE_WIN_RATE_3X", r_win_3x)
-        await database.save_setting("GAMBLE_ROULETTE_WIN_RATE_36X", r_win_36x)
+        await database.save_setting(interaction.guild.id, "GAMBLE_ROULETTE_WIN_RATE_2X", r_win_2x)
+        await database.save_setting(interaction.guild.id, "GAMBLE_ROULETTE_WIN_RATE_3X", r_win_3x)
+        await database.save_setting(interaction.guild.id, "GAMBLE_ROULETTE_WIN_RATE_36X", r_win_36x)
         
-        bot.bot_settings["GAMBLE_ROULETTE_WIN_RATE_2X"] = r_win_2x
-        bot.bot_settings["GAMBLE_ROULETTE_WIN_RATE_3X"] = r_win_3x
-        bot.bot_settings["GAMBLE_ROULETTE_WIN_RATE_36X"] = r_win_36x
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_ROULETTE_WIN_RATE_2X"] = r_win_2x
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_ROULETTE_WIN_RATE_3X"] = r_win_3x
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_ROULETTE_WIN_RATE_36X"] = r_win_36x
 
 
 class GambleSettingsView(discord.ui.View):
@@ -1952,8 +1952,8 @@ class GambleDetailSettingsModal(discord.ui.Modal):
                     return await interaction.response.send_message("0以上の数値を入力してください。", ephemeral=True)
                     
             # 保存
-            await database.save_setting(self.key, val)
-            bot.bot_settings[self.key] = val
+            await database.save_setting(interaction.guild.id, self.key, val)
+            bot.bot_settings.setdefault(interaction.guild.id, {})[self.key] = val
             
             embed = discord.Embed(
                 title="✅ 設定更新完了",

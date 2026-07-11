@@ -281,7 +281,7 @@ class Ranking(commands.Cog):
                     xp_reward = elapsed_minutes * config.VC_XP_PER_MIN
                     category_name = member.voice.channel.category.name if member.voice.channel and member.voice.channel.category else "なし"
                     print(f"[DEBUG] VC XP Awarding: {member.display_name} in {category_name}")
-                    new_lv = await database.add_xp(interaction.guild.id, user_id, xp_reward, "vc")
+                    new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
                     
                     self.bot.vc_sessions[user_id] = last_reward_time + datetime.timedelta(minutes=elapsed_minutes)
                     
@@ -335,7 +335,7 @@ class Ranking(commands.Cog):
             if not last_xp_time or (now - last_xp_time).total_seconds() > config.TC_XP_COOLDOWN:
                 category_name = message.channel.category.name if message.channel.category else "なし"
                 print(f"[DEBUG] TC XP Awarding: {message.author.display_name} in {category_name}")
-                new_lv = await database.add_xp(interaction.guild.id, user_id, config.TC_XP_REWARD, "tc")
+                new_lv = await database.add_xp(message.guild.id, user_id, config.TC_XP_REWARD, "tc")
                 self.bot.tc_xp_cooldowns[user_id] = now
                 if new_lv:
                     lv_channel = self.bot.get_channel(config.get_setting(self.bot, "LEVEL_UP_CHANNEL_ID"))
@@ -374,7 +374,7 @@ class Ranking(commands.Cog):
                 duration_minutes = int((now_aware - join_time).total_seconds() / 60)
                 if duration_minutes > 0:
                     xp_reward = duration_minutes * config.VC_XP_PER_MIN
-                    new_lv = await database.add_xp(interaction.guild.id, user_id, xp_reward, "vc")
+                    new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
                     if new_lv:
                         lv_channel = self.bot.get_channel(config.get_setting(self.bot, "LEVEL_UP_CHANNEL_ID"))
                         if lv_channel:

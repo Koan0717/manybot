@@ -168,7 +168,7 @@ class Logging(commands.Cog):
                     for forum_id in cfg["forum_channel_ids"]:
                         forum_channel = self.bot.get_channel(forum_id)
                         if isinstance(forum_channel, discord.ForumChannel):
-                            period = await database.get_evaluation_period(interaction.guild.id, user_id)
+                            period = await database.get_evaluation_period(message.guild.id, user_id)
                             if period:
                                 start_str = config.format_evaluation_datetime(period['start_time'])
                                 end_str = config.format_evaluation_datetime(period['end_time'])
@@ -275,7 +275,7 @@ class Logging(commands.Cog):
     async def on_member_update(self, before, after):
         human_role = config.get_role_by_setting(self.bot, after.guild, "NEW_MEMBER_ROLE_ID", config.NEW_MEMBER_ROLE_NAME)
         if human_role and human_role in after.roles and human_role not in before.roles:
-            existing = await database.get_evaluation_period(interaction.guild.id, after.id)
+            existing = await database.get_evaluation_period(after.guild.id, after.id)
             if not existing:
                 now = datetime.datetime.now(config.JST)
                 if 23 <= now.hour <= 23:
@@ -284,7 +284,7 @@ class Logging(commands.Cog):
                     start_time = now + datetime.timedelta(minutes=5)
                 
                 end_time = start_time + datetime.timedelta(days=14)
-                await database.add_evaluation_period(interaction.guild.id, after.id, start_time, end_time)
+                await database.add_evaluation_period(after.guild.id, after.id, start_time, end_time)
                 print(f"[Evaluation] Started for {after.display_name}: {start_time} to {end_time}")
 
         # 評価落ちロール付与検知
