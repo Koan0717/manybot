@@ -33,6 +33,21 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [toggles, setToggles] = useState({
+    ENABLE_PRICE_MAIN_SUB: false,
+    ENABLE_PRICE_NEW_MEMBER: false,
+    ENABLE_PRICE_DOWNGRADE: false,
+    ENABLE_PRICE_VIOLATOR: false
+  });
+  
+  const defaultRolePrices = {
+    MAIN_SUB_MEMBER_ROLE: JSON.parse(JSON.stringify(defaultPrices)),
+    NEW_MEMBER_ROLE: JSON.parse(JSON.stringify(defaultPrices)),
+    DOWNGRADE_ROLE: JSON.parse(JSON.stringify(defaultPrices)),
+    VIOLATOR_ROLE: JSON.parse(JSON.stringify(defaultPrices)),
+  };
+  const [rolePrices, setRolePrices] = useState<any>(defaultRolePrices);
+
   // Panel deployment states
   const [selectedChannels, setSelectedChannels] = useState<{ [key: string]: string }>({});
   const [deploying, setDeploying] = useState<{ [key: string]: boolean }>({});
@@ -56,6 +71,19 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
         }
         setPrices(merged);
       }
+      
+      if (roomsData.toggles) {
+        setToggles(prev => ({ ...prev, ...roomsData.toggles }));
+      }
+      if (roomsData.role_prices) {
+        const mergedRolePrices = JSON.parse(JSON.stringify(defaultRolePrices));
+        for (const rp of roomsData.role_prices) {
+          if (mergedRolePrices[rp.role_key] && mergedRolePrices[rp.role_key][rp.room_type] && mergedRolePrices[rp.role_key][rp.room_type][rp.duration]) {
+            mergedRolePrices[rp.role_key][rp.room_type][rp.duration].price = rp.price;
+          }
+        }
+        setRolePrices(mergedRolePrices);
+      }
       if (!channelsData.error) {
         setChannels(channelsData.filter((c: any) => c.type === 0)); // Text channels
       }
@@ -71,10 +99,24 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
     setSaving(true);
     setError(null);
     try {
+      const flattenedRolePrices = [];
+      for (const [roleKey, roomTypes] of Object.entries(rolePrices)) {
+        for (const [roomType, durations] of Object.entries(roomTypes as any)) {
+          for (const [duration, data] of Object.entries(durations as any)) {
+            flattenedRolePrices.push({
+              role_key: roleKey,
+              room_type: roomType,
+              duration: parseInt(duration),
+              price: (data as any).price
+            });
+          }
+        }
+      }
+
       const res = await fetch(`/api/guilds/${guildId}/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', ROOM_PRICES: prices })
+        body: JSON.stringify({ action: 'save', ROOM_PRICES: prices, toggles, role_prices: flattenedRolePrices })
       });
       if (!res.ok) throw new Error('保存に失敗しました');
       alert('価格設定を保存しました');
@@ -108,6 +150,22 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
     } finally {
       setDeploying(prev => ({ ...prev, [panelType]: false }));
     }
+  };
+
+  const handleRolePriceChange = (roleKey: string, roomType: string, duration: string, newPrice: string) => {
+    setRolePrices((prev: any) => ({
+      ...prev,
+      [roleKey]: {
+        ...prev[roleKey],
+        [roomType]: {
+          ...prev[roleKey][roomType],
+          [duration]: {
+            ...prev[roleKey][roomType][duration],
+            price: parseInt(newPrice) || 0
+          }
+        }
+      }
+    }));
   };
 
   const handlePriceChange = (roomType: string, duration: string, newPrice: string) => {
@@ -194,6 +252,68 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
         </div>
       </div>
 
+      {/* --- ロール別特別料金設定 --- */}
+      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mb-8">
+        <h2 className="text-xl font-bold text-white mb-6 border-b border-zinc-700 pb-2">ロール別特別料金設定</h2>
+        <p className="text-sm text-zinc-400 mb-6">
+          特定のロールを持っているユーザーに対して、基本料金とは異なる特別料金を適用できます。
+          スイッチをオンにしたロールの料金設定が優先して適用されます。
+        </p>
+
+        <div className="space-y-6">
+          {[
+            { key: 'ENABLE_PRICE_MAIN_SUB', roleKey: 'MAIN_SUB_MEMBER_ROLE', label: '本・準メンバーロール' },
+            { key: 'ENABLE_PRICE_NEW_MEMBER', roleKey: 'NEW_MEMBER_ROLE', label: '仮メンバーロール' },
+            { key: 'ENABLE_PRICE_DOWNGRADE', roleKey: 'DOWNGRADE_ROLE', label: '評価落ちロール' },
+            { key: 'ENABLE_PRICE_VIOLATOR', roleKey: 'VIOLATOR_ROLE', label: '違反者ロール' },
+          ].map(setting => (
+            <div key={setting.key} className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-lg text-white">{setting.label} 特別料金</h3>
+                <label className="flex items-center cursor-pointer">
+                  <div className="relative">
+                    <input type="checkbox" className="sr-only" 
+                      checked={toggles[setting.key as keyof typeof toggles]}
+                      onChange={(e) => setToggles({...toggles, [setting.key]: e.target.checked})}
+                    />
+                    <div className={`block w-14 h-8 rounded-full transition-colors ${toggles[setting.key as keyof typeof toggles] ? 'bg-red-500' : 'bg-zinc-600'}`}></div>
+                    <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${toggles[setting.key as keyof typeof toggles] ? 'transform translate-x-6' : ''}`}></div>
+                  </div>
+                  <div className="ml-3 text-zinc-300 font-medium">
+                    {toggles[setting.key as keyof typeof toggles] ? '有効' : '無効'}
+                  </div>
+                </label>
+              </div>
+
+              {toggles[setting.key as keyof typeof toggles] && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4 pt-4 border-t border-zinc-700">
+                  {Object.entries(rolePrices[setting.roleKey]).map(([roomType, durations]: [string, any]) => (
+                    <div key={roomType} className="bg-zinc-800 rounded p-3">
+                      <h4 className="text-sm font-bold text-zinc-300 mb-2">{roomType}</h4>
+                      <div className="space-y-2">
+                        {Object.entries(durations).map(([dur, data]: [string, any]) => (
+                          <div key={dur} className="flex items-center justify-between text-sm">
+                            <span className="text-zinc-400">{dur}時間:</span>
+                            <div className="flex items-center">
+                              <input 
+                                type="number"
+                                value={data.price}
+                                onChange={e => handleRolePriceChange(setting.roleKey, roomType, dur, e.target.value)}
+                                className="w-24 bg-zinc-700 border border-zinc-600 rounded px-2 py-1 text-white focus:outline-none focus:border-red-500 text-right"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* --- パネル設置 --- */}
       <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700">
         <h2 className="text-xl font-bold mb-6 border-b border-zinc-700 pb-2 text-white">パネル設置 (遠隔操作)</h2>
@@ -205,7 +325,8 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
         <div className="space-y-4">
           {[
             { id: 'inn_combined', name: '一般宿・高級宿セットパネル', desc: '宿と高級宿の両方のボタンがあるパネル' },
-            { id: 'game_vc', name: 'ゲームVC・賭博VCセットパネル', desc: 'ゲームVCと賭博VCの両方のボタンがあるパネル' },
+            { id: 'game_vc', name: 'ゲームVC作成パネル', desc: 'ゲームVCを作成するパネル' },
+            { id: 'gamble_vc', name: '賭博VC作成パネル', desc: '賭博VCを作成するパネル' },
             { id: 'custom_vc', name: 'カスタムVC作成パネル', desc: '任意の名前・人数のカスタムVCを作成するパネル' },
           ].map(panel => (
             <div key={panel.id} className="flex flex-col md:flex-row items-center justify-between bg-zinc-900 p-4 rounded border border-zinc-700 gap-4">

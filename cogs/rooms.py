@@ -32,11 +32,12 @@ class LimitModal(discord.ui.Modal, title='人数制限の設定'):
 
 # --- 延長選択View ---
 class ExtendInnSelectView(discord.ui.View):
-    def __init__(self, bot, is_free: bool):
+    def __init__(self, bot, is_free: bool, member=None):
         super().__init__(timeout=60)
         self.bot = bot
-        p12 = get_room_settings(self.bot)["宿"][12]["price"]
-        p24 = get_room_settings(self.bot)["宿"][24]["price"]
+        self.member = member
+        p12 = get_room_price(self.bot, getattr(self, "member", None), "宿", 12)
+        p24 = get_room_price(self.bot, getattr(self, "member", None), "宿", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four.label = f"24時間 ({p24:,} {currency_name})"
@@ -63,8 +64,9 @@ class ExtendLuxuryInnSelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.bot = bot
         self.member = member
-        p12 = get_luxury_inn_price(self.bot, self.member, 12)
-        p24 = get_luxury_inn_price(self.bot, self.member, 24)
+        self.member = member
+        p12 = get_room_price(self.bot, self.member, "高級宿", 12)
+        p24 = get_room_price(self.bot, self.member, "高級宿", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four.label = f"24時間 ({p24:,} {currency_name})"
@@ -84,11 +86,12 @@ class ExtendLuxuryInnSelectView(discord.ui.View):
         await interaction.response.edit_message(content="キャンセルしました。", view=None)
 
 class ExtendGameVCSelectView(discord.ui.View):
-    def __init__(self, bot):
+    def __init__(self, bot, member=None):
         super().__init__(timeout=60)
         self.bot = bot
-        p12 = get_room_settings(self.bot)["ゲームVC"][12]["price"]
-        p24 = get_room_settings(self.bot)["ゲームVC"][24]["price"]
+        self.member = member
+        p12 = get_room_price(self.bot, self.member, "ゲームVC", 12)
+        p24 = get_room_price(self.bot, self.member, "ゲームVC", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four.label = f"24時間 ({p24:,} {currency_name})"
@@ -108,11 +111,12 @@ class ExtendGameVCSelectView(discord.ui.View):
         await interaction.response.edit_message(content="キャンセルしました。", view=None)
 
 class ExtendGambleVCSelectView(discord.ui.View):
-    def __init__(self, bot):
+    def __init__(self, bot, member=None):
         super().__init__(timeout=60)
         self.bot = bot
-        p12 = get_room_settings(self.bot)["賭博VC"][12]["price"]
-        p24 = get_room_settings(self.bot)["賭博VC"][24]["price"]
+        self.member = member
+        p12 = get_room_price(self.bot, self.member, "賭博VC", 12)
+        p24 = get_room_price(self.bot, self.member, "賭博VC", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four.label = f"24時間 ({p24:,} {currency_name})"
@@ -143,7 +147,7 @@ async def process_room_extension(bot, interaction: discord.Interaction, room_typ
         return await interaction.edit_original_response(content="延長は作成者または管理者のみ可能です。", view=None)
         
     if room_type == "高級宿":
-        price = get_luxury_inn_price(bot, interaction.user, duration)
+        price = get_room_price(bot, interaction.user, room_type, duration)
     elif room_type == "宿" and is_free_inn_member(bot, interaction.user):
         price = 0
 
@@ -203,7 +207,7 @@ async def handle_extend(bot, interaction: discord.Interaction):
         view = ExtendLuxuryInnSelectView(bot, interaction.user)
         await interaction.response.send_message("「高級宿」の延長期間を選択してください。", view=view, ephemeral=True)
     elif room_type == "カスタムVC":
-        price = get_room_settings(bot)["カスタムVC"][24]["price"]
+        price = get_room_price(bot, interaction.user, "カスタムVC", 24)
         await process_room_extension(bot, interaction, "カスタムVC", 24, price)
     elif room_type == "ゲームVC":
         view = ExtendGameVCSelectView(bot)
@@ -409,15 +413,14 @@ async def process_room_purchase(bot, interaction: discord.Interaction, room_type
         return await interaction.edit_original_response(content="既に「賭博VC」を持っています！(1人1つまで)")
     
     if room_type == "高級宿":
-        price = get_luxury_inn_price(bot, interaction.user, duration)
+        price = get_room_price(bot, interaction.user, room_type, duration)
     elif room_type == "宿" and duration == 0:
         if is_main_or_sub_member(bot, interaction.user) or has_admin_role(bot, interaction.user):
             price = 0
         else:
             return await interaction.edit_original_response(content="無制限宿を作成する権限がありません。")
     else:
-        settings = get_room_settings(bot)[room_type][duration]
-        price = settings["price"]
+        price = get_room_price(bot, interaction.user, room_type, duration)
     
     if room_type == "宿" and is_free_inn_member(bot, interaction.user):
         price = 0
@@ -488,11 +491,12 @@ async def process_room_purchase(bot, interaction: discord.Interaction, room_type
             await interaction.edit_original_response(content=f"エラー: {e}")
 
 class GameVCDurationSelectView(discord.ui.View):
-    def __init__(self, bot):
+    def __init__(self, bot, member=None):
         super().__init__(timeout=60)
         self.bot = bot
-        p12 = get_room_settings(self.bot)["ゲームVC"][12]["price"]
-        p24 = get_room_settings(self.bot)["ゲームVC"][24]["price"]
+        self.member = member
+        p12 = get_room_price(self.bot, self.member, "ゲームVC", 12)
+        p24 = get_room_price(self.bot, self.member, "ゲームVC", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve_hours.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four_hours.label = f"24時間 ({p24:,} {currency_name})"
@@ -510,11 +514,12 @@ class GameVCDurationSelectView(discord.ui.View):
         await interaction.response.edit_message(content="キャンセルしました。", view=None)
 
 class GambleVCDurationSelectView(discord.ui.View):
-    def __init__(self, bot):
+    def __init__(self, bot, member=None):
         super().__init__(timeout=60)
         self.bot = bot
-        p12 = get_room_settings(self.bot)["賭博VC"][12]["price"]
-        p24 = get_room_settings(self.bot)["賭博VC"][24]["price"]
+        self.member = member
+        p12 = get_room_price(self.bot, self.member, "賭博VC", 12)
+        p24 = get_room_price(self.bot, self.member, "賭博VC", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve_hours.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four_hours.label = f"24時間 ({p24:,} {currency_name})"
@@ -538,19 +543,20 @@ class GameRoomPanelView(discord.ui.View):
     @discord.ui.button(label="ゲームVCを作成", style=discord.ButtonStyle.primary, emoji="🎮", custom_id="persistent_game_vc_btn")
     async def game_vc(self, it, btn):
         msg = "「ゲームVC」の利用期間を選択してください。"
-        await it.response.send_message(msg, view=GameVCDurationSelectView(it.client), ephemeral=True)
+        await it.response.send_message(msg, view=GameVCDurationSelectView(it.client, it.user), ephemeral=True)
 
     @discord.ui.button(label="賭博VCを作成", style=discord.ButtonStyle.primary, emoji="🎲", custom_id="persistent_gamble_vc_btn")
     async def gamble_vc(self, it, btn):
         msg = "「賭博VC」の利用期間を選択してください。"
-        await it.response.send_message(msg, view=GambleVCDurationSelectView(it.client), ephemeral=True)
+        await it.response.send_message(msg, view=GambleVCDurationSelectView(it.client, it.user), ephemeral=True)
 
 class InnDurationSelectView(discord.ui.View):
-    def __init__(self, bot, is_free: bool):
+    def __init__(self, bot, is_free: bool, member=None):
         super().__init__(timeout=60)
         self.bot = bot
-        p12 = get_room_settings(self.bot)["宿"][12]["price"]
-        p24 = get_room_settings(self.bot)["宿"][24]["price"]
+        self.member = member
+        p12 = get_room_price(self.bot, getattr(self, "member", None), "宿", 12)
+        p24 = get_room_price(self.bot, getattr(self, "member", None), "宿", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve_hours.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four_hours.label = f"24時間 ({p24:,} {currency_name})"
@@ -575,8 +581,9 @@ class LuxuryInnDurationSelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.bot = bot
         self.member = member
-        p12 = get_luxury_inn_price(self.bot, self.member, 12)
-        p24 = get_luxury_inn_price(self.bot, self.member, 24)
+        self.member = member
+        p12 = get_room_price(self.bot, self.member, "高級宿", 12)
+        p24 = get_room_price(self.bot, self.member, "高級宿", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve_hours.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four_hours.label = f"24時間 ({p24:,} {currency_name})"
@@ -594,10 +601,11 @@ class LuxuryInnDurationSelectView(discord.ui.View):
         await interaction.response.edit_message(content="キャンセルしました。", view=None)
 
 class CustomRoomConfirmView(discord.ui.View):
-    def __init__(self, bot):
+    def __init__(self, bot, member=None):
         super().__init__(timeout=60)
         self.bot = bot
-        p24 = get_room_settings(bot)["カスタムVC"][24]["price"]
+        self.member = member
+        p24 = get_room_price(bot, getattr(self, "member", None), "カスタムVC", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.confirm.label = f"確定 (24時間 / {p24:,} {currency_name})"
 
@@ -665,11 +673,12 @@ class CustomRoomView(discord.ui.View):
         await it.response.send_message("「カスタムVC」を購入しますか？", view=CustomRoomConfirmView(it.client), ephemeral=True)
 
 class TempInnDurationSelectView(discord.ui.View):
-    def __init__(self, bot):
+    def __init__(self, bot, member=None):
         super().__init__(timeout=60)
         self.bot = bot
-        p12 = get_room_settings(self.bot)["宿"][12]["price"]
-        p24 = get_room_settings(self.bot)["宿"][24]["price"]
+        self.member = member
+        p12 = get_room_price(self.bot, getattr(self, "member", None), "宿", 12)
+        p24 = get_room_price(self.bot, getattr(self, "member", None), "宿", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve_hours.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four_hours.label = f"24時間 ({p24:,} {currency_name})"
@@ -687,9 +696,10 @@ class TempInnDurationSelectView(discord.ui.View):
         await interaction.response.edit_message(content="キャンセルしました。", view=None)
 
 class MainInnConfirmView(discord.ui.View):
-    def __init__(self, bot):
+    def __init__(self, bot, member=None):
         super().__init__(timeout=60)
         self.bot = bot
+        self.member = member
 
     @discord.ui.button(label="作成する", style=discord.ButtonStyle.success, emoji="✅")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -733,8 +743,9 @@ class LuxuryInnPanelView(discord.ui.View):
 
 # --- Cogの定義 ---
 class Rooms(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot, member=None):
         self.bot = bot
+        self.member = member
         self.check_expired_rooms.start()
 
     def cog_unload(self):
@@ -754,6 +765,7 @@ class Rooms(commands.Cog):
         self.bot.add_view(TempInnPanelView())
         self.bot.add_view(LuxuryInnPanelView())
         self.bot.add_view(GameRoomPanelView())
+        self.bot.add_view(GambleRoomPanelView())
 
     @tasks.loop(minutes=1)
     async def check_expired_rooms(self):

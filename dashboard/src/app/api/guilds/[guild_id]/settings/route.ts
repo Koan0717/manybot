@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
-import { Pool } from 'pg';
+import { getPool } from '@/lib/db';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+
 
 export async function GET(
   request: Request,
   { params }: { params: { guild_id: string } }
 ) {
   const guildId = params.guild_id;
+  const pool = await getPool(guildId);
   try {
     const result = await pool.query(
       'SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1',
@@ -43,6 +42,7 @@ export async function POST(
   { params }: { params: { guild_id: string } }
 ) {
   const guildId = params.guild_id;
+  const pool = await getPool(guildId);
   try {
     const body = await request.json();
     

@@ -48,6 +48,17 @@ class IPC(commands.Cog):
                         except Exception as e:
                             print(f"[IPC ERROR] Failed to reload bot_settings: {e}")
 
+                    elif panel_type == "reload_bot_and_role_prices":
+                        try:
+                            self.bot.bot_settings = await database.load_settings()
+                            db_role_prices = await database.get_all_role_room_prices()
+                            self.bot.role_room_prices.clear()
+                            for rp in db_role_prices:
+                                self.bot.role_room_prices[(rp["role_key"], rp["room_type"], rp["duration"])] = rp["price"]
+                            print(f"[IPC] Reloaded bot_settings and role_room_prices")
+                        except Exception as e:
+                            print(f"[IPC ERROR] Failed to reload bot and role prices: {e}")
+
                     elif panel_type == "reload_rank_and_bot_settings":
                         try:
                             self.bot.bot_settings = await database.load_settings()
@@ -96,8 +107,12 @@ class IPC(commands.Cog):
                     view = LuxuryRoomView()
                 elif panel_type == "game_vc":
                     from cogs.rooms import GameRoomPanelView
-                    embed = discord.Embed(title="🎮 ゲームVC / 🎲 賭博VC", description="ゲームVCや賭博VCの作成はこちらから。", color=discord.Color.orange())
+                    embed = discord.Embed(title="🎮 ゲームVC", description="ゲームVCの作成はこちらから。", color=discord.Color.green())
                     view = GameRoomPanelView()
+                elif panel_type == "gamble_vc":
+                    from cogs.rooms import GambleRoomPanelView
+                    embed = discord.Embed(title="🎲 賭博VC", description="賭博VCの作成はこちらから。", color=discord.Color.orange())
+                    view = GambleRoomPanelView()
                 elif panel_type == "custom_vc":
                     from cogs.rooms import CustomRoomView
                     embed = discord.Embed(title="✨ カスタムVC", description="任意の名前・人数のカスタムVCを作成できます。", color=discord.Color.teal())

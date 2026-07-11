@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
-import { Pool } from 'pg';
+import { getPool } from '@/lib/db';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+
 
 export async function GET(
   request: Request,
   { params }: { params: { guild_id: string } }
 ) {
   const guildId = params.guild_id;
+  const pool = await getPool(guildId);
   const token = process.env.DISCORD_BOT_TOKEN;
 
   try {

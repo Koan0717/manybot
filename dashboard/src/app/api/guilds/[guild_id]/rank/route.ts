@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
-import { Pool } from 'pg';
+import { getPool } from '@/lib/db';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+
 
 export async function GET(
   request: Request,
   { params }: { params: { guild_id: string } }
 ) {
   const guildId = params.guild_id;
+  const pool = await getPool(guildId);
   try {
     // Fetch rank settings
     const rankResult = await pool.query(
@@ -53,6 +52,7 @@ export async function POST(
   { params }: { params: { guild_id: string } }
 ) {
   const guildId = params.guild_id;
+  const pool = await getPool(guildId);
   try {
     const body = await request.json();
     const { 

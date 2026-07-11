@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
-import { Pool } from 'pg';
+import { getPool } from '@/lib/db';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+
 
 export async function GET(
   request: Request,
   { params }: { params: { guild_id: string } }
 ) {
   const guildId = params.guild_id;
+  const pool = await getPool(guildId);
   try {
     const result = await pool.query(
       'SELECT item_id, name, usage, price, target_role_ids, reward_role_ids, duration_days, is_eval_extend, extend_days FROM shop_items WHERE guild_id = $1 ORDER BY item_id ASC',
@@ -26,6 +25,7 @@ export async function POST(
   { params }: { params: { guild_id: string } }
 ) {
   const guildId = params.guild_id;
+  const pool = await getPool(guildId);
   try {
     const body = await request.json();
     const { action } = body;

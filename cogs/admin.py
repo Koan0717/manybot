@@ -15,7 +15,7 @@ from helpers import (
 
 # --- UIクラス (ヘルパーのダミーインポート等も利用) ---
 # 他のUIインポートや定義
-from cogs.rooms import VCRenamePanelView, RoomView, CustomRoomView, LuxuryRoomView, InnCombinedView
+from cogs.rooms import VCRenamePanelView, RoomView, CustomRoomView, LuxuryRoomView, InnCombinedView, GameRoomPanelView, GambleRoomPanelView
 from cogs.gambling import ChinchiroView, CoinflipView, SlotView, BlackjackView, RouletteView
 from cogs.interview import InterviewPanelView
 from cogs.utility import EmblemRequestPanelView, ConfessionRequestPanelView, InquiryRequestPanelView, AnonymousChatPanelView, CustomTicketPanelView, AnonymousChatSetupView, InquirySetupView

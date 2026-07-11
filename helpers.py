@@ -327,25 +327,49 @@ def is_new_member(bot, user: discord.Member) -> bool:
         return True
     return False
 
-def get_luxury_inn_price(bot, user: discord.Member, duration: int) -> int:
-    base_price = get_room_settings(bot)["高級宿"][duration]["price"]
+def is_violator_member(bot, user: discord.Member) -> bool:
+    violator_role_id = get_setting(bot, "GAMBLE_VIOLATOR_ROLE_ID")
+    if violator_role_id and any(r.id == violator_role_id for r in user.roles):
+        return True
+    return False
+
+def get_room_price(bot, user: discord.Member, room_type: str, duration: int) -> int:
+    """汎用的なルーム料金計算関数。ロール別特別料金が有効な場合はそれを優先する。"""
+    if room_type == "高級宿" and duration == 0:
+        if is_main_or_sub_member(bot, user) or has_admin_role(bot, user):
+            return 0
+        return -1 # Should not happen usually, caught before
+
+    if room_type == "高級宿" and is_free_inn_member(bot, user):
+        return 0
+
+    base_price = get_room_settings(bot).get(room_type, {}).get(duration, {}).get("price", 0)
     role_prices = getattr(bot, "role_room_prices", {})
-    
-    if is_downgrade_member(bot, user):
-        custom_price = role_prices.get(("DOWNGRADE_ROLE", "高級宿", duration))
+
+    # 1. 違反者
+    if get_setting(bot, "ENABLE_PRICE_VIOLATOR") and is_violator_member(bot, user):
+        custom_price = role_prices.get(("VIOLATOR_ROLE", room_type, duration))
         if custom_price is not None:
             return custom_price
-            
-    if is_new_member(bot, user):
-        custom_price = role_prices.get(("NEW_MEMBER_ROLE", "高級宿", duration))
+
+    # 2. 評価落ち
+    if get_setting(bot, "ENABLE_PRICE_DOWNGRADE") and is_downgrade_member(bot, user):
+        custom_price = role_prices.get(("DOWNGRADE_ROLE", room_type, duration))
         if custom_price is not None:
             return custom_price
-            
-    if has_admin_role(bot, user) or is_main_or_sub_member(bot, user):
-        custom_price = role_prices.get(("MAIN_SUB_MEMBER_ROLE", "高級宿", duration))
+
+    # 3. 仮メン
+    if get_setting(bot, "ENABLE_PRICE_NEW_MEMBER") and is_new_member(bot, user):
+        custom_price = role_prices.get(("NEW_MEMBER_ROLE", room_type, duration))
         if custom_price is not None:
             return custom_price
-            
+
+    # 4. 本メン・準メン
+    if get_setting(bot, "ENABLE_PRICE_MAIN_SUB") and is_main_or_sub_member(bot, user):
+        custom_price = role_prices.get(("MAIN_SUB_MEMBER_ROLE", room_type, duration))
+        if custom_price is not None:
+            return custom_price
+
     return base_price
 
 def is_rank_eligible(bot, channel) -> bool:

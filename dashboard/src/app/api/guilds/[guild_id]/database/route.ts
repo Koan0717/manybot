@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { setupDbSchema } from '@/lib/db';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+const masterPool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export async function GET(
   request: Request,
@@ -13,7 +12,7 @@ export async function GET(
   if (isNaN(guildId)) return NextResponse.json({ error: 'Invalid guild_id' }, { status: 400 });
 
   try {
-    const result = await pool.query(
+    const result = await masterPool.query(
       'SELECT database_url FROM guild_databases WHERE guild_id = $1',
       [guildId]
     );
@@ -40,43 +39,38 @@ export async function POST(
   const { database_url } = await request.json();
 
   try {
+    // Ensure table exists in master DB
+    try {
+      await masterPool.query(`
+        CREATE TABLE IF NOT EXISTS guild_databases (
+            guild_id BIGINT PRIMARY KEY,
+            database_url TEXT NOT NULL
+        )
+      `);
+    } catch (e) {}
+
     if (database_url) {
-      await pool.query(
+      await masterPool.query(
         'INSERT INTO guild_databases (guild_id, database_url) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET database_url = EXCLUDED.database_url',
         [guildId, database_url]
       );
+      
+      // Run setup schema on the newly added DB
+      try {
+        const newPool = new Pool({ connectionString: database_url });
+        await setupDbSchema(newPool);
+      } catch (setupError: any) {
+        return NextResponse.json({ error: 'テーブルの初期化に失敗しました。URLが正しいか確認してください。' }, { status: 500 });
+      }
+
     } else {
-      await pool.query(
+      await masterPool.query(
         'DELETE FROM guild_databases WHERE guild_id = $1',
         [guildId]
       );
     }
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    if (error.code === '42P01') {
-      try {
-        await pool.query(`
-          CREATE TABLE IF NOT EXISTS guild_databases (
-              guild_id BIGINT PRIMARY KEY,
-              database_url TEXT NOT NULL
-          )
-        `);
-        if (database_url) {
-          await pool.query(
-            'INSERT INTO guild_databases (guild_id, database_url) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET database_url = EXCLUDED.database_url',
-            [guildId, database_url]
-          );
-        } else {
-          await pool.query(
-            'DELETE FROM guild_databases WHERE guild_id = $1',
-            [guildId]
-          );
-        }
-        return NextResponse.json({ success: true });
-      } catch (retryError: any) {
-        return NextResponse.json({ error: retryError.message }, { status: 500 });
-      }
-    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
