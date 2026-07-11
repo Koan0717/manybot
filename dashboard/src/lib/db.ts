@@ -5,7 +5,7 @@ const globalForDb = globalThis as unknown as {
   pools: { [url: string]: Pool };
 };
 
-const masterPool = globalForDb.masterPool ?? new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+const masterPool = globalForDb.masterPool ?? new Pool({ connectionString: process.env.DATABASE_URL?.replace('?sslmode=require', ''), ssl: { rejectUnauthorized: false } });
 
 if (process.env.NODE_ENV !== 'production') {
   globalForDb.masterPool = masterPool;
@@ -41,7 +41,7 @@ export async function getPool(guildId: string | number): Promise<Pool> {
   const url = await getGuildDbUrl(guildId);
   if (url) {
     if (!pools[url]) {
-      pools[url] = new Pool({ connectionString: url, ssl: { rejectUnauthorized: false } });
+      pools[url] = new Pool({ connectionString: url?.replace('?sslmode=require', ''), ssl: { rejectUnauthorized: false } });
     }
     return pools[url];
   }
