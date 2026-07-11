@@ -5,7 +5,7 @@ import asyncio
 import database
 from helpers import (
     JST, get_setting, is_free_inn_member, is_main_or_sub_member,
-    get_room_settings, get_circled_number, circled_to_int, send_log, get_luxury_inn_price,
+    get_room_settings, get_circled_number, circled_to_int, send_log,
     has_admin_role, is_new_member, is_downgrade_member, get_role_by_setting,
     PENDING_MEMBER_ROLE_NAME
 )
@@ -73,12 +73,12 @@ class ExtendLuxuryInnSelectView(discord.ui.View):
         
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success)
     async def twelve(self, interaction: discord.Interaction, button: discord.ui.Button):
-        price = get_luxury_inn_price(self.bot, self.member, 12)
+        price = get_room_price(self.bot, self.member, '高級宿', 12)
         await process_room_extension(self.bot, interaction, "高級宿", 12, price)
         
     @discord.ui.button(label="24時間", style=discord.ButtonStyle.success)
     async def twenty_four(self, interaction: discord.Interaction, button: discord.ui.Button):
-        price = get_luxury_inn_price(self.bot, self.member, 24)
+        price = get_room_price(self.bot, self.member, '高級宿', 24)
         await process_room_extension(self.bot, interaction, "高級宿", 24, price)
         
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
@@ -765,8 +765,7 @@ class Rooms(commands.Cog):
         self.bot.add_view(TempInnPanelView())
         self.bot.add_view(LuxuryInnPanelView())
         self.bot.add_view(GameRoomPanelView())
-        self.bot.add_view(GambleRoomPanelView())
-
+        
     @tasks.loop(minutes=1)
     async def check_expired_rooms(self):
         # 1. 有効期限切れの部屋を削除

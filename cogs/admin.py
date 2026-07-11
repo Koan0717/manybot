@@ -15,7 +15,7 @@ from helpers import (
 
 # --- UIクラス (ヘルパーのダミーインポート等も利用) ---
 # 他のUIインポートや定義
-from cogs.rooms import VCRenamePanelView, RoomView, CustomRoomView, LuxuryRoomView, InnCombinedView, GameRoomPanelView, GambleRoomPanelView
+from cogs.rooms import VCRenamePanelView, RoomView, CustomRoomView, LuxuryRoomView, InnCombinedView, GameRoomPanelView
 from cogs.gambling import ChinchiroView, CoinflipView, SlotView, BlackjackView, RouletteView
 from cogs.interview import InterviewPanelView
 from cogs.utility import EmblemRequestPanelView, ConfessionRequestPanelView, InquiryRequestPanelView, AnonymousChatPanelView, CustomTicketPanelView, AnonymousChatSetupView, InquirySetupView
@@ -2205,23 +2205,6 @@ class AdminGroup(app_commands.Group):
         super().__init__(name="運営", description="運営管理者専用コマンド")
         self.bot = bot
 
-    @app_commands.command(name="設定パネル", description="【運営専用】Botの基本設定パネルを表示します")
-    @is_admin()
-    async def bot_setup(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        try:
-            embed = await create_admin_panel_embed(self.bot, interaction.guild)
-            view = BotSetupMainView()
-            await interaction.followup.send(embed=embed, view=view, ephemeral=True)
-        except Exception as e:
-            print(f"[ERROR] bot_setup: {e}")
-            await interaction.followup.send("⚠️ 設定パネルの生成中にエラーが発生しました。", ephemeral=True)
-
-    @app_commands.command(name="パネル設置", description="【運営専用】各種コントロールパネル（カジノ、部屋作成など）を設置します")
-    @is_admin()
-    async def panel_setup(self, interaction: discord.Interaction):
-        embed = discord.Embed(title="⚙️ パネル設置メニュー", description="設置したい機能を選択肢から選んでください。\n（現在のテキストチャンネルに設置用Embedが送信されます）", color=discord.Color.blue())
-        await interaction.response.send_message(embed=embed, view=PanelSetupView(), ephemeral=True)
 
     @app_commands.command(name="任意ロールパネル設置", description="【運営専用】ユーザーがリアクションを押すことで自由に付与・剥奪できるロールパネルを設置します")
     @is_admin()

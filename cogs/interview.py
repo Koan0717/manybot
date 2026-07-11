@@ -4,7 +4,7 @@ from discord import app_commands
 import database
 from helpers import (
     get_setting, get_role_by_setting, has_interviewer_role,
-    NEW_MEMBER_ROLE_NAME, PENDING_MEMBER_ROLE_NAME, INITIAL_COINS, send_log
+    NEW_MEMBER_ROLE_NAME, PENDING_MEMBER_ROLE_NAME, send_log
 )
 
 class InterviewNicknameModal(discord.ui.Modal, title='入界手続き：名前の設定'):
@@ -33,7 +33,7 @@ class InterviewNicknameModal(discord.ui.Modal, title='入界手続き：名前�
             if pending_role and pending_role in interaction.user.roles:
                 await interaction.user.remove_roles(pending_role)
                 
-            initial_coins = get_setting(bot, "INITIAL_COINS") or INITIAL_COINS
+            initial_coins = get_setting(bot, "INITIAL_COINS") or 30000
             currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
             await database.add_balance(interaction.guild.id, interaction.user.id, initial_coins)
             await database.mark_initial_issued(interaction.user.id)
@@ -170,7 +170,7 @@ class InterviewerGroup(app_commands.Group):
             if pending_role and pending_role in user.roles:
                 await user.remove_roles(pending_role)
                 
-            initial_coins = get_setting(bot, "INITIAL_COINS") or INITIAL_COINS
+            initial_coins = get_setting(bot, "INITIAL_COINS") or 30000
             currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
             await database.add_balance(interaction.guild.id, user.id, initial_coins)
             await database.mark_initial_issued(user.id)
