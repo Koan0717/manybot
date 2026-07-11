@@ -162,7 +162,9 @@ class Logging(commands.Cog):
         guild = message.guild
         if guild:
             cfg = self.bot.get_evaluation_config(guild.id)
-            if cfg["forum_channel_ids"] and message.channel.id in cfg["self_intro_channel_ids"]:
+            if not cfg.get("is_enabled", True):
+                pass
+            elif cfg["forum_channel_ids"] and message.channel.id in cfg["self_intro_channel_ids"]:
                 human_role = config.get_role_by_setting(self.bot, guild, "NEW_MEMBER_ROLE_ID", config.NEW_MEMBER_ROLE_NAME)
                 if human_role and human_role in message.author.roles:
                     for forum_id in cfg["forum_channel_ids"]:

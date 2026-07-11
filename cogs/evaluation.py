@@ -276,6 +276,8 @@ class Evaluation(commands.Cog):
         guild = message.guild
         if guild:
             cfg = self.bot.get_evaluation_config(guild.id)
+            if not cfg.get("is_enabled", True):
+                return
             if cfg["forum_channel_ids"] and message.channel.id in cfg["self_intro_channel_ids"]:
                 human_role = get_role_by_setting(self.bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
                 if human_role and human_role in message.author.roles:

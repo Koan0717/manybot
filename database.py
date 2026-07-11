@@ -280,6 +280,10 @@ async def setup_db_schema(p):
                 self_intro_channel_ids BIGINT[]
             )
         ''')
+        try:
+            await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT TRUE')
+        except Exception as e:
+            print(f"[Migration] evaluation_settings migration warning: {e}")
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS rank_settings (
                 guild_id BIGINT PRIMARY KEY,
@@ -984,9 +988,10 @@ async def remove_log_channel(guild_id: int, log_type: str):
 async def get_evaluation_settings(guild_id: int) -> dict:
     p = await get_pool()
     async with p.acquire() as conn:
-        row = await conn.fetchrow('SELECT forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
+        row = await conn.fetchrow('SELECT is_enabled, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
         if row:
             return {
+                "is_enabled": row["is_enabled"] if row["is_enabled"] is not None else True,
                 "forum_channel_ids": row["forum_channel_ids"] or [],
                 "self_intro_channel_ids": row["self_intro_channel_ids"] or []
             }
@@ -995,18 +1000,18 @@ async def get_evaluation_settings(guild_id: int) -> dict:
 async def get_all_evaluation_settings() -> list[dict]:
     p = await get_pool()
     async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT guild_id, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings')
-        return [{"guild_id": r["guild_id"], "forum_channel_ids": r["forum_channel_ids"] or [], "self_intro_channel_ids": r["self_intro_channel_ids"] or []} for r in rows]
+        rows = await conn.fetch('SELECT guild_id, is_enabled, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings')
+        return [{"guild_id": r["guild_id"], "is_enabled": r["is_enabled"] if r["is_enabled"] is not None else True, "forum_channel_ids": r["forum_channel_ids"] or [], "self_intro_channel_ids": r["self_intro_channel_ids"] or []} for r in rows]
 
-async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], self_intro_channel_ids: list[int]):
+async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], self_intro_channel_ids: list[int], is_enabled: bool = True):
     p = await get_pool()
     async with p.acquire() as conn:
         await conn.execute('''
-            INSERT INTO evaluation_settings (guild_id, forum_channel_ids, self_intro_channel_ids)
-            VALUES ($1, $2, $3)
+            INSERT INTO evaluation_settings (guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled)
+            VALUES ($1, $2, $3, $4)
             ON CONFLICT (guild_id)
-            DO UPDATE SET forum_channel_ids = $2, self_intro_channel_ids = $3
-        ''', guild_id, forum_channel_ids, self_intro_channel_ids)
+            DO UPDATE SET forum_channel_ids = $2, self_intro_channel_ids = $3, is_enabled = $4
+        ''', guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled)
 
 
 # --- ランク対象設定管理用関数 ---

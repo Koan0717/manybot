@@ -19,6 +19,7 @@ export default function DashboardLayout({
     { label: 'ショップ設定', path: `/dashboard/${guildId}/shop` },
     { label: 'チケット設定', path: `/dashboard/${guildId}/tickets` },
     { label: 'ランク設定', path: `/dashboard/${guildId}/rank` },
+    { label: '評価シート自動生成', path: `/dashboard/${guildId}/eval-sheet` },
   ];
 
   return (

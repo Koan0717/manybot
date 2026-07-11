@@ -41,6 +41,7 @@ class EconomyBot(commands.Bot):
             forum_vals = get_setting(self, "EVALUATION_FORUM_CHANNEL_IDS") or []
             forum_ids = forum_vals if isinstance(forum_vals, list) else ([forum_vals] if forum_vals else [])
             self.evaluation_settings[guild_id] = {
+                "is_enabled": True,
                 "forum_channel_ids": set(forum_ids),
                 "self_intro_channel_ids": set(get_setting(self, "SELF_INTRO_CHANNEL_IDS") or [])
             }
@@ -147,6 +148,7 @@ class EconomyBot(commands.Bot):
             db_eval_settings = await database.get_all_evaluation_settings()
             for s in db_eval_settings:
                 self.evaluation_settings[s["guild_id"]] = {
+                    "is_enabled": s.get("is_enabled", True),
                     "forum_channel_ids": set(s["forum_channel_ids"]),
                     "self_intro_channel_ids": set(s["self_intro_channel_ids"])
                 }
