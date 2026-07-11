@@ -20,6 +20,9 @@ export default function DashboardLayout({
     { label: 'チケット設定', path: `/dashboard/${guildId}/tickets` },
     { label: 'ランク設定', path: `/dashboard/${guildId}/rank` },
     { label: '評価シート自動生成', path: `/dashboard/${guildId}/eval-sheet` },
+    { label: '経済・レベリング設定', path: `/dashboard/${guildId}/economy` },
+    { label: 'VCコイン獲得制限', path: `/dashboard/${guildId}/vc-coins` },
+    { label: 'ログ出力設定', path: `/dashboard/${guildId}/logs` },
   ];
 
   return (
