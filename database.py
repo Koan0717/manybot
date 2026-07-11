@@ -766,6 +766,8 @@ async def save_setting(guild_id: int, key: str, value):
             DO UPDATE SET setting_value = $3
         ''', guild_id, key, val_json)
 
+import json
+
 async def load_settings() -> dict:
     settings = {}
     for p in await get_all_configured_pools():
@@ -775,7 +777,15 @@ async def load_settings() -> dict:
                 g_id = row['guild_id']
                 if g_id not in settings:
                     settings[g_id] = {}
-                settings[g_id][row['setting_key']] = row['setting_value']
+                try:
+                    val = json.loads(row['setting_value'])
+                    if isinstance(val, list):
+                        val = [int(v) if isinstance(v, str) and v.isdigit() else v for v in val]
+                    elif isinstance(val, str) and val.isdigit():
+                        val = int(val)
+                    settings[g_id][row['setting_key']] = val
+                except:
+                    settings[g_id][row['setting_key']] = row['setting_value']
         except Exception:
             pass
     return settings

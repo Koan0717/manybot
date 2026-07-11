@@ -146,19 +146,12 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
   const handleSave = async () => {
     setSaving(true);
     
-    // DBに保存する前に、数値を適切な型（number / number[]）に戻す
     const payload: Record<string, any> = {};
     for (const setting of ROLE_SETTINGS) {
       const val = settings[setting.key];
       if (!val) continue;
       
-      if (setting.multiple) {
-        if (Array.isArray(val) && val.length > 0) {
-          payload[setting.key] = val.map(Number);
-        }
-      } else {
-        payload[setting.key] = Number(val);
-      }
+      payload[setting.key] = val;
     }
     
     try {
