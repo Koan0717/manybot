@@ -10,19 +10,97 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 JST = datetime.timezone(datetime.timedelta(hours=9))
 
 # 接続プールを保持する変数
-pool = None
+# -- NEW POOL LOGIC --
+pools = {}
+guild_to_db = {}
+master_pool = None
+import inspect
 
-async def get_pool():
-    global pool
-    if pool is None:
-        pool = await asyncpg.create_pool(DATABASE_URL, statement_cache_size=0, min_size=1, max_size=10)
-    return pool
+async def get_master_pool():
+    global master_pool
+    if master_pool is None:
+        master_pool = await asyncpg.create_pool(DATABASE_URL, statement_cache_size=0, min_size=1, max_size=10)
+    return master_pool
 
-def get_now_naive():
-    return datetime.datetime.now(JST).replace(tzinfo=None)
+async def get_all_configured_pools():
+    p = await get_master_pool()
+    try:
+        urls = await p.fetch("SELECT DISTINCT database_url FROM guild_databases")
+        all_pools = [p]
+        for r in urls:
+            url = r['database_url']
+            if url not in pools:
+                pools[url] = await asyncpg.create_pool(url, statement_cache_size=0, min_size=1, max_size=10)
+            if pools[url] not in all_pools:
+                all_pools.append(pools[url])
+        return all_pools
+    except asyncpg.exceptions.UndefinedTableError:
+        return [p]
 
-async def setup_db():
-    p = await get_pool()
+async def get_guild_db_url(guild_id: int):
+    if guild_id in guild_to_db:
+        return guild_to_db[guild_id]
+    p = await get_master_pool()
+    try:
+        val = await p.fetchval("SELECT database_url FROM guild_databases WHERE guild_id = $1", guild_id)
+        guild_to_db[guild_id] = val
+        return val
+    except asyncpg.exceptions.UndefinedTableError:
+        return None
+
+async def set_guild_db_url(guild_id: int, url: str):
+    p = await get_master_pool()
+    if url:
+        await p.execute("""
+            INSERT INTO guild_databases (guild_id, database_url) 
+            VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET database_url = EXCLUDED.database_url
+        """, guild_id, url)
+        guild_to_db[guild_id] = url
+        new_pool = await get_pool(guild_id)
+        await setup_db_schema(new_pool)
+    else:
+        await p.execute("DELETE FROM guild_databases WHERE guild_id = $1", guild_id)
+        guild_to_db[guild_id] = None
+
+async def get_pool(guild_id: int = None):
+    if guild_id is None:
+        for frame_info in inspect.stack()[1:10]:
+            frame = frame_info.frame
+            if 'interaction' in frame.f_locals:
+                obj = frame.f_locals['interaction']
+                if hasattr(obj, 'guild') and obj.guild:
+                    guild_id = obj.guild.id
+                    break
+            elif 'message' in frame.f_locals:
+                obj = frame.f_locals['message']
+                if hasattr(obj, 'guild') and obj.guild:
+                    guild_id = obj.guild.id
+                    break
+            elif 'member' in frame.f_locals:
+                obj = frame.f_locals['member']
+                if hasattr(obj, 'guild') and obj.guild:
+                    guild_id = obj.guild.id
+                    break
+            elif 'guild' in frame.f_locals:
+                obj = frame.f_locals['guild']
+                if hasattr(obj, 'id'):
+                    guild_id = obj.id
+                    break
+            elif 'channel' in frame.f_locals:
+                obj = frame.f_locals['channel']
+                if hasattr(obj, 'guild') and obj.guild:
+                    guild_id = obj.guild.id
+                    break
+
+    if guild_id:
+        url = await get_guild_db_url(guild_id)
+        if url:
+            if url not in pools:
+                pools[url] = await asyncpg.create_pool(url, statement_cache_size=0, min_size=1, max_size=10)
+            return pools[url]
+    return await get_master_pool()
+
+async def setup_db_schema(p):
     async with p.acquire() as conn:
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS users (
@@ -357,6 +435,20 @@ async def setup_db():
         except Exception as e:
             print(f"[Migration] users event_points migration warning: {e}")
 
+
+
+async def setup_db():
+    p = await get_master_pool()
+    async with p.acquire() as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS guild_databases (
+                guild_id BIGINT PRIMARY KEY,
+                database_url TEXT NOT NULL
+            )
+        """)
+    for p in await get_all_configured_pools():
+        await setup_db_schema(p)
+
 async def get_user(guild_id: int, user_id: int):
     p = await get_pool()
     async with p.acquire() as conn:
@@ -498,9 +590,8 @@ async def has_room_type(owner_id: int, room_types: list[str]) -> bool:
         return row is not None
 
 async def remove_room(channel_id: int):
-    p = await get_pool()
-    async with p.acquire() as conn:
-        await conn.execute('DELETE FROM rooms WHERE channel_id = $1', channel_id)
+    for p in await get_all_configured_pools():
+        await p.execute("DELETE FROM rooms WHERE channel_id = $1", channel_id)
 
 async def extend_room(channel_id: int, new_expire_at: datetime.datetime):
     if new_expire_at.tzinfo:
@@ -510,12 +601,12 @@ async def extend_room(channel_id: int, new_expire_at: datetime.datetime):
         await conn.execute('UPDATE rooms SET expire_at = $1 WHERE channel_id = $2', new_expire_at, channel_id)
 
 async def get_expired_rooms():
-    p = await get_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT channel_id FROM rooms WHERE expire_at <= $1', get_now_naive())
-        return [row['channel_id'] for row in rows]
+    all_expired = []
+    for p in await get_all_configured_pools():
+        rows = await p.fetch("SELECT channel_id FROM rooms WHERE expire_at < $1", get_now_naive())
+        all_expired.extend([row['channel_id'] for row in rows])
+    return all_expired
 
-# --- 管理用リセット関数 ---
 async def reset_user_rank(guild_id: int, user_id: int):
     p = await get_pool()
     async with p.acquire() as conn:
@@ -554,10 +645,14 @@ async def get_evaluation_period(guild_id: int, user_id: int):
         return None
 
 async def get_all_evaluation_periods():
-    p = await get_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT user_id, start_time, end_time FROM evaluation_periods ORDER BY end_time ASC')
-        return [{"user_id": row['user_id'], "start_time": row['start_time'], "end_time": row['end_time']} for row in rows]
+    all_periods = []
+    for p in await get_all_configured_pools():
+        try:
+            rows = await p.fetch("SELECT guild_id, user_id, start_time, end_time FROM evaluation_periods")
+            all_periods.extend([dict(row) for row in rows])
+        except Exception:
+            pass
+    return all_periods
 
 async def extend_evaluation_period(guild_id: int, user_id: int, extra_days: int) -> bool:
     p = await get_pool()
@@ -672,21 +767,19 @@ async def save_setting(guild_id: int, key: str, value):
         ''', guild_id, key, val_json)
 
 async def load_settings() -> dict:
-    p = await get_pool()
     settings = {}
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT guild_id, setting_key, setting_value FROM bot_settings')
-        for r in rows:
-            gid = r['guild_id']
-            if gid not in settings:
-                settings[gid] = {}
-            try:
-                settings[gid][r['setting_key']] = json.loads(r['setting_value'])
-            except Exception:
-                pass
+    for p in await get_all_configured_pools():
+        try:
+            rows = await p.fetch("SELECT guild_id, setting_key, setting_value FROM bot_settings")
+            for row in rows:
+                g_id = row['guild_id']
+                if g_id not in settings:
+                    settings[g_id] = {}
+                settings[g_id][row['setting_key']] = row['setting_value']
+        except Exception:
+            pass
     return settings
 
-# --- レベルロール報酬管理用関数 ---
 async def add_level_role_reward(level_type: str, level: int, role_id: int):
     p = await get_pool()
     async with p.acquire() as conn:
@@ -1461,24 +1554,22 @@ async def get_user_items(user_id: int):
         return [dict(r) for r in rows]
 
 async def get_expired_user_items():
-    p = await get_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('''
-            SELECT u.id, u.user_id, s.guild_id, s.reward_role_ids
-            FROM user_items u
-            JOIN shop_items s ON u.item_id = s.item_id
-            WHERE u.expire_at IS NOT NULL 
-              AND u.expire_at <= $1 
-              AND u.role_removed = FALSE
-        ''', get_now_naive())
-        return [dict(r) for r in rows]
+    all_expired = []
+    for p in await get_all_configured_pools():
+        try:
+            rows = await p.fetch("SELECT id, user_id, item_id FROM user_items WHERE expire_at < $1 AND is_role_removed = FALSE", get_now_naive())
+            all_expired.extend([dict(row) for row in rows])
+        except Exception:
+            pass
+    return all_expired
 
 async def mark_user_item_role_removed(user_item_id: int):
-    p = await get_pool()
-    async with p.acquire() as conn:
-        await conn.execute('UPDATE user_items SET role_removed = TRUE WHERE id = $1', user_item_id)
+    for p in await get_all_configured_pools():
+        try:
+            await p.execute("UPDATE user_items SET is_role_removed = TRUE WHERE id = $1", user_item_id)
+        except Exception:
+            pass
 
-# --- レベルコイン報酬管理用関数 ---
 async def add_level_coin_reward(level_type: str, level: int, coins: int):
     p = await get_pool()
     async with p.acquire() as conn:

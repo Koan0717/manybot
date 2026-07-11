@@ -2,6 +2,82 @@
 
 import { useState, useEffect } from 'react';
 
+function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: boolean, value: any, onChange: (val: any) => void, roles: any[], loading: boolean }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const valArray = multiple ? (Array.isArray(value) ? value : []) : (value ? [value] : []);
+
+  if (loading) return <div className="bg-zinc-900 border border-zinc-700 rounded p-2 text-zinc-500 text-sm h-10 flex items-center">読み込み中...</div>;
+
+  const toggleOption = (id: string) => {
+    if (multiple) {
+      if (valArray.includes(id)) {
+        onChange(valArray.filter((v: string) => v !== id));
+      } else {
+        onChange([...valArray, id]);
+      }
+    } else {
+      onChange(id);
+      setIsOpen(false);
+    }
+  };
+
+  const selectedRoles = roles.filter(r => valArray.includes(r.id));
+
+  return (
+    <div className="relative">
+      <div 
+        className="bg-zinc-900 border border-zinc-700 rounded p-2 cursor-pointer hover:border-zinc-500 min-h-[42px] flex flex-wrap gap-1 items-center"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        {selectedRoles.length === 0 ? (
+          <span className="text-zinc-500 px-1 text-sm">未設定</span>
+        ) : (
+          selectedRoles.map(r => (
+            <span key={r.id} className="bg-zinc-800 text-xs px-2 py-1 rounded border border-zinc-700 font-bold" style={{ color: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : 'white' }}>
+              @ {r.name}
+            </span>
+          ))
+        )}
+      </div>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-0" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded shadow-xl max-h-60 overflow-y-auto p-1">
+            {!multiple && (
+              <div 
+                onClick={() => { onChange(""); setIsOpen(false); }}
+                className="px-3 py-2 cursor-pointer hover:bg-zinc-700 rounded text-sm text-zinc-400"
+              >
+                未設定
+              </div>
+            )}
+            {roles.map(r => {
+              const isSelected = valArray.includes(r.id);
+              const roleColor = r.color ? `#${r.color.toString(16).padStart(6, '0')}` : 'white';
+              return (
+                <div 
+                  key={r.id}
+                  onClick={() => toggleOption(r.id)}
+                  className={`flex items-center px-3 py-2 cursor-pointer rounded text-sm ${isSelected ? 'bg-zinc-700' : 'hover:bg-zinc-700/50'}`}
+                >
+                  {multiple && (
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 ${isSelected ? 'bg-red-600 border-red-600' : 'border-zinc-500'}`}>
+                      {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                    </div>
+                  )}
+                  <span style={{ color: roleColor, fontWeight: isSelected ? 'bold' : 'normal' }}>@ {r.name}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
 const ROLE_SETTINGS = [
   { key: 'NEW_MEMBER_ROLE_ID', label: '仮（新規）メンバーロール', multiple: false },
   { key: 'DOWNGRADE_ROLE_ID', label: '評価落ちロール', multiple: false },
@@ -119,30 +195,13 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
                 {setting.label}
                 {setting.multiple && <span className="ml-2 text-xs text-zinc-500 font-normal">(複数選択可)</span>}
               </label>
-              <select 
+              <RoleSelect 
                 multiple={setting.multiple}
-                className={`bg-zinc-900 border border-zinc-700 rounded p-2 focus:border-red-500 outline-none text-white ${setting.multiple ? 'h-24' : ''}`}
                 value={settings[setting.key] || (setting.multiple ? [] : '')}
-                onChange={(e) => {
-                  if (setting.multiple) {
-                    const values = Array.from(e.target.selectedOptions, option => option.value);
-                    handleChange(setting.key, values, true);
-                  } else {
-                    handleChange(setting.key, e.target.value, false);
-                  }
-                }}
-              >
-                {!setting.multiple && <option value="">未設定</option>}
-                {loading ? (
-                  <option disabled>読み込み中...</option>
-                ) : (
-                  roles.map(r => (
-                    <option key={r.id} value={r.id} style={{ color: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : 'white' }}>
-                      @ {r.name}
-                    </option>
-                  ))
-                )}
-              </select>
+                onChange={(val) => handleChange(setting.key, val, setting.multiple)}
+                roles={roles}
+                loading={loading}
+              />
             </div>
           ))}
         </div>
