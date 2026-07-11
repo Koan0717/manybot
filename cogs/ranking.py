@@ -100,7 +100,9 @@ class Ranking(commands.Cog):
                     tc_next_xp=tc_next,
                     tc_role_name=tc_role_name,
                     enable_tc=True,
-                    eval_time_str=eval_time_str
+                    eval_time_str=eval_time_str,
+                    bot=self.bot,
+                    guild_id=guild_id
                 )
                 file = discord.File(fp=io.BytesIO(card_bytes), filename="rank_card.png")
                 await interaction.followup.send(file=file)
@@ -117,10 +119,10 @@ class Ranking(commands.Cog):
                 return f"{bar}  **{int(pct*100)}%**"
 
             tc_needed = tc_next - tc_xp
-            tc_est_msgs = -(-tc_needed // config.TC_XP_REWARD)
+            tc_est_msgs = -(-tc_needed // (config.get_setting(self.bot, "TC_XP_REWARD", message.guild.id) or 10))
             
             vc_needed = vc_next - vc_xp
-            vc_est_mins = -(-vc_needed // config.VC_XP_PER_MIN)
+            vc_est_mins = -(-vc_needed // (config.get_setting(self.bot, "VC_XP_PER_MIN", guild_id) or 15))
 
             embed = discord.Embed(
                 title=f"✨ {target_user.display_name} のステータス",
@@ -278,7 +280,7 @@ class Ranking(commands.Cog):
 
                 elapsed_minutes = int((now - last_reward_time).total_seconds() / 60)
                 if elapsed_minutes >= 1:
-                    xp_reward = elapsed_minutes * config.VC_XP_PER_MIN
+                    xp_reward = elapsed_minutes * (config.get_setting(self.bot, "VC_XP_PER_MIN", guild_id) or 15)
                     category_name = member.voice.channel.category.name if member.voice.channel and member.voice.channel.category else "なし"
                     print(f"[DEBUG] VC XP Awarding: {member.display_name} in {category_name}")
                     new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
@@ -332,10 +334,10 @@ class Ranking(commands.Cog):
 
         if in_correct_category:
             last_xp_time = self.bot.tc_xp_cooldowns.get(user_id)
-            if not last_xp_time or (now - last_xp_time).total_seconds() > config.TC_XP_COOLDOWN:
+            if not last_xp_time or (now - last_xp_time).total_seconds() > (config.get_setting(self.bot, "TC_XP_COOLDOWN", message.guild.id) or 10):
                 category_name = message.channel.category.name if message.channel.category else "なし"
                 print(f"[DEBUG] TC XP Awarding: {message.author.display_name} in {category_name}")
-                new_lv = await database.add_xp(message.guild.id, user_id, config.TC_XP_REWARD, "tc")
+                new_lv = await database.add_xp(message.guild.id, user_id, (config.get_setting(self.bot, "TC_XP_REWARD", message.guild.id) or 10), "tc")
                 self.bot.tc_xp_cooldowns[user_id] = now
                 if new_lv:
                     lv_channel = self.bot.get_channel(config.get_setting(self.bot, "LEVEL_UP_CHANNEL_ID"))
@@ -373,7 +375,7 @@ class Ranking(commands.Cog):
             if join_time:
                 duration_minutes = int((now_aware - join_time).total_seconds() / 60)
                 if duration_minutes > 0:
-                    xp_reward = duration_minutes * config.VC_XP_PER_MIN
+                    xp_reward = duration_minutes * (config.get_setting(self.bot, "VC_XP_PER_MIN", guild_id) or 15)
                     new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
                     if new_lv:
                         lv_channel = self.bot.get_channel(config.get_setting(self.bot, "LEVEL_UP_CHANNEL_ID"))

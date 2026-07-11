@@ -2,7 +2,7 @@ import os
 import io
 import urllib.request
 from PIL import Image, ImageDraw, ImageFont
-from helpers import VC_XP_PER_MIN, TC_XP_REWARD
+from helpers import get_setting
 
 def check_font():
     font_dir = "assets/fonts"
@@ -190,7 +190,7 @@ async def generate_rank_card(
             draw_badge(draw, 415, 116, vc_role_name, font_badge, bg_color=(190, 46, 221, 80))
             
         vc_needed = vc_next_xp - vc_xp
-        vc_est_mins = -(-vc_needed // VC_XP_PER_MIN)
+        vc_est_mins = -(-vc_needed // (get_setting(bot, "VC_XP_PER_MIN", guild_id) if bot and guild_id else 15))
         xp_text = f"VC XP {vc_xp}/{vc_next_xp}  (次のレベルまであと {vc_needed} XP / 目安: 約{vc_est_mins}分の滞在)"
         draw.text((215, 155), xp_text, font=font_xp, fill=light_gray, stroke_width=1, stroke_fill=light_gray)
         draw_progress_bar(base, 215, 185, 620, 18, vc_xp, vc_next_xp, bar_type="vc")
@@ -204,7 +204,7 @@ async def generate_rank_card(
             draw_badge(draw, 415, 226, tc_role_name, font_badge, bg_color=(9, 132, 227, 100))
             
         tc_needed = tc_next_xp - tc_xp
-        tc_est_msgs = -(-tc_needed // TC_XP_REWARD)
+        tc_est_msgs = -(-tc_needed // (get_setting(bot, "TC_XP_REWARD", guild_id) if bot and guild_id else 10))
         tc_xp_text = f"TC XP {tc_xp}/{tc_next_xp}  (次のレベルまであと {tc_needed} XP / 目安: 約{tc_est_msgs}通のチャット)"
         draw.text((215, 265), tc_xp_text, font=font_xp, fill=light_gray, stroke_width=1, stroke_fill=light_gray)
         draw_progress_bar(base, 215, 295, 620, 18, tc_xp, tc_next_xp, bar_type="tc")
@@ -223,7 +223,7 @@ async def generate_rank_card(
             draw_badge(draw, 415, 116, vc_role_name, font_badge, bg_color=(190, 46, 221, 80))
             
         vc_needed = vc_next_xp - vc_xp
-        vc_est_mins = -(-vc_needed // VC_XP_PER_MIN)
+        vc_est_mins = -(-vc_needed // (get_setting(bot, "VC_XP_PER_MIN", guild_id) if bot and guild_id else 15))
         xp_text = f"VC XP {vc_xp}/{vc_next_xp}  (次のレベルまであと {vc_needed} XP)"
         draw.text((215, 160), xp_text, font=font_xp, fill=light_gray, stroke_width=1, stroke_fill=light_gray)
         

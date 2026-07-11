@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import database
 from keep_alive import keep_alive
 from helpers import (
-    JST, MSG_COOLDOWN, TC_XP_COOLDOWN, VC_XP_PER_MIN, ROOM_SETTINGS,
+    JST, ROOM_SETTINGS,
     get_setting, is_rank_eligible, is_vc_coins_eligible, check_and_assign_level_roles, send_log
 )
 
@@ -306,7 +306,7 @@ async def on_voice_state_update(member, before, after):
                 duration_minutes = duration_seconds // 60
                 if duration_minutes > 0:
                     if is_rank_eligible(bot, before.channel):
-                        xp_reward = duration_minutes * VC_XP_PER_MIN
+                        xp_reward = duration_minutes * (helpers.get_setting(self, "VC_XP_PER_MIN", guild_id) or 15)
                         new_lv = await database.add_xp(guild.id, user_id, xp_reward, "vc")
                         if new_lv:
                             lv_channel = bot.get_channel(get_setting(bot, "LEVEL_UP_CHANNEL_ID"))

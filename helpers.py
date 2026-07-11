@@ -9,16 +9,6 @@ import json
 
 JST = datetime.timezone(datetime.timedelta(hours=9))
 
-# 獲得量の設定
-MSG_COOLDOWN = 60     # メッセージ獲得のクールダウン（秒）
-
-# 経験値の設定
-TC_XP_REWARD = 10      # メッセージ1通あたりのXP
-TC_XP_COOLDOWN = 10    # TC XP獲得のクールダウン（秒）
-VC_XP_PER_MIN = 15     # VC滞在1分あたりのXP
-LEVEL_UP_CHANNEL_ID = 123456789012345678
-RANKING_CATEGORY_NAME = "【仮】ランク対象カテゴリ名"  # ランク機能が有効なカテゴリー
-
 # 部屋作成の設定
 ROOM_SETTINGS = {
     "宿": {
@@ -53,7 +43,6 @@ EMBLEM_MANAGER_ROLE_NAME = "【仮】スタンプ統括ロール名"
 EMBLEM_MASTER_ROLE_NAME = "【仮】スタンプ制作ロール名"
 CONFESSION_PRIEST_ROLE_NAME = "【仮】告解司祭ロール名"
 PRIEST_ROLE_NAME = "【仮】司祭ロール名"
-INITIAL_COINS = 30000
 
 # 自己紹介・評価設定
 SELF_INTRO_CHANNEL_IDS = [123456789012345678, 123456789012345678]
@@ -123,6 +112,15 @@ DEFAULT_SETTINGS = {
     "GAMBLE_ROULETTE_MUL_36X": 36.0,
     "MAIN_SUB_MEMBER_ROLE_IDS": [],
     "DOWNGRADE_ROLE_ID": 123456789012345678,
+    "EVALUATION_FAILED_ROLE_ID": None,
+    "VIOLATOR_ROLE_ID": None,
+    "MINUS_TARGET_ROLE_IDS": [],
+    "ENABLE_VC_COINS": True,
+    "MSG_COOLDOWN": 60,
+    "TC_XP_REWARD": 10,
+    "TC_XP_COOLDOWN": 10,
+    "VC_XP_PER_MIN": 15,
+    "INITIAL_COINS": 30000,
     "ENABLE_TC_RANK": True,
     "VC_COINS_PER_MIN": 12,
     "MINUS_TARGET_ROLE_IDS": [],
