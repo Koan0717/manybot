@@ -112,7 +112,7 @@ export async function POST(
 
     // 追加・更新処理
     for (const item of data) {
-      const cid = BigInt(item.channel_id);
+      const cid = item.channel_id;
       // triggersに追加
       await pool.query(
         'INSERT INTO auto_vc_triggers (channel_id) VALUES ($1) ON CONFLICT (channel_id) DO NOTHING',
@@ -144,10 +144,9 @@ export async function POST(
     await pool.query('COMMIT');
     
     // IPCでBotに再読み込みを通知
-    const ipcId = Math.floor(Math.random() * 100000000);
     await pool.query(
-      "INSERT INTO panel_requests (id, guild_id, channel_id, message_id, panel_type, user_id) VALUES ($1, $2, $3, $4, $5, $6)",
-      [ipcId, guildId, 0, 0, "reload_vc_triggers", 0]
+      "INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, $2, $3)",
+      [guildId, 0, "reload_vc_triggers"]
     );
 
     return NextResponse.json({ success: true });

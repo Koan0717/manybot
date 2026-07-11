@@ -66,7 +66,12 @@ export default function VCTriggersPage() {
       });
       
       if (!res.ok) {
-        throw new Error('設定の保存に失敗しました');
+        let errMsg = '設定の保存に失敗しました';
+        try {
+          const errorData = await res.json();
+          if (errorData.error) errMsg = errorData.error;
+        } catch (e) {}
+        throw new Error(errMsg);
       }
       
       setSuccessMessage('設定を保存しました。Botに変更が反映されます。');

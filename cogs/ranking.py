@@ -16,8 +16,8 @@ class Ranking(commands.Cog):
     # --- スラッシュコマンド ---
     rank_group = app_commands.Group(name="rank", description="ランク（レベル）関連のコマンド")
 
-    @rank_group.command(name="status", description="自分または他ユーザーのランク（レベル）を表示します")
-    async def rank_status(self, interaction: discord.Interaction, user: discord.Member = None):
+    @rank_group.command(name="info", description="自分または他ユーザーのランク（レベル）を表示します")
+    async def rank_info(self, interaction: discord.Interaction, user: discord.Member = None):
         try:
             await interaction.response.defer()
         except:
