@@ -36,7 +36,7 @@ export default function EconomySettingsPage() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch(`/api/guilds/${guildId}/economy`);
+      const res = await fetch(`/api/guilds/${guildId}/settings`);
       if (res.ok) {
         const data = await res.json();
         setSettings(prev => ({ ...prev, ...data }));
@@ -53,7 +53,7 @@ export default function EconomySettingsPage() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/guilds/${guildId}/economy`, {
+      const res = await fetch(`/api/guilds/${guildId}/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

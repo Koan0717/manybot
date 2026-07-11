@@ -35,7 +35,7 @@ export default function LogSettingsPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/guilds/${guildId}/logs`).then(res => res.ok ? res.json() : {}),
+      fetch(`/api/guilds/${guildId}/settings`).then(res => res.ok ? res.json() : {}),
       fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : [])
     ]).then(([settingsData, channelsData]: [any, any]) => {
       setSettings(settingsData || {});
@@ -52,7 +52,7 @@ export default function LogSettingsPage() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/guilds/${guildId}/logs`, {
+      const res = await fetch(`/api/guilds/${guildId}/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
