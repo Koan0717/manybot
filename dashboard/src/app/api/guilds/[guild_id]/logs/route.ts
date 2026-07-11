@@ -39,8 +39,8 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
         await client.query('DELETE FROM log_settings WHERE guild_id = $1', [guildId]);
         
         for (const [logType, conf] of Object.entries(body) as any) {
-            const channelId = conf?.channel_id || conf;
-            const isEnabled = typeof conf === 'object' && conf.is_enabled !== undefined ? conf.is_enabled : true;
+            const channelId = typeof conf === 'object' && conf !== null ? conf.channel_id : conf;
+            const isEnabled = typeof conf === 'object' && conf !== null && conf.is_enabled !== undefined ? conf.is_enabled : true;
 
             if (channelId && channelId !== '') {
                 await client.query(
