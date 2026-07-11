@@ -1297,27 +1297,29 @@ async def add_reaction_role(message_id: int, emoji: str, role_id: int):
             
             for table in tables_to_migrate:
                 try:
-                    guild_id_exists = await conn.fetchval(f"SELECT column_name FROM information_schema.columns WHERE table_name='{table}' AND column_name='guild_id'")
-                    if not guild_id_exists:
-                        await conn.execute(f'ALTER TABLE {table} ADD COLUMN guild_id BIGINT')
-                        await conn.execute(f'UPDATE {table} SET guild_id = $1 WHERE guild_id IS NULL', default_guild_id)
-                        
-                        # Recreate primary keys for specific tables if necessary
-                        if table == "users":
-                            await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey')
-                            await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, user_id)')
-                        elif table in ["antigrief_settings", "evaluation_settings", "rank_settings", "vc_coins_settings", "shop_settings"]:
-                            await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey')
-                            await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id)')
-                        elif table == "level_role_rewards":
-                            await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey')
-                            await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level, role_id)')
-                        elif table == "level_coin_rewards":
-                            await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey')
-                            await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level)')
-                        print(f"[Migration] Added guild_id to {table} and migrated data.")
+                    # try to add column, it will error if it already exists
+                    await conn.execute(f'ALTER TABLE {table} ADD COLUMN guild_id BIGINT')
+                    await conn.execute(f'UPDATE {table} SET guild_id = $1 WHERE guild_id IS NULL', default_guild_id)
+                except Exception:
+                    pass # column likely already exists
+                
+                try:
+                    # Recreate primary keys for specific tables if necessary
+                    if table == "users":
+                        await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey CASCADE')
+                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, user_id)')
+                    elif table in ["antigrief_settings", "evaluation_settings", "rank_settings", "vc_coins_settings", "shop_settings"]:
+                        await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey CASCADE')
+                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id)')
+                    elif table == "level_role_rewards":
+                        await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey CASCADE')
+                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level, role_id)')
+                    elif table == "level_coin_rewards":
+                        await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey CASCADE')
+                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level)')
+                    print(f"[Migration] Added guild_id to {table} and migrated data.")
                 except Exception as e:
-                    print(f"[Migration] {table} migration warning: {e}")
+                    print(f"[Migration] {table} PK migration warning: {e}")
         except Exception as e:
             print(f"[Migration] Comprehensive migration error: {e}")
 
