@@ -81,11 +81,37 @@ DEFAULT_SETTINGS = {
     "ENABLE_VC_COINS": True
 }
 
-def get_setting(bot, key: str):
-    if hasattr(bot, 'bot_settings') and key in bot.bot_settings:
-        return bot.bot_settings[key]
-    if key == "EVAL_TIME_CATEGORY_ID" and hasattr(bot, 'bot_settings') and "RANKING_CATEGORY_ID" in bot.bot_settings:
-        return bot.bot_settings["RANKING_CATEGORY_ID"]
+import inspect
+
+def get_setting(bot, key: str, guild_id: int = None):
+    if guild_id is None:
+        for frame_info in inspect.stack()[1:]:
+            frame = frame_info.frame
+            if 'interaction' in frame.f_locals:
+                obj = frame.f_locals['interaction']
+                if hasattr(obj, 'guild') and obj.guild:
+                    guild_id = obj.guild.id
+                    break
+            elif 'message' in frame.f_locals:
+                obj = frame.f_locals['message']
+                if hasattr(obj, 'guild') and obj.guild:
+                    guild_id = obj.guild.id
+                    break
+            elif 'member' in frame.f_locals:
+                obj = frame.f_locals['member']
+                if hasattr(obj, 'guild') and obj.guild:
+                    guild_id = obj.guild.id
+                    break
+            elif 'guild' in frame.f_locals:
+                obj = frame.f_locals['guild']
+                if hasattr(obj, 'id'):
+                    guild_id = obj.id
+                    break
+                    
+    if hasattr(bot, 'bot_settings') and guild_id in bot.bot_settings and key in bot.bot_settings[guild_id]:
+        return bot.bot_settings[guild_id][key]
+    if key == "EVAL_TIME_CATEGORY_ID" and hasattr(bot, 'bot_settings') and guild_id in bot.bot_settings and "RANKING_CATEGORY_ID" in bot.bot_settings[guild_id]:
+        return bot.bot_settings[guild_id]["RANKING_CATEGORY_ID"]
     return DEFAULT_SETTINGS.get(key)
 
 def get_role_by_setting(bot, guild, key, default_name):

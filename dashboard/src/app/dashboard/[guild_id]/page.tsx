@@ -29,24 +29,77 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
   const guildId = params.guild_id;
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   // Settings state to hold the selected values for each key
   const [settings, setSettings] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    fetch(`/api/guilds/${guildId}/roles`)
-      .then(res => res.json())
-      .then(data => {
-        if (!data.error) {
-          setRoles(data.filter((r: any) => r.id !== guildId));
+    // 並列でデータ取得
+    Promise.all([
+      fetch(`/api/guilds/${guildId}/roles`).then(res => res.json()),
+      fetch(`/api/guilds/${guildId}/settings`).then(res => res.json())
+    ])
+    .then(([rolesData, settingsData]) => {
+      if (!rolesData.error) {
+        setRoles(rolesData.filter((r: any) => r.id !== guildId));
+      }
+      if (!settingsData.error) {
+        // 数値型の場合は文字列に変換してセレクトボックスと合わせる
+        const formattedSettings: Record<string, any> = {};
+        for (const [k, v] of Object.entries(settingsData)) {
+          if (Array.isArray(v)) {
+            formattedSettings[k] = v.map(String);
+          } else if (v) {
+            formattedSettings[k] = String(v);
+          }
         }
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+        setSettings(formattedSettings);
+      }
+    })
+    .catch(console.error)
+    .finally(() => setLoading(false));
   }, [guildId]);
 
   const handleChange = (key: string, value: any, multiple: boolean) => {
     setSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    
+    // DBに保存する前に、数値を適切な型（number / number[]）に戻す
+    const payload: Record<string, any> = {};
+    for (const setting of ROLE_SETTINGS) {
+      const val = settings[setting.key];
+      if (!val) continue;
+      
+      if (setting.multiple) {
+        if (Array.isArray(val) && val.length > 0) {
+          payload[setting.key] = val.map(Number);
+        }
+      } else {
+        payload[setting.key] = Number(val);
+      }
+    }
+    
+    try {
+      const res = await fetch(`/api/guilds/${guildId}/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('設定を保存しました！');
+      } else {
+        alert('エラーが発生しました: ' + data.error);
+      }
+    } catch (e) {
+      alert('保存に失敗しました');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -95,8 +148,12 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
         </div>
         
         <div className="mt-8 border-t border-zinc-700 pt-4">
-          <button className="bg-red-600 hover:bg-red-700 text-white transition-colors px-8 py-3 rounded-lg font-bold disabled:opacity-50 w-full md:w-auto" disabled={loading}>
-            設定を保存する
+          <button 
+            onClick={handleSave}
+            className="bg-red-600 hover:bg-red-700 text-white transition-colors px-8 py-3 rounded-lg font-bold disabled:opacity-50 w-full md:w-auto flex items-center justify-center gap-2" 
+            disabled={loading || saving}
+          >
+            {saving ? '保存中...' : '設定を保存する'}
           </button>
         </div>
       </div>

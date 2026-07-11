@@ -82,8 +82,10 @@ async def setup_db():
         ''')
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS bot_settings (
-                setting_key TEXT PRIMARY KEY,
-                setting_value TEXT
+                guild_id BIGINT,
+                setting_key TEXT,
+                setting_value TEXT,
+                PRIMARY KEY (guild_id, setting_key)
             )
         ''')
         await conn.execute('''
@@ -658,25 +660,28 @@ async def remove_inquiry_panel(channel_id: int):
         await conn.execute('DELETE FROM inquiry_panels WHERE channel_id = $1', channel_id)
 
 # --- Bot設定値管理用関数 ---
-async def save_setting(key: str, value):
+async def save_setting(guild_id: int, key: str, value):
     p = await get_pool()
     val_json = json.dumps(value)
     async with p.acquire() as conn:
         await conn.execute('''
-            INSERT INTO bot_settings (setting_key, setting_value)
-            VALUES ($1, $2)
-            ON CONFLICT (setting_key)
-            DO UPDATE SET setting_value = $2
-        ''', key, val_json)
+            INSERT INTO bot_settings (guild_id, setting_key, setting_value)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (guild_id, setting_key)
+            DO UPDATE SET setting_value = $3
+        ''', guild_id, key, val_json)
 
 async def load_settings() -> dict:
     p = await get_pool()
     settings = {}
     async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT setting_key, setting_value FROM bot_settings')
+        rows = await conn.fetch('SELECT guild_id, setting_key, setting_value FROM bot_settings')
         for r in rows:
+            gid = r['guild_id']
+            if gid not in settings:
+                settings[gid] = {}
             try:
-                settings[r['setting_key']] = json.loads(r['setting_value'])
+                settings[gid][r['setting_key']] = json.loads(r['setting_value'])
             except Exception:
                 pass
     return settings
