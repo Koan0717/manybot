@@ -3,8 +3,8 @@ import { getPool } from '@/lib/db';
 
 export async function GET(request: Request, { params }: { params: { guild_id: string } }) {
   try {
-    const guildId = parseInt(params.guild_id);
-    if (isNaN(guildId)) return NextResponse.json({ error: 'Invalid guild_id' }, { status: 400 });
+    const guildId = params.guild_id;
+    
 
     const pool = await getPool(guildId);
     
@@ -44,8 +44,8 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
 
 export async function POST(request: Request, { params }: { params: { guild_id: string } }) {
   try {
-    const guildId = parseInt(params.guild_id);
-    if (isNaN(guildId)) return NextResponse.json({ error: 'Invalid guild_id' }, { status: 400 });
+    const guildId = params.guild_id;
+    
 
     const pool = await getPool(guildId);
     const body = await request.json();

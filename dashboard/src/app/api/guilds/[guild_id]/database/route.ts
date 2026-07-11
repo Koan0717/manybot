@@ -8,8 +8,8 @@ export async function GET(
   request: Request,
   { params }: { params: { guild_id: string } }
 ) {
-  const guildId = parseInt(params.guild_id);
-  if (isNaN(guildId)) return NextResponse.json({ error: 'Invalid guild_id' }, { status: 400 });
+  const guildId = params.guild_id;
+  
 
   try {
     const result = await masterPool.query(
@@ -33,8 +33,8 @@ export async function POST(
   request: Request,
   { params }: { params: { guild_id: string } }
 ) {
-  const guildId = parseInt(params.guild_id);
-  if (isNaN(guildId)) return NextResponse.json({ error: 'Invalid guild_id' }, { status: 400 });
+  const guildId = params.guild_id;
+  
 
   const { database_url } = await request.json();
 
