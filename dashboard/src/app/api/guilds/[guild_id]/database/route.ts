@@ -14,7 +14,7 @@ export async function GET(
 
   try {
     const result = await pool.query(
-      'SELECT database_url FROM guild_databases WHERE guild_id = ',
+      'SELECT database_url FROM guild_databases WHERE guild_id = $1',
       [guildId]
     );
 
@@ -42,12 +42,12 @@ export async function POST(
   try {
     if (database_url) {
       await pool.query(
-        'INSERT INTO guild_databases (guild_id, database_url) VALUES (, ) ON CONFLICT (guild_id) DO UPDATE SET database_url = EXCLUDED.database_url',
+        'INSERT INTO guild_databases (guild_id, database_url) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET database_url = EXCLUDED.database_url',
         [guildId, database_url]
       );
     } else {
       await pool.query(
-        'DELETE FROM guild_databases WHERE guild_id = ',
+        'DELETE FROM guild_databases WHERE guild_id = $1',
         [guildId]
       );
     }
@@ -55,20 +55,20 @@ export async function POST(
   } catch (error: any) {
     if (error.code === '42P01') {
       try {
-        await pool.query(
+        await pool.query(`
           CREATE TABLE IF NOT EXISTS guild_databases (
               guild_id BIGINT PRIMARY KEY,
               database_url TEXT NOT NULL
           )
-        );
+        `);
         if (database_url) {
           await pool.query(
-            'INSERT INTO guild_databases (guild_id, database_url) VALUES (, ) ON CONFLICT (guild_id) DO UPDATE SET database_url = EXCLUDED.database_url',
+            'INSERT INTO guild_databases (guild_id, database_url) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET database_url = EXCLUDED.database_url',
             [guildId, database_url]
           );
         } else {
           await pool.query(
-            'DELETE FROM guild_databases WHERE guild_id = ',
+            'DELETE FROM guild_databases WHERE guild_id = $1',
             [guildId]
           );
         }
