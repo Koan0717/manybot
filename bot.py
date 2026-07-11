@@ -24,6 +24,7 @@ class EconomyBot(commands.Bot):
         self.message_cooldowns = {} # {user_id: timestamp} (通貨用)
         self.tc_xp_cooldowns = {}   # {user_id: timestamp} (経験値用)
         self.vc_sessions = {}       # {user_id: join_timestamp}
+        self.eval_vc_sessions = {}  # {user_id: join_timestamp}
         self.empty_custom_vcs = {}  # {channel_id: empty_since_timestamp}
         self.auto_vc_triggers = set()
         self.auto_vc_configs = {}  # {channel_id: config_dict}
