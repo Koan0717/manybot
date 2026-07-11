@@ -198,10 +198,11 @@ async def setup_db_schema(p):
 
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS level_role_rewards (
+                guild_id BIGINT,
                 level_type VARCHAR(10),
                 level INTEGER,
                 role_id BIGINT,
-                PRIMARY KEY (level_type, level, role_id)
+                PRIMARY KEY (guild_id, level_type, level, role_id)
             )
         ''')
 
@@ -437,10 +438,11 @@ async def setup_db_schema(p):
 
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS level_coin_rewards (
+                guild_id BIGINT,
                 level_type VARCHAR(10),
                 level INTEGER,
                 coins INTEGER,
-                PRIMARY KEY (level_type, level)
+                PRIMARY KEY (guild_id, level_type, level)
             )
         ''')
 
@@ -1281,6 +1283,26 @@ async def add_reaction_role(message_id: int, emoji: str, role_id: int):
             await conn.execute('ALTER TABLE user_evaluations ADD COLUMN IF NOT EXISTS comment TEXT')
         except Exception as e:
             print(f"[Migration] user_evaluations columns migration warning: {e}")
+
+        try:
+            guild_id_exists = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='level_role_rewards' AND column_name='guild_id'")
+            if not guild_id_exists:
+                await conn.execute('ALTER TABLE level_role_rewards ADD COLUMN guild_id BIGINT')
+                await conn.execute('UPDATE level_role_rewards SET guild_id = 0 WHERE guild_id IS NULL')
+                await conn.execute('ALTER TABLE level_role_rewards DROP CONSTRAINT IF EXISTS level_role_rewards_pkey')
+                await conn.execute('ALTER TABLE level_role_rewards ADD PRIMARY KEY (guild_id, level_type, level, role_id)')
+        except Exception as e:
+            print(f"[Migration] level_role_rewards migration warning: {e}")
+
+        try:
+            guild_id_exists = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='level_coin_rewards' AND column_name='guild_id'")
+            if not guild_id_exists:
+                await conn.execute('ALTER TABLE level_coin_rewards ADD COLUMN guild_id BIGINT')
+                await conn.execute('UPDATE level_coin_rewards SET guild_id = 0 WHERE guild_id IS NULL')
+                await conn.execute('ALTER TABLE level_coin_rewards DROP CONSTRAINT IF EXISTS level_coin_rewards_pkey')
+                await conn.execute('ALTER TABLE level_coin_rewards ADD PRIMARY KEY (guild_id, level_type, level)')
+        except Exception as e:
+            print(f"[Migration] level_coin_rewards migration warning: {e}")
 
 async def get_user_evaluation_counts(target_user_id: int) -> dict:
     p = await get_pool()
