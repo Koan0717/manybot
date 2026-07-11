@@ -1644,13 +1644,23 @@ async def remove_level_coin_reward(guild_id: int, level_type: str, level: int):
         ''', guild_id, level_type, level)
 
 # --- VCランキング取得用関数 ---
-async def get_vc_ranking(limit: int = 10) -> list[dict]:
+async def get_top_users(guild_id: int, mode: str, limit: int = 10) -> list[dict]:
     p = await get_pool()
     async with p.acquire() as conn:
-        rows = await conn.fetch('''
-            SELECT user_id, vc_level, vc_xp 
-            FROM users 
-            ORDER BY vc_level DESC, vc_xp DESC 
-            LIMIT $1
-        ''', limit)
-        return [{"user_id": r["user_id"], "vc_level": r["vc_level"], "vc_xp": r["vc_xp"]} for r in rows]
+        if mode == "tc":
+            rows = await conn.fetch('''
+                SELECT user_id, tc_level as level, tc_xp as xp
+                FROM users 
+                WHERE guild_id = $1
+                ORDER BY tc_level DESC, tc_xp DESC 
+                LIMIT $2
+            ''', guild_id, limit)
+        else:
+            rows = await conn.fetch('''
+                SELECT user_id, vc_level as level, vc_xp as xp
+                FROM users 
+                WHERE guild_id = $1
+                ORDER BY vc_level DESC, vc_xp DESC 
+                LIMIT $2
+            ''', guild_id, limit)
+        return [{"user_id": r["user_id"], "level": r["level"], "xp": r["xp"]} for r in rows]

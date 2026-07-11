@@ -25,7 +25,7 @@ class Ranking(commands.Cog):
 
         try:
             target_user = user or interaction.user
-            user_data = await database.get_user(target_user.id)
+            user_data = await database.get_user(interaction.guild_id, target_user.id)
             
             tc_xp, tc_lv = user_data["tc_xp"], user_data["tc_level"]
             vc_xp, vc_lv = user_data["vc_xp"], user_data["vc_level"]
@@ -50,7 +50,7 @@ class Ranking(commands.Cog):
             user_role_ids = {r.id for r in target_user.roles}
             
             vc_role_name = None
-            vc_rewards = await database.get_level_role_rewards("vc")
+            vc_rewards = await database.get_level_role_rewards(interaction.guild_id, "vc")
             vc_rewards.sort(key=lambda x: x["level"], reverse=True)
             for r in vc_rewards:
                 if r["role_id"] in user_role_ids:
@@ -60,7 +60,7 @@ class Ranking(commands.Cog):
                         break
             
             tc_role_name = None
-            tc_rewards = await database.get_level_role_rewards("tc")
+            tc_rewards = await database.get_level_role_rewards(interaction.guild_id, "tc")
             tc_rewards.sort(key=lambda x: x["level"], reverse=True)
             for r in tc_rewards:
                 if r["role_id"] in user_role_ids:
@@ -75,13 +75,8 @@ class Ranking(commands.Cog):
             if join_time:
                 now_aware = datetime.datetime.now(config.JST)
                 current_sec = int((now_aware - join_time).total_seconds())
-                if current_sec > 0:
-                    eval_time_sec += current_sec
-
-            hours = eval_time_sec // 3600
-            minutes = (eval_time_sec % 3600) // 60
-            seconds = eval_time_sec % 60
-            eval_time_str = f"{hours}時間{minutes}分{seconds}秒"
+                eval_time_sec += current_sec
+            eval_time_str = f"{eval_time_sec // 3600}時間 {(eval_time_sec % 3600) // 60}分"
 
             # ランクカード画像の生成
             import io
@@ -93,16 +88,13 @@ class Ranking(commands.Cog):
                     server_logo_bytes=server_logo_bytes,
                     vc_level=vc_lv,
                     vc_xp=vc_xp,
-                    vc_next_xp=vc_next,
-                    vc_role_name=vc_role_name,
+                    vc_next=vc_next,
                     tc_level=tc_lv,
                     tc_xp=tc_xp,
-                    tc_next_xp=tc_next,
-                    tc_role_name=tc_role_name,
-                    enable_tc=True,
-                    eval_time_str=eval_time_str,
-                    bot=self.bot,
-                    guild_id=guild_id
+                    tc_next=tc_next,
+                    eval_time=eval_time_str,
+                    vc_role=vc_role_name,
+                    tc_role=tc_role_name
                 )
                 file = discord.File(fp=io.BytesIO(card_bytes), filename="rank_card.png")
                 await interaction.followup.send(file=file)
@@ -119,10 +111,10 @@ class Ranking(commands.Cog):
                 return f"{bar}  **{int(pct*100)}%**"
 
             tc_needed = tc_next - tc_xp
-            tc_est_msgs = -(-tc_needed // (config.get_setting(self.bot, "TC_XP_REWARD", message.guild.id) or 10))
+            tc_est_msgs = -(-tc_needed // (config.get_setting(self.bot, "TC_XP_REWARD", interaction.guild_id) or 10))
             
             vc_needed = vc_next - vc_xp
-            vc_est_mins = -(-vc_needed // (config.get_setting(self.bot, "VC_XP_PER_MIN", guild_id) or 15))
+            vc_est_mins = -(-vc_needed // (config.get_setting(self.bot, "VC_XP_PER_MIN", interaction.guild_id) or 15))
 
             embed = discord.Embed(
                 title=f"✨ {target_user.display_name} のステータス",
@@ -139,11 +131,11 @@ class Ranking(commands.Cog):
                 f"┗ 次のレベルまであと **{tc_needed}** XP\n"
                 f"┗ 目安: あと **約{tc_est_msgs}通** のチャット"
             )
-            embed.add_field(name="💬 テキスト活動 (TC)", value=tc_value, inline=False)
+            if tc_role_name:
+                tc_value += f"\n┗ 現在の役職: **{tc_role_name}**"
+            embed.add_field(name="💬 テキストチャット", value=tc_value, inline=False)
 
             # VC
-            eval_time_cat_id = config.get_setting(self.bot, "EVAL_TIME_CATEGORY_ID")
-            current_session_str = ""
 
             if target_user.voice and target_user.voice.channel:
                 vc = target_user.voice.channel
@@ -203,13 +195,7 @@ class Ranking(commands.Cog):
 
             await interaction.followup.send(embed=embed)
         except Exception as e:
-            print(f"[ERROR] rank status command: {e}")
-            try:
-                await interaction.followup.send(f"❌ エラーが発生しました: `{e}`", ephemeral=True)
-            except:
-                pass
-        except Exception as e:
-            print(f"[ERROR] rank status command: {e}")
+            print(f"[ERROR] rank info command: {e}")
             try:
                 await interaction.followup.send(f"❌ エラーが発生しました: `{e}`", ephemeral=True)
             except:
@@ -231,7 +217,7 @@ class Ranking(commands.Cog):
     async def _show_ranking(self, interaction: discord.Interaction, mode: str):
         await interaction.response.defer()
         try:
-            top_users = await database.get_top_users(mode, 10)
+            top_users = await database.get_top_users(interaction.guild_id, mode, 10)
             
             embed = discord.Embed(
                 title="💬 TCランキング上位10名" if mode == "tc" else "🎙️ VCランキング上位10名",
