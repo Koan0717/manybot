@@ -1135,8 +1135,6 @@ class PriceInputModal(discord.ui.Modal, title='新しい価格の入力'):
             else:
                 rtype, dur = parts[0], int(parts[1])
                 await database.update_room_price(rtype, dur, price)
-                if rtype in ROOM_SETTINGS and dur in ROOM_SETTINGS[rtype]:
-                    ROOM_SETTINGS[rtype][dur]["price"] = price
                 await interaction.response.send_message(f"✅ 更新しました: {rtype} ({dur}時間) ➔ {price:,} {currency_name}", ephemeral=True)
                 
             await update_room_prices_config_view(interaction)

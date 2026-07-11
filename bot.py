@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import database
 from keep_alive import keep_alive
 from helpers import (
-    JST, ROOM_SETTINGS,
+    JST,
     get_setting, is_rank_eligible, is_vc_coins_eligible, check_and_assign_level_roles, send_log
 )
 
@@ -179,17 +179,6 @@ class EconomyBot(commands.Bot):
                 "show_panel": True
             }
 
-        # 部屋の価格設定のキャッシュロード
-        try:
-            db_prices = await database.get_all_room_prices()
-            for p_info in db_prices:
-                rtype = p_info["room_type"]
-                dur = p_info["duration"]
-                price = p_info["price"]
-                if rtype in ROOM_SETTINGS and dur in ROOM_SETTINGS[rtype]:
-                    ROOM_SETTINGS[rtype][dur]["price"] = price
-        except Exception as e:
-            print(f"[ERROR] Failed to load room prices from DB: {e}")
 
         # ロール別部屋価格のキャッシュロード
         try:

@@ -328,7 +328,7 @@ def is_new_member(bot, user: discord.Member) -> bool:
     return False
 
 def get_luxury_inn_price(bot, user: discord.Member, duration: int) -> int:
-    base_price = ROOM_SETTINGS["高級宿"][duration]["price"]
+    base_price = get_room_settings(bot)["高級宿"][duration]["price"]
     role_prices = getattr(bot, "role_room_prices", {})
     
     if is_downgrade_member(bot, user):

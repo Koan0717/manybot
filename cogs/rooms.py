@@ -857,7 +857,7 @@ class Rooms(commands.Cog):
                             next_num = 1
                             while next_num in existing_numbers:
                                 next_num += 1
-                            circled_num = get_room_settings, get_circled_number(next_num)
+                            circled_num = get_circled_number(next_num)
                             channel_name = f"{channel_name}ー{circled_num}"
 
                     if category:
