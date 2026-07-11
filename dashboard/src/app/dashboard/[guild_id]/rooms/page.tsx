@@ -1,7 +1,27 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+
 export default function RoomsSettings({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
+  const [channels, setChannels] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/guilds/${guildId}/channels`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) {
+          setChannels(data);
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [guildId]);
+
+  // Discord Channel Types: 0 = GUILD_TEXT, 4 = GUILD_CATEGORY
+  const textChannels = channels.filter(c => c.type === 0);
+  const categories = channels.filter(c => c.type === 4);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -17,22 +37,32 @@ export default function RoomsSettings({ params }: { params: { guild_id: string }
           <div className="flex flex-col gap-2">
             <label className="text-sm text-zinc-400">設置するテキストチャンネル</label>
             <select className="bg-zinc-900 border border-zinc-700 rounded p-2 focus:border-red-500 outline-none text-white">
-              <option># 部屋作成チャンネルを選択</option>
-              <option># vc作成</option>
-              <option># create-room</option>
+              <option value="">チャンネルを選択してください</option>
+              {loading ? (
+                <option disabled>読み込み中...</option>
+              ) : (
+                textChannels.map(c => (
+                  <option key={c.id} value={c.id}># {c.name}</option>
+                ))
+              )}
             </select>
           </div>
 
           <div className="flex flex-col gap-2">
             <label className="text-sm text-zinc-400">作成されるVCの親カテゴリ</label>
             <select className="bg-zinc-900 border border-zinc-700 rounded p-2 focus:border-red-500 outline-none text-white">
-              <option>カテゴリを選択</option>
-              <option>ボイスチャンネル</option>
-              <option>プライベート部屋</option>
+              <option value="">カテゴリを選択してください</option>
+              {loading ? (
+                <option disabled>読み込み中...</option>
+              ) : (
+                categories.map(c => (
+                  <option key={c.id} value={c.id}>📁 {c.name}</option>
+                ))
+              )}
             </select>
           </div>
           
-          <button className="mt-4 bg-red-600 hover:bg-red-700 text-white transition-colors px-6 py-2 rounded font-bold">
+          <button className="mt-4 bg-red-600 hover:bg-red-700 text-white transition-colors px-6 py-2 rounded font-bold disabled:opacity-50" disabled={loading}>
             パネルを設置する
           </button>
         </div>
@@ -55,7 +85,7 @@ export default function RoomsSettings({ params }: { params: { guild_id: string }
             <input type="number" defaultValue={5} className="bg-zinc-900 border border-zinc-700 rounded p-2 focus:border-red-500 outline-none text-white" />
           </div>
           
-          <button className="mt-4 bg-red-600 hover:bg-red-700 text-white transition-colors px-6 py-2 rounded font-bold">
+          <button className="mt-4 bg-red-600 hover:bg-red-700 text-white transition-colors px-6 py-2 rounded font-bold disabled:opacity-50" disabled={loading}>
             料金を保存する
           </button>
         </div>
