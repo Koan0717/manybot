@@ -1285,24 +1285,41 @@ async def add_reaction_role(message_id: int, emoji: str, role_id: int):
             print(f"[Migration] user_evaluations columns migration warning: {e}")
 
         try:
-            guild_id_exists = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='level_role_rewards' AND column_name='guild_id'")
-            if not guild_id_exists:
-                await conn.execute('ALTER TABLE level_role_rewards ADD COLUMN guild_id BIGINT')
-                await conn.execute('UPDATE level_role_rewards SET guild_id = 0 WHERE guild_id IS NULL')
-                await conn.execute('ALTER TABLE level_role_rewards DROP CONSTRAINT IF EXISTS level_role_rewards_pkey')
-                await conn.execute('ALTER TABLE level_role_rewards ADD PRIMARY KEY (guild_id, level_type, level, role_id)')
+            # Migrate all tables that should have guild_id
+            tables_to_migrate = [
+                "users", "evaluation_periods", "bot_settings", "antigrief_settings", 
+                "level_role_rewards", "panel_requests", "log_settings", "evaluation_settings", 
+                "rank_settings", "vc_coins_settings", "interviewer_logs", "user_evaluations", 
+                "user_vc_durations", "shop_settings", "shop_items", "user_items", "level_coin_rewards"
+            ]
+            
+            default_guild_id = 1111621213446053898 # 既存のデータを移行するデフォルトサーバーID
+            
+            for table in tables_to_migrate:
+                try:
+                    guild_id_exists = await conn.fetchval(f"SELECT column_name FROM information_schema.columns WHERE table_name='{table}' AND column_name='guild_id'")
+                    if not guild_id_exists:
+                        await conn.execute(f'ALTER TABLE {table} ADD COLUMN guild_id BIGINT')
+                        await conn.execute(f'UPDATE {table} SET guild_id = $1 WHERE guild_id IS NULL', default_guild_id)
+                        
+                        # Recreate primary keys for specific tables if necessary
+                        if table == "users":
+                            await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey')
+                            await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, user_id)')
+                        elif table in ["antigrief_settings", "evaluation_settings", "rank_settings", "vc_coins_settings", "shop_settings"]:
+                            await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey')
+                            await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id)')
+                        elif table == "level_role_rewards":
+                            await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey')
+                            await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level, role_id)')
+                        elif table == "level_coin_rewards":
+                            await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey')
+                            await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level)')
+                        print(f"[Migration] Added guild_id to {table} and migrated data.")
+                except Exception as e:
+                    print(f"[Migration] {table} migration warning: {e}")
         except Exception as e:
-            print(f"[Migration] level_role_rewards migration warning: {e}")
-
-        try:
-            guild_id_exists = await conn.fetchval("SELECT column_name FROM information_schema.columns WHERE table_name='level_coin_rewards' AND column_name='guild_id'")
-            if not guild_id_exists:
-                await conn.execute('ALTER TABLE level_coin_rewards ADD COLUMN guild_id BIGINT')
-                await conn.execute('UPDATE level_coin_rewards SET guild_id = 0 WHERE guild_id IS NULL')
-                await conn.execute('ALTER TABLE level_coin_rewards DROP CONSTRAINT IF EXISTS level_coin_rewards_pkey')
-                await conn.execute('ALTER TABLE level_coin_rewards ADD PRIMARY KEY (guild_id, level_type, level)')
-        except Exception as e:
-            print(f"[Migration] level_coin_rewards migration warning: {e}")
+            print(f"[Migration] Comprehensive migration error: {e}")
 
 async def get_user_evaluation_counts(target_user_id: int) -> dict:
     p = await get_pool()
