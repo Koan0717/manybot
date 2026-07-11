@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
-const masterPool = new Pool({ connectionString: process.env.DATABASE_URL });
+const masterPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
 export async function GET(
   request: Request,

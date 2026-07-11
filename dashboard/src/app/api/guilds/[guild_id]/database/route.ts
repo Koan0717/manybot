@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { setupDbSchema } from '@/lib/db';
 
-const masterPool = new Pool({ connectionString: process.env.DATABASE_URL });
+const masterPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
 export async function GET(
   request: Request,
@@ -57,7 +57,7 @@ export async function POST(
       
       // Run setup schema on the newly added DB
       try {
-        const newPool = new Pool({ connectionString: database_url });
+        const newPool = new Pool({ connectionString: database_url, ssl: { rejectUnauthorized: false } });
         await setupDbSchema(newPool);
       } catch (setupError: any) {
         return NextResponse.json({ error: 'テーブルの初期化に失敗しました。URLが正しいか確認してください。' }, { status: 500 });
