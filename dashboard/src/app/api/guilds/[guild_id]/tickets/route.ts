@@ -48,6 +48,8 @@ export async function POST(
   { params }: { params: { guild_id: string } }
 ) {
   try {
+    const guildId = params.guild_id;
+    const pool = await getPool(guildId);
     const body = await request.json();
     const { action } = body;
 
