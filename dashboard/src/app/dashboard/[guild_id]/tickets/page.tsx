@@ -202,11 +202,30 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                       {panel.button_emoji} {panel.button_label}
                     </div>
                   </div>
-                  <div className="text-xs text-zinc-500 space-y-1">
+                  <div className="text-xs text-zinc-500 space-y-1 mb-4">
                     <p>チケットの接頭辞: <span className="text-zinc-300 font-mono">{panel.ticket_prefix}-001</span></p>
                     <p>メンション: {panel.mention_role_ids?.length || 0} 個のロール</p>
                     <p>利用可能: {panel.target_role_ids?.length || '全員'}</p>
                   </div>
+                  <button
+                    onClick={async () => {
+                      if (!confirm('このチャンネルにチケット作成パネルを送信しますか？')) return;
+                      try {
+                        const res = await fetch(`/api/guilds/${guildId}/rooms`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ action: 'deploy_panel', channel_id: panel.channel_id, panel_type: 'custom_ticket' })
+                        });
+                        if (res.ok) alert('パネルの設置をリクエストしました！');
+                        else alert('リクエストに失敗しました。');
+                      } catch (e) {
+                        alert('エラーが発生しました。');
+                      }
+                    }}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-bold shadow transition-colors"
+                  >
+                    🚀 このチャンネルにパネルを設置する
+                  </button>
                 </div>
               );
             })}

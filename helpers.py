@@ -9,28 +9,67 @@ import json
 
 JST = datetime.timezone(datetime.timedelta(hours=9))
 
-# 部屋作成の設定
-ROOM_SETTINGS = {
-    "宿": {
-        12: {"price": 10000, "duration_hours": 12},
-        24: {"price": 15000, "duration_hours": 24}
-    },
-    "高級宿": {
-        12: {"price": 150000, "duration_hours": 12},
-        24: {"price": 250000, "duration_hours": 24}
-    },
-    "カスタムVC": {
-        24: {"price": 30000, "duration_hours": 24}
-    },
-    "ゲームVC": {
-        12: {"price": 10000, "duration_hours": 12},
-        24: {"price": 15000, "duration_hours": 24}
-    },
-    "賭博VC": {
-        12: {"price": 10000, "duration_hours": 12},
-        24: {"price": 15000, "duration_hours": 24}
+def get_room_settings(bot, guild_id: int = None) -> dict:
+    default_settings = {
+        "宿": {
+            12: {"price": 10000, "duration_hours": 12},
+            24: {"price": 15000, "duration_hours": 24}
+        },
+        "高級宿": {
+            12: {"price": 150000, "duration_hours": 12},
+            24: {"price": 250000, "duration_hours": 24}
+        },
+        "カスタムVC": {
+            24: {"price": 30000, "duration_hours": 24}
+        },
+        "ゲームVC": {
+            12: {"price": 10000, "duration_hours": 12},
+            24: {"price": 15000, "duration_hours": 24}
+        },
+        "賭博VC": {
+            12: {"price": 10000, "duration_hours": 12},
+            24: {"price": 15000, "duration_hours": 24}
+        }
     }
-}
+
+    if guild_id is None:
+        import inspect
+        for frame_info in inspect.stack()[1:]:
+            frame = frame_info.frame
+            if 'interaction' in frame.f_locals:
+                obj = frame.f_locals['interaction']
+                if hasattr(obj, 'guild') and obj.guild:
+                    guild_id = obj.guild.id
+                    break
+            if 'it' in frame.f_locals:
+                obj = frame.f_locals['it']
+                if hasattr(obj, 'guild') and obj.guild:
+                    guild_id = obj.guild.id
+                    break
+
+    if guild_id and hasattr(bot, "bot_settings") and guild_id in bot.bot_settings:
+        if "ROOM_PRICES" in bot.bot_settings[guild_id]:
+            try:
+                import json
+                db_settings = json.loads(bot.bot_settings[guild_id]["ROOM_PRICES"])
+                parsed_settings = {}
+                for room_type, durations in db_settings.items():
+                    parsed_settings[room_type] = {}
+                    for dur, data in durations.items():
+                        parsed_settings[room_type][int(dur)] = data
+                # Merge defaults for any missing types/durations
+                for rt in default_settings:
+                    if rt not in parsed_settings:
+                        parsed_settings[rt] = default_settings[rt]
+                    else:
+                        for dur in default_settings[rt]:
+                            if dur not in parsed_settings[rt]:
+                                parsed_settings[rt][dur] = default_settings[rt][dur]
+                return parsed_settings
+            except Exception:
+                pass
+    return default_settings
+
 CREATE_VC_CHANNEL_ID = 123456789012345678
 
 # 面接・入界設定

@@ -266,6 +266,16 @@ async def setup_db_schema(p):
             print(f"[Migration] custom_ticket_panels migration warning: {e}")
 
         await conn.execute('''
+            CREATE TABLE IF NOT EXISTS panel_requests (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT,
+                channel_id BIGINT,
+                panel_type VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        await conn.execute('''
             CREATE TABLE IF NOT EXISTS log_settings (
                 guild_id BIGINT,
                 log_type VARCHAR(50),
@@ -952,6 +962,16 @@ async def remove_custom_ticket_panel(channel_id: int):
     async with p.acquire() as conn:
         await conn.execute('DELETE FROM custom_ticket_panels WHERE channel_id = $1', channel_id)
 
+async def get_panel_requests() -> list[dict]:
+    p = await get_pool()
+    async with p.acquire() as conn:
+        rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type FROM panel_requests ORDER BY created_at ASC LIMIT 10')
+        return [dict(row) for row in rows]
+
+async def delete_panel_request(request_id: int):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        await conn.execute('DELETE FROM panel_requests WHERE id = $1', request_id)
 
 async def set_log_channel(guild_id: int, log_type: str, channel_id: int):
     p = await get_pool()
