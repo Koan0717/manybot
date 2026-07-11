@@ -207,7 +207,8 @@ class EconomyBot(commands.Bot):
             "cogs.interview",
             "cogs.evaluation",
             "cogs.utility",
-            "cogs.points"
+            "cogs.points",
+            "cogs.dashboard_launcher"
         ]
         for cog in cogs_to_load:
             try:
