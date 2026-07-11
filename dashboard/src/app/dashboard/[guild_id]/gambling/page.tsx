@@ -17,6 +17,7 @@ export default function GamblingSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('common');
+  const [rouletteChartType, setRouletteChartType] = useState<'2x' | '3x' | '36x'>('2x');
 
   useEffect(() => {
     fetch(`/api/guilds/${guildId}/gambling`)
@@ -153,10 +154,22 @@ export default function GamblingSettingsPage() {
       { name: '負け', value: settings.GAMBLE_BLACKJACK_RATE_LOSE },
     ];
   } else if (activeTab === 'roulette') {
-    pieData = [
-      { name: '2倍賭け当たり', value: settings.GAMBLE_ROULETTE_WIN_RATE_2X },
-      { name: '2倍賭けハズレ', value: Math.max(0, 1 - settings.GAMBLE_ROULETTE_WIN_RATE_2X) },
-    ]; // Simplified for visual
+    if (rouletteChartType === '2x') {
+      pieData = [
+        { name: '2倍賭け当たり', value: settings.GAMBLE_ROULETTE_WIN_RATE_2X },
+        { name: '2倍賭けハズレ', value: Math.max(0, 1 - settings.GAMBLE_ROULETTE_WIN_RATE_2X) },
+      ];
+    } else if (rouletteChartType === '3x') {
+      pieData = [
+        { name: '3倍賭け当たり', value: settings.GAMBLE_ROULETTE_WIN_RATE_3X },
+        { name: '3倍賭けハズレ', value: Math.max(0, 1 - settings.GAMBLE_ROULETTE_WIN_RATE_3X) },
+      ];
+    } else if (rouletteChartType === '36x') {
+      pieData = [
+        { name: '1点賭け当たり', value: settings.GAMBLE_ROULETTE_WIN_RATE_36X },
+        { name: '1点賭けハズレ', value: Math.max(0, 1 - settings.GAMBLE_ROULETTE_WIN_RATE_36X) },
+      ];
+    }
   }
 
   const renderInput = (label: string, key: string, isPercent: boolean = false, step: string = "0.01") => (
@@ -355,6 +368,23 @@ export default function GamblingSettingsPage() {
           <div className="lg:col-span-1">
             <div className="bg-gradient-to-b from-gray-900 to-gray-950 border border-gray-700/50 rounded-2xl p-6 shadow-2xl sticky top-28">
               <h3 className="text-center text-lg font-bold text-purple-400 mb-2">現在の確率バランス</h3>
+              {activeTab === 'roulette' && (
+                <div className="flex justify-center gap-2 mb-4">
+                  {(['2x', '3x', '36x'] as const).map(type => (
+                    <button
+                      key={type}
+                      onClick={() => setRouletteChartType(type)}
+                      className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${
+                        rouletteChartType === type 
+                        ? 'bg-purple-600 text-white' 
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                      }`}
+                    >
+                      {type === '2x' ? '2倍賭け' : type === '3x' ? '3倍賭け' : '1点賭け'}
+                    </button>
+                  ))}
+                </div>
+              )}
               <p className="text-center text-xs text-gray-500 mb-6">設定値の合計が100%になるように調整してください。</p>
               
               <div className="h-[300px] w-full">
