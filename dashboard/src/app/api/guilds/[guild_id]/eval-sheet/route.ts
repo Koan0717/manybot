@@ -54,6 +54,13 @@ export async function POST(
       [guildId, forumChannelIds, selfIntroChannelIds, isEnabled]
     );
 
+    // Request bot to reload the evaluation settings cache
+    await pool.query(
+      `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
+       VALUES ($1, $2, $3)`,
+      [guildId, 0, 'reload_eval'] // channel_id=0 for system events
+    );
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

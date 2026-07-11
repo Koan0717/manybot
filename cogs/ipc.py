@@ -26,6 +26,47 @@ class IPC(commands.Cog):
                     await database.delete_panel_request(req_id)
                     continue
 
+                if channel_id == 0:
+                    if panel_type == "reload_eval":
+                        try:
+                            db_eval_settings = await database.get_all_evaluation_settings()
+                            for s in db_eval_settings:
+                                if s["guild_id"] == guild_id:
+                                    self.bot.evaluation_settings[guild_id] = {
+                                        "is_enabled": s.get("is_enabled", True),
+                                        "forum_channel_ids": set(s["forum_channel_ids"]),
+                                        "self_intro_channel_ids": set(s["self_intro_channel_ids"])
+                                    }
+                            print(f"[IPC] Reloaded evaluation settings for guild {guild_id}")
+                        except Exception as e:
+                            print(f"[IPC ERROR] Failed to reload evaluation settings: {e}")
+                    
+                    elif panel_type == "reload_bot_settings":
+                        try:
+                            self.bot.bot_settings = await database.load_settings()
+                            print(f"[IPC] Reloaded bot_settings for all guilds")
+                        except Exception as e:
+                            print(f"[IPC ERROR] Failed to reload bot_settings: {e}")
+
+                    elif panel_type == "reload_rank_and_bot_settings":
+                        try:
+                            self.bot.bot_settings = await database.load_settings()
+                            db_rank_settings = await database.get_all_rank_settings()
+                            for s in db_rank_settings:
+                                if s["guild_id"] == guild_id:
+                                    self.bot.rank_settings_cache[guild_id] = {
+                                        "whitelist": set(s["whitelist_channel_ids"]),
+                                        "blacklist": set(s["blacklist_channel_ids"]),
+                                        "categories": set(s["whitelist_category_ids"]),
+                                        "blacklist_categories": set(s["blacklist_category_ids"])
+                                    }
+                            print(f"[IPC] Reloaded rank and bot_settings for guild {guild_id}")
+                        except Exception as e:
+                            print(f"[IPC ERROR] Failed to reload rank and bot settings: {e}")
+
+                    await database.delete_panel_request(req_id)
+                    continue
+
                 channel = guild.get_channel(channel_id)
                 if not channel:
                     await database.delete_panel_request(req_id)

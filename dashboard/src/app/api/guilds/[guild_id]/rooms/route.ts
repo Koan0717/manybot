@@ -50,6 +50,13 @@ export async function POST(
         [guildId, 'ROOM_PRICES', JSON.stringify(ROOM_PRICES)]
       );
       
+      // Request bot to reload bot_settings cache
+      await pool.query(
+        `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
+         VALUES ($1, $2, $3)`,
+        [guildId, 0, 'reload_bot_settings']
+      );
+      
       return NextResponse.json({ success: true });
     }
     else if (action === 'deploy_panel') {

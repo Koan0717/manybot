@@ -92,6 +92,13 @@ export async function POST(
         ]
       );
 
+      // Request bot to reload the rank settings and bot_settings cache
+      await client.query(
+        `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
+         VALUES ($1, $2, $3)`,
+        [guildId, 0, 'reload_rank_and_bot_settings']
+      );
+
       await client.query('COMMIT');
       return NextResponse.json({ success: true });
     } catch (e) {
