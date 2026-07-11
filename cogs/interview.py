@@ -36,7 +36,7 @@ class InterviewNicknameModal(discord.ui.Modal, title='入界手続き：名前�
             initial_coins = get_setting(bot, "INITIAL_COINS") or 30000
             currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
             await database.add_balance(interaction.guild.id, interaction.user.id, initial_coins)
-            await database.mark_initial_issued(interaction.user.id)
+            await database.mark_initial_issued(interaction.guild_id, interaction.user.id)
 
             # 通貨ログ送信
             embed_log = discord.Embed(
@@ -173,7 +173,7 @@ class InterviewerGroup(app_commands.Group):
             initial_coins = get_setting(bot, "INITIAL_COINS") or 30000
             currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
             await database.add_balance(interaction.guild.id, user.id, initial_coins)
-            await database.mark_initial_issued(user.id)
+            await database.mark_initial_issued(interaction.guild_id, user.id)
             
             await interaction.followup.send(f"✅ {user.mention} の入界手続きを完了しました！（{initial_coins} {currency_name} 発行済み）{nick_change_status}", ephemeral=True)
 

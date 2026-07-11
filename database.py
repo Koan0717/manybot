@@ -466,7 +466,7 @@ async def setup_db():
         await setup_db_schema(p)
 
 async def get_user(guild_id: int, user_id: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('SELECT balance, chinchiro_count, chinchiro_last_date, tc_xp, tc_level, vc_xp, vc_level, evaluation_vc_time, initial_issued, chinchiro_daily_bet, event_points FROM users WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
         if row:
@@ -493,7 +493,7 @@ async def get_balance(guild_id: int, user_id: int) -> int:
 
 async def add_balance(guild_id: int, user_id: int, amount: int):
     await get_user(guild_id, user_id)
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         new_balance = await conn.fetchval('UPDATE users SET balance = balance + $1 WHERE guild_id = $2 AND user_id = $3 RETURNING balance', amount, guild_id, user_id)
         return new_balance
@@ -502,7 +502,7 @@ async def remove_balance(guild_id: int, user_id: int, amount: int, force: bool =
     if amount < 0:
         return False
         
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         if force:
             await conn.execute('UPDATE users SET balance = balance - $1 WHERE guild_id = $2 AND user_id = $3', amount, guild_id, user_id)
@@ -520,7 +520,7 @@ async def transfer_balance(guild_id: int, sender_id: int, receiver_id: int, amou
     await get_user(guild_id, receiver_id)
     await get_user(guild_id, sender_id)
     
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         async with conn.transaction():
             status = await conn.execute('UPDATE users SET balance = balance - $1 WHERE guild_id = $2 AND user_id = $3 AND balance >= $1', amount, guild_id, sender_id)
@@ -535,26 +535,26 @@ async def get_event_points(guild_id: int, user_id: int) -> int:
 
 async def add_event_points(guild_id: int, user_id: int, amount: int) -> int:
     await get_user(guild_id, user_id)
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         new_points = await conn.fetchval('UPDATE users SET event_points = event_points + $1 WHERE guild_id = $2 AND user_id = $3 RETURNING event_points', amount, guild_id, user_id)
         return new_points
 
 async def remove_event_points(guild_id: int, user_id: int, amount: int) -> int:
     await get_user(guild_id, user_id)
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         new_points = await conn.fetchval('UPDATE users SET event_points = GREATEST(0, event_points - $1) WHERE guild_id = $2 AND user_id = $3 RETURNING event_points', amount, guild_id, user_id)
         return new_points
 
 
 async def reset_gambling_count(guild_id: int, user_id: int, date_str: str):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('UPDATE users SET chinchiro_count = 0, chinchiro_daily_bet = 0, chinchiro_last_date = $1 WHERE guild_id = $2 AND user_id = $3', date_str, guild_id, user_id)
 
 async def increment_gambling_count(guild_id: int, user_id: int, amount: int = 0):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('UPDATE users SET chinchiro_count = chinchiro_count + 1, chinchiro_daily_bet = chinchiro_daily_bet + $1 WHERE guild_id = $2 AND user_id = $3', amount, guild_id, user_id)
 
@@ -566,7 +566,7 @@ async def add_xp(guild_id: int, user_id: int, amount: int, mode: str):
     field_xp = "tc_xp" if mode == "tc" else "vc_xp"
     field_lv = "tc_level" if mode == "tc" else "vc_level"
     
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow(f'SELECT {field_xp}, {field_lv} FROM users WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
         current_xp, current_lv = row[0], row[1]
@@ -624,7 +624,7 @@ async def get_expired_rooms():
     return all_expired
 
 async def reset_user_rank(guild_id: int, user_id: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             UPDATE users 
@@ -633,7 +633,7 @@ async def reset_user_rank(guild_id: int, user_id: int):
         ''', guild_id, user_id)
 
 async def reset_user_balance(guild_id: int, user_id: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('UPDATE users SET balance = 0 WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
 
@@ -644,7 +644,7 @@ async def add_evaluation_period(guild_id: int, user_id: int, start_time: datetim
     if end_time.tzinfo:
         end_time = end_time.replace(tzinfo=None)
         
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             INSERT INTO evaluation_periods (guild_id, user_id, start_time, end_time) 
@@ -653,7 +653,7 @@ async def add_evaluation_period(guild_id: int, user_id: int, start_time: datetim
         ''', guild_id, user_id, start_time, end_time)
 
 async def get_evaluation_period(guild_id: int, user_id: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('SELECT start_time, end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
         if row:
@@ -671,7 +671,7 @@ async def get_all_evaluation_periods():
     return all_periods
 
 async def extend_evaluation_period(guild_id: int, user_id: int, extra_days: int) -> bool:
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('SELECT end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
         if not row:
@@ -772,7 +772,7 @@ async def remove_inquiry_panel(channel_id: int):
 
 # --- Bot設定値管理用関数 ---
 async def save_setting(guild_id: int, key: str, value):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     val_json = json.dumps(value)
     async with p.acquire() as conn:
         await conn.execute('''
@@ -807,7 +807,7 @@ async def load_settings() -> dict:
     return settings
 
 async def add_level_role_reward(guild_id: int, level_type: str, level: int, role_id: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             INSERT INTO level_role_rewards (guild_id, level_type, level, role_id)
@@ -816,7 +816,7 @@ async def add_level_role_reward(guild_id: int, level_type: str, level: int, role
         ''', guild_id, level_type, level, role_id)
 
 async def get_level_role_rewards(guild_id: int, level_type: str = None) -> list[dict]:
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         if level_type:
             rows = await conn.fetch('''
@@ -835,7 +835,7 @@ async def get_level_role_rewards(guild_id: int, level_type: str = None) -> list[
         return [{"level_type": r["level_type"], "level": r["level"], "role_id": r["role_id"]} for r in rows]
 
 async def remove_level_role_reward(guild_id: int, level_type: str, level: int, role_id: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             DELETE FROM level_role_rewards 
@@ -977,7 +977,7 @@ async def delete_panel_request(request_id: int):
         await conn.execute('DELETE FROM panel_requests WHERE id = $1', request_id)
 
 async def set_log_channel(guild_id: int, log_type: str, channel_id: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             INSERT INTO log_settings (guild_id, log_type, channel_id)
@@ -990,26 +990,26 @@ async def save_log_channel(guild_id: int, log_type: str, channel_id: int):
     await set_log_channel(guild_id, log_type, channel_id)
 
 async def get_log_channel(guild_id: int, log_type: str) -> int:
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('SELECT channel_id FROM log_settings WHERE guild_id = $1 AND log_type = $2', guild_id, log_type)
         return row['channel_id'] if row else None
 
 async def get_all_log_settings(guild_id: int) -> dict:
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         rows = await conn.fetch('SELECT log_type, channel_id FROM log_settings WHERE guild_id = $1', guild_id)
         return {row['log_type']: row['channel_id'] for row in rows}
 
 async def remove_log_channel(guild_id: int, log_type: str):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('DELETE FROM log_settings WHERE guild_id = $1 AND log_type = $2', guild_id, log_type)
 
 
 # --- 自己紹介・評価設定管理用関数 ---
 async def get_evaluation_settings(guild_id: int) -> dict:
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('SELECT is_enabled, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
         if row:
@@ -1027,7 +1027,7 @@ async def get_all_evaluation_settings() -> list[dict]:
         return [{"guild_id": r["guild_id"], "is_enabled": r["is_enabled"] if r["is_enabled"] is not None else True, "forum_channel_ids": r["forum_channel_ids"] or [], "self_intro_channel_ids": r["self_intro_channel_ids"] or []} for r in rows]
 
 async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], self_intro_channel_ids: list[int], is_enabled: bool = True):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             INSERT INTO evaluation_settings (guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled)
@@ -1039,7 +1039,7 @@ async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], s
 
 # --- ランク対象設定管理用関数 ---
 async def get_rank_settings(guild_id: int) -> dict:
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('SELECT whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM rank_settings WHERE guild_id = $1', guild_id)
         if row:
@@ -1069,7 +1069,7 @@ async def get_all_rank_settings() -> list[dict]:
         ]
 
 async def set_rank_settings(guild_id: int, whitelist_ids: list[int], blacklist_ids: list[int], category_ids: list[int], blacklist_category_ids: list[int]):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             INSERT INTO rank_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids)
@@ -1081,7 +1081,7 @@ async def set_rank_settings(guild_id: int, whitelist_ids: list[int], blacklist_i
 
 # --- VCコイン対象設定管理用関数 ---
 async def get_vc_coins_settings(guild_id: int) -> dict:
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('SELECT whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_settings WHERE guild_id = $1', guild_id)
         if row:
@@ -1111,7 +1111,7 @@ async def get_all_vc_coins_settings() -> list[dict]:
         ]
 
 async def set_vc_coins_settings(guild_id: int, whitelist_ids: list[int], blacklist_ids: list[int], category_ids: list[int], blacklist_category_ids: list[int]):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             INSERT INTO vc_coins_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids)
@@ -1182,7 +1182,7 @@ async def remove_sticky_template(channel_id: int):
 
 
 
-async def check_initial_issued(user_id: int) -> bool:
+async def check_initial_issued(guild_id: int, user_id: int) -> bool:
     user = await get_user(guild_id, user_id)
     return user["initial_issued"]
 
@@ -1192,7 +1192,7 @@ async def get_reaction_role(message_id: int, emoji: str):
         row = await conn.fetchrow('SELECT role_id FROM reaction_roles WHERE message_id = $1 AND emoji = $2', message_id, emoji)
         return row['role_id'] if row else None
 
-async def add_evaluation_vc_time(user_id: int, seconds: int):
+async def add_evaluation_vc_time(guild_id: int, user_id: int, seconds: int):
     await get_user(guild_id, user_id)
     p = await get_pool()
     async with p.acquire() as conn:
@@ -1353,17 +1353,17 @@ async def get_user_evaluations(target_user_id: int) -> list[dict]:
         ''', target_user_id)
         return [dict(r) for r in rows]
 
-async def set_initial_issued(user_id: int):
+async def set_initial_issued(guild_id: int, user_id: int):
     await get_user(guild_id, user_id)
     p = await get_pool()
     async with p.acquire() as conn:
         await conn.execute('UPDATE users SET initial_issued = TRUE WHERE user_id = $1', user_id)
 
-async def mark_initial_issued(user_id: int):
-    await set_initial_issued(user_id)
+async def mark_initial_issued(guild_id: int, user_id: int):
+    await set_initial_issued(guild_id, user_id)
 
 async def add_interviewer_log(interviewer_id: int, target_user_id: int, guild_id: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             INSERT INTO interviewer_logs (interviewer_id, target_user_id, guild_id)
@@ -1379,7 +1379,7 @@ async def get_interviewer_count(interviewer_id: int) -> int:
 
 # --- 荒らし対策設定管理用関数 ---
 async def get_antigrief_settings(guild_id: int) -> dict:
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('SELECT target_category_ids, target_channel_ids, exempt_role_ids FROM antigrief_settings WHERE guild_id = $1', guild_id)
         if row:
@@ -1407,7 +1407,7 @@ async def get_all_antigrief_settings() -> list[dict]:
         ]
 
 async def set_antigrief_settings(guild_id: int, category_ids: list[int], channel_ids: list[int], exempt_role_ids: list[int]):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             INSERT INTO antigrief_settings (guild_id, target_category_ids, target_channel_ids, exempt_role_ids)
@@ -1451,7 +1451,7 @@ async def clear_antigrief_settings_field(guild_id: int, field_name: str):
 
 # --- 不具合修正：ランク対象設定の更新用関数 ---
 async def update_rank_settings_list(guild_id: int, field_type: str, item_id: int, action: str):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('SELECT whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM rank_settings WHERE guild_id = $1', guild_id)
         if not row:
@@ -1488,14 +1488,14 @@ async def update_rank_settings_list(guild_id: int, field_type: str, item_id: int
         ''', guild_id, wl_ch, bl_ch, wl_cat, bl_cat)
 
 async def clear_rank_settings_field(guild_id: int, field_name: str):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         if field_name in ["whitelist_channel_ids", "blacklist_channel_ids", "whitelist_category_ids", "blacklist_category_ids"]:
             await conn.execute(f'UPDATE rank_settings SET {field_name} = $2 WHERE guild_id = $1', guild_id, [])
 
 
 async def update_vc_coins_settings_list(guild_id: int, field_type: str, item_id: int, action: str):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('SELECT whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_settings WHERE guild_id = $1', guild_id)
         if not row:
@@ -1532,7 +1532,7 @@ async def update_vc_coins_settings_list(guild_id: int, field_type: str, item_id:
         ''', guild_id, wl_ch, bl_ch, wl_cat, bl_cat)
 
 async def clear_vc_coins_settings_field(guild_id: int, field_name: str):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         if field_name in ["whitelist_channel_ids", "blacklist_channel_ids", "whitelist_category_ids", "blacklist_category_ids"]:
             await conn.execute(f'UPDATE vc_coins_settings SET {field_name} = $2 WHERE guild_id = $1', guild_id, [])
@@ -1541,7 +1541,7 @@ async def clear_vc_coins_settings_field(guild_id: int, field_name: str):
 
 # ショップ設定
 async def get_shop_settings(guild_id: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('SELECT employee_role_id, manager_role_id, inquiry_mention_role_id, inquiry_mention_role_ids FROM shop_settings WHERE guild_id = $1', guild_id)
         if row:
@@ -1565,7 +1565,7 @@ async def get_shop_settings(guild_id: int):
             return {"employee_role_id": None, "manager_role_id": None, "inquiry_mention_role_id": None, "inquiry_mention_role_ids": []}
 
 async def set_shop_settings(guild_id: int, employee_role_id: int, manager_role_id: int, inquiry_mention_role_id: int, inquiry_mention_role_ids: list):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             INSERT INTO shop_settings (guild_id, employee_role_id, manager_role_id, inquiry_mention_role_id, inquiry_mention_role_ids)
@@ -1579,7 +1579,7 @@ async def set_shop_settings(guild_id: int, employee_role_id: int, manager_role_i
 
 # ショップ商品関連
 async def get_shop_items(guild_id: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         rows = await conn.fetch('SELECT item_id, name, usage, price, target_role_ids, reward_role_ids, duration_days, is_eval_extend, extend_days FROM shop_items WHERE guild_id = $1 ORDER BY item_id ASC', guild_id)
         return [dict(r) for r in rows]
@@ -1593,7 +1593,7 @@ async def get_shop_item(item_id: int):
 async def add_shop_item(guild_id: int, name: str, usage: str, price: int, target_role_ids: list = None, reward_role_ids: list = None, duration_days: int = None, is_eval_extend: bool = False, extend_days: int = None):
     if target_role_ids is None: target_role_ids = []
     if reward_role_ids is None: reward_role_ids = []
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow('''
             INSERT INTO shop_items (guild_id, name, usage, price, target_role_ids, reward_role_ids, duration_days, is_eval_extend, extend_days)
@@ -1648,7 +1648,7 @@ async def mark_user_item_role_removed(user_item_id: int):
             pass
 
 async def add_level_coin_reward(guild_id: int, level_type: str, level: int, coins: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             INSERT INTO level_coin_rewards (guild_id, level_type, level, coins)
@@ -1658,7 +1658,7 @@ async def add_level_coin_reward(guild_id: int, level_type: str, level: int, coin
         ''', guild_id, level_type, level, coins)
 
 async def get_level_coin_rewards(guild_id: int, level_type: str = None) -> list[dict]:
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         if level_type:
             rows = await conn.fetch('''
@@ -1677,7 +1677,7 @@ async def get_level_coin_rewards(guild_id: int, level_type: str = None) -> list[
         return [{"level_type": r["level_type"], "level": r["level"], "coins": r["coins"]} for r in rows]
 
 async def remove_level_coin_reward(guild_id: int, level_type: str, level: int):
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
             DELETE FROM level_coin_rewards 
@@ -1686,7 +1686,7 @@ async def remove_level_coin_reward(guild_id: int, level_type: str, level: int):
 
 # --- VCランキング取得用関数 ---
 async def get_top_users(guild_id: int, mode: str, limit: int = 10) -> list[dict]:
-    p = await get_pool()
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         if mode == "tc":
             rows = await conn.fetch('''

@@ -300,7 +300,7 @@ class Ranking(commands.Cog):
 
                 elapsed_seconds = int((now - last_reward_time).total_seconds())
                 if elapsed_seconds >= 60:
-                    await database.add_evaluation_vc_time(user_id, elapsed_seconds)
+                    await database.add_evaluation_vc_time(guild_id, user_id, elapsed_seconds)
                     print(f"[Eval Time] Mid-loop added {elapsed_seconds}s to {member.display_name}")
                     self.bot.eval_vc_sessions[user_id] = now
             else:
@@ -350,7 +350,7 @@ class Ranking(commands.Cog):
             if join_time:
                 elapsed_seconds = int((now_aware - join_time).total_seconds())
                 if elapsed_seconds > 0:
-                    await database.add_evaluation_vc_time(user_id, elapsed_seconds)
+                    await database.add_evaluation_vc_time(guild_id, user_id, elapsed_seconds)
                     print(f"[Eval Time] Added {elapsed_seconds}s to {member.display_name}")
 
         if is_in_eval and not was_in_eval:

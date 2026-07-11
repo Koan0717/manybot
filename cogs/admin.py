@@ -2351,7 +2351,7 @@ class AdminGroup(app_commands.Group):
             # 全員に初期給与を付与してフラグを TRUE にマークする
             for member in members:
                 await database.add_balance(interaction.guild.id, member.id, initial_coins)
-                await database.mark_initial_issued(member.id)
+                await database.mark_initial_issued(interaction.guild_id, member.id)
                 issued_count += 1
                 issued_members_log.append(f"{member.mention} (ID: {member.id})")
                     
