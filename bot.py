@@ -217,7 +217,10 @@ class EconomyBot(commands.Bot):
             except Exception as e:
                 print(f"[ERROR] Failed to load Cog {cog}: {e}")
 
-        await self.tree.sync()
+        try:
+            await self.tree.sync()
+        except Exception as e:
+            print(f"[ERROR] Failed to sync slash commands: {e}")
         print(f"[OK] Bot is ready! Logged in as {self.user} (ID: {self.user.id})")
         print("[OK] Slash commands and persistent views are synced.")
 
