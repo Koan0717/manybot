@@ -200,7 +200,12 @@ class EconomyBot(commands.Bot):
             "cogs.utility",
             "cogs.points",
             "cogs.dashboard_launcher",
-            "cogs.ipc"
+            "cogs.ipc",
+            "cogs.logging_cog",
+            "cogs.ranking",
+            "cogs.reaction_roles",
+            "cogs.shop",
+            "cogs.tickets"
         ]
         for cog in cogs_to_load:
             try:

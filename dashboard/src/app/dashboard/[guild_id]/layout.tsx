@@ -29,6 +29,7 @@ export default function DashboardLayout({
   const navItems = [
     { label: '基本・評価設定', path: `/dashboard/${guildId}` },
     { label: 'VCルーム設定', path: `/dashboard/${guildId}/rooms` },
+    { label: 'VCトリガー設定', path: `/dashboard/${guildId}/vc-triggers` },
     { label: 'ショップ設定', path: `/dashboard/${guildId}/shop` },
     { label: 'チケット設定', path: `/dashboard/${guildId}/tickets` },
     { label: 'ランク設定', path: `/dashboard/${guildId}/rank` },
