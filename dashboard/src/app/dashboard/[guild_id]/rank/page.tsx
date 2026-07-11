@@ -1,1 +1,197 @@
-export default function Page() { return <div className='max-w-4xl mx-auto'><h1 className='text-3xl font-bold mb-8'>Rank 設定</h1><div className='text-zinc-400'>開発中...</div></div>; }
+'use client';
+import { useState, useEffect } from 'react';
+import Select from 'react-select';
+
+export default function RankSettingsPage({ params }: { params: { guild_id: string } }) {
+  const guildId = params.guild_id;
+  
+  const [settings, setSettings] = useState<any>({
+    ENABLE_TC_RANK: true,
+    whitelist_channel_ids: [],
+    blacklist_channel_ids: [],
+    whitelist_category_ids: [],
+    blacklist_category_ids: []
+  });
+  
+  const [channels, setChannels] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/guilds/${guildId}/rank`).then(res => res.ok ? res.json() : {}),
+      fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : [])
+    ]).then(([settingsData, channelsData]: [any, any]) => {
+      setSettings({
+        ENABLE_TC_RANK: settingsData.ENABLE_TC_RANK ?? true,
+        whitelist_channel_ids: settingsData.whitelist_channel_ids?.map(String) || [],
+        blacklist_channel_ids: settingsData.blacklist_channel_ids?.map(String) || [],
+        whitelist_category_ids: settingsData.whitelist_category_ids?.map(String) || [],
+        blacklist_category_ids: settingsData.blacklist_category_ids?.map(String) || []
+      });
+      if (!channelsData.error) {
+        setChannels(channelsData);
+      }
+    }).catch(err => {
+      console.error(err);
+      setError('データの取得に失敗しました');
+    }).finally(() => {
+      setLoading(false);
+    });
+  }, [guildId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/guilds/${guildId}/rank`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+      });
+      if (!res.ok) throw new Error('保存に失敗しました');
+      alert('保存しました');
+    } catch (err) {
+      console.error(err);
+      setError('設定の保存に失敗しました');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const textChannels = channels.filter(c => c.type === 0 || c.type === 2); // Text and Voice
+  const categories = channels.filter(c => c.type === 4); // Categories
+
+  const textChannelOptions = textChannels.map(c => ({ value: c.id, label: `${c.type === 0 ? '#' : '🔊'} ${c.name}` }));
+  const categoryOptions = categories.map(c => ({ value: c.id, label: `📁 ${c.name}` }));
+
+  const customStyles = {
+    control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white' }),
+    menu: (base: any) => ({ ...base, backgroundColor: '#27272a', zIndex: 9999 }),
+    option: (base: any, state: any) => ({
+      ...base,
+      backgroundColor: state.isFocused ? '#3f3f46' : '#27272a',
+      color: 'white',
+      ':active': { backgroundColor: '#52525b' }
+    }),
+    multiValue: (base: any) => ({ ...base, backgroundColor: '#3f3f46' }),
+    multiValueLabel: (base: any) => ({ ...base, color: 'white' })
+  };
+
+  if (loading) return <div className="text-zinc-400">読み込み中...</div>;
+
+  return (
+    <div className="max-w-4xl mx-auto pb-20">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-white">ランク・経験値設定</h1>
+      </div>
+
+      {error && (
+        <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-6">
+        {/* 全体設定 */}
+        <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700">
+          <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">全体設定</h2>
+          
+          <div className="flex items-center justify-between bg-zinc-900 p-4 rounded border border-zinc-700">
+            <div>
+              <p className="font-bold text-white mb-1">TC (テキストチャット) ランク機能</p>
+              <p className="text-sm text-zinc-400">テキストチャンネルでメッセージを送信した際に経験値を獲得するかどうかを設定します。</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                className="sr-only peer"
+                checked={settings.ENABLE_TC_RANK}
+                onChange={e => setSettings({...settings, ENABLE_TC_RANK: e.target.checked})}
+              />
+              <div className="w-14 h-7 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-red-600"></div>
+            </label>
+          </div>
+        </div>
+
+        {/* チャンネル設定 */}
+        <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700">
+          <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">経験値獲得の対象チャンネル・カテゴリ</h2>
+          <p className="text-sm text-zinc-400 mb-6">
+            経験値（XP）を獲得できるチャンネルと、できないチャンネルを指定します。<br/>
+            ホワイトリストを指定すると**そのチャンネルのみ**で経験値を獲得でき、ブラックリストを指定すると**そのチャンネル以外**で獲得できるようになります。<br/>
+            (※両方指定した場合、システムが競合する可能性がありますのでご注意ください)
+          </p>
+          
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-bold text-zinc-300 mb-2">ホワイトリスト: カテゴリ</label>
+              <p className="text-xs text-zinc-500 mb-2">このカテゴリ内のチャンネルでのみXPを獲得します。</p>
+              <Select
+                isMulti
+                options={categoryOptions}
+                value={categoryOptions.filter(o => settings.whitelist_category_ids.includes(o.value))}
+                onChange={(selected: any) => setSettings({...settings, whitelist_category_ids: selected.map((s: any) => s.value)})}
+                styles={customStyles}
+                placeholder="カテゴリを選択..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-zinc-300 mb-2">ホワイトリスト: チャンネル</label>
+              <p className="text-xs text-zinc-500 mb-2">このチャンネルでのみXPを獲得します。</p>
+              <Select
+                isMulti
+                options={textChannelOptions}
+                value={textChannelOptions.filter(o => settings.whitelist_channel_ids.includes(o.value))}
+                onChange={(selected: any) => setSettings({...settings, whitelist_channel_ids: selected.map((s: any) => s.value)})}
+                styles={customStyles}
+                placeholder="チャンネルを選択..."
+              />
+            </div>
+
+            <div className="h-px bg-zinc-700 my-4"></div>
+
+            <div>
+              <label className="block text-sm font-bold text-zinc-300 mb-2">ブラックリスト: カテゴリ</label>
+              <p className="text-xs text-zinc-500 mb-2">このカテゴリ内のチャンネルではXPを獲得できません。</p>
+              <Select
+                isMulti
+                options={categoryOptions}
+                value={categoryOptions.filter(o => settings.blacklist_category_ids.includes(o.value))}
+                onChange={(selected: any) => setSettings({...settings, blacklist_category_ids: selected.map((s: any) => s.value)})}
+                styles={customStyles}
+                placeholder="カテゴリを選択..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-zinc-300 mb-2">ブラックリスト: チャンネル</label>
+              <p className="text-xs text-zinc-500 mb-2">このチャンネルではXPを獲得できません。</p>
+              <Select
+                isMulti
+                options={textChannelOptions}
+                value={textChannelOptions.filter(o => settings.blacklist_channel_ids.includes(o.value))}
+                onChange={(selected: any) => setSettings({...settings, blacklist_channel_ids: selected.map((s: any) => s.value)})}
+                styles={customStyles}
+                placeholder="チャンネルを選択..."
+              />
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-64 right-0 p-4 bg-zinc-900/90 backdrop-blur border-t border-zinc-800 flex justify-end z-10">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-8 py-2 rounded font-bold shadow-lg transition-colors"
+        >
+          {saving ? '保存中...' : '設定を保存'}
+        </button>
+      </div>
+    </div>
+  );
+}
