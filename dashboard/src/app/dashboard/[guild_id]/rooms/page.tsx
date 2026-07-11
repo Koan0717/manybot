@@ -184,7 +184,7 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
                         onChange={e => handlePriceChange(roomType, dur, e.target.value)}
                         className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-1.5 text-white focus:outline-none focus:border-red-500 text-right"
                       />
-                      <span className="text-sm text-zinc-400 ml-2">pt</span>
+                      <span className="text-sm text-zinc-400 ml-2">通貨</span>
                     </div>
                   </div>
                 ))}

@@ -172,7 +172,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
                 <tr>
                   <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">アイテム名</th>
-                  <th className="px-4 py-3">価格 (pt)</th>
+                  <th className="px-4 py-3">価格 (通貨)</th>
                   <th className="px-4 py-3">対象ロール</th>
                   <th className="px-4 py-3">付与ロール</th>
                   <th className="px-4 py-3 text-right">操作</th>
@@ -183,7 +183,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
                   <tr key={item.item_id} className="border-b border-zinc-800 hover:bg-zinc-800/50 transition-colors">
                     <td className="px-4 py-3 font-mono text-zinc-500">{item.item_id}</td>
                     <td className="px-4 py-3 font-bold text-white">{item.name}</td>
-                    <td className="px-4 py-3 text-yellow-400">{item.price} pt</td>
+                    <td className="px-4 py-3 text-yellow-400">{item.price} 通貨</td>
                     <td className="px-4 py-3">
                       {item.target_role_ids?.length ? item.target_role_ids.length + '個のロール' : 'なし (全員)'}
                     </td>
@@ -224,7 +224,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
                 </div>
 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">価格 (pt) <span className="text-red-500">*</span></label>
+                  <label className="block text-sm text-zinc-400 mb-1">価格 (通貨) <span className="text-red-500">*</span></label>
                   <input 
                     type="number" 
                     value={formData.price} 
