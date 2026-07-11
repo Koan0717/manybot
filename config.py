@@ -308,8 +308,7 @@ async def check_and_assign_level_roles(bot, member: discord.Member, level_type: 
             if lv_channel_id:
                 lv_channel = member.guild.get_channel(lv_channel_id)
                 if lv_channel:
-                    await lv_channel.send(f"🎁 {member.mention} が {level_type.upper()} レベル {new_level} に到達したため、以下のロールが付与されました！
-{role_mentions}")
+                    await lv_channel.send(f"🎁 {member.mention} が {level_type.upper()} レベル {new_level} に到達したため、以下のロールが付与されました！\n{role_mentions}")
                     
     except Exception as e:
         print(f"[ERROR] check_and_assign_level_roles for {member.display_name}: {e}")

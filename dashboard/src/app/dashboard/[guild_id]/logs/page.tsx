@@ -27,7 +27,7 @@ export default function LogSettingsPage() {
   const params = useParams();
   const guildId = params.guild_id as string;
   
-  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [settings, setSettings] = useState<Record<string, { channel_id: string; is_enabled: boolean }>>({});
   const [discordChannels, setDiscordChannels] = useState<DiscordChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -35,9 +35,10 @@ export default function LogSettingsPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/guilds/${guildId}/settings`).then(res => res.ok ? res.json() : {}),
+      fetch(`/api/guilds/${guildId}/logs`).then(res => res.ok ? res.json() : {}),
       fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : [])
     ]).then(([settingsData, channelsData]: [any, any]) => {
+      // Migrate old data if necessary (if old data was simple strings, though /logs should handle it now)
       setSettings(settingsData || {});
       setDiscordChannels(channelsData);
       setLoading(false);
@@ -52,7 +53,7 @@ export default function LogSettingsPage() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`/api/guilds/${guildId}/settings`, {
+      const res = await fetch(`/api/guilds/${guildId}/logs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
@@ -70,7 +71,20 @@ export default function LogSettingsPage() {
   const handleChannelChange = (logType: string, channelId: string) => {
     setSettings(prev => ({
       ...prev,
-      [logType]: channelId
+      [logType]: {
+        ...(prev[logType] || { is_enabled: true }),
+        channel_id: channelId
+      }
+    }));
+  };
+
+  const toggleEnabled = (logType: string) => {
+    setSettings(prev => ({
+      ...prev,
+      [logType]: {
+        ...(prev[logType] || { channel_id: '' }),
+        is_enabled: !(prev[logType]?.is_enabled ?? true)
+      }
     }));
   };
 
@@ -110,27 +124,44 @@ export default function LogSettingsPage() {
         </div>
         
         <p className="text-gray-400 text-sm">
-          各種ログの出力先チャンネルを指定してください。何も指定しない場合、そのログは出力されません。
+          各種ログの出力先チャンネルを指定してください。OFFにした場合、チャンネルが指定されていてもログは出力されません。
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-          {LOG_TYPES.map(log => (
-            <div key={log.id} className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
-              <label className="block text-sm font-medium text-gray-300 mb-2">{log.label}</label>
-              <select
-                value={settings[log.id] || ""}
-                onChange={(e) => handleChannelChange(log.id, e.target.value)}
-                className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-              >
-                <option value="">-- 出力しない --</option>
-                {textChannels.map(ch => (
-                  <option key={ch.id} value={ch.id}>
-                    # {ch.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ))}
+          {LOG_TYPES.map(log => {
+            const conf = settings[log.id] || { channel_id: '', is_enabled: true };
+            const isEnabled = conf.is_enabled ?? true;
+            return (
+              <div key={log.id} className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-sm font-medium text-gray-300">{log.label}</label>
+                  <button
+                    onClick={() => toggleEnabled(log.id)}
+                    className={`px-3 py-1 rounded text-xs font-bold transition-colors ${
+                      isEnabled 
+                      ? 'bg-emerald-600 text-white' 
+                      : 'bg-gray-700 text-gray-400'
+                    }`}
+                  >
+                    {isEnabled ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+                <select
+                  value={conf.channel_id || ""}
+                  onChange={(e) => handleChannelChange(log.id, e.target.value)}
+                  disabled={!isEnabled}
+                  className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all disabled:opacity-50"
+                >
+                  <option value="">-- 出力しない --</option>
+                  {textChannels.map(ch => (
+                    <option key={ch.id} value={ch.id}>
+                      # {ch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          })}
         </div>
       </motion.div>
     </div>

@@ -4,18 +4,19 @@ import { getPool } from '@/lib/db';
 export async function GET(request: Request, { params }: { params: { guild_id: string } }) {
   try {
     const guildId = params.guild_id;
-    
-
     const pool = await getPool(guildId);
     
     const res = await pool.query(
-        'SELECT log_type, channel_id FROM log_settings WHERE guild_id = ',
+        'SELECT log_type, channel_id, is_enabled FROM log_settings WHERE guild_id = $1',
         [guildId]
     );
 
-    const data: Record<string, string> = {};
+    const data: Record<string, any> = {};
     for (const row of res.rows) {
-        data[row.log_type] = String(row.channel_id);
+        data[row.log_type] = {
+            channel_id: String(row.channel_id),
+            is_enabled: row.is_enabled ?? true
+        };
     }
 
     return NextResponse.json(data);
@@ -28,8 +29,6 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
 export async function POST(request: Request, { params }: { params: { guild_id: string } }) {
   try {
     const guildId = params.guild_id;
-    
-
     const pool = await getPool(guildId);
     const body = await request.json();
 
@@ -37,14 +36,16 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     try {
         await client.query('BEGIN');
         
-        // delete old ones not in body or empty
-        await client.query('DELETE FROM log_settings WHERE guild_id = ', [guildId]);
+        await client.query('DELETE FROM log_settings WHERE guild_id = $1', [guildId]);
         
-        for (const [logType, channelId] of Object.entries(body)) {
+        for (const [logType, conf] of Object.entries(body) as any) {
+            const channelId = conf?.channel_id || conf;
+            const isEnabled = typeof conf === 'object' && conf.is_enabled !== undefined ? conf.is_enabled : true;
+
             if (channelId && channelId !== '') {
                 await client.query(
-                    'INSERT INTO log_settings (guild_id, log_type, channel_id) VALUES (, , )',
-                    [guildId, logType, channelId]
+                    'INSERT INTO log_settings (guild_id, log_type, channel_id, is_enabled) VALUES ($1, $2, $3, $4)',
+                    [guildId, logType, channelId, isEnabled]
                 );
             }
         }
