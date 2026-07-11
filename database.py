@@ -804,40 +804,41 @@ async def load_settings() -> dict:
             pass
     return settings
 
-async def add_level_role_reward(level_type: str, level: int, role_id: int):
+async def add_level_role_reward(guild_id: int, level_type: str, level: int, role_id: int):
     p = await get_pool()
     async with p.acquire() as conn:
         await conn.execute('''
-            INSERT INTO level_role_rewards (level_type, level, role_id)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (level_type, level, role_id) DO NOTHING
-        ''', level_type, level, role_id)
+            INSERT INTO level_role_rewards (guild_id, level_type, level, role_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id, level_type, level, role_id) DO NOTHING
+        ''', guild_id, level_type, level, role_id)
 
-async def get_level_role_rewards(level_type: str = None) -> list[dict]:
+async def get_level_role_rewards(guild_id: int, level_type: str = None) -> list[dict]:
     p = await get_pool()
     async with p.acquire() as conn:
         if level_type:
             rows = await conn.fetch('''
                 SELECT level_type, level, role_id 
                 FROM level_role_rewards 
-                WHERE level_type = $1 
+                WHERE guild_id = $1 AND level_type = $2 
                 ORDER BY level ASC
-            ''', level_type)
+            ''', guild_id, level_type)
         else:
             rows = await conn.fetch('''
                 SELECT level_type, level, role_id 
                 FROM level_role_rewards 
+                WHERE guild_id = $1
                 ORDER BY level_type ASC, level ASC
-            ''')
+            ''', guild_id)
         return [{"level_type": r["level_type"], "level": r["level"], "role_id": r["role_id"]} for r in rows]
 
-async def remove_level_role_reward(level_type: str, level: int, role_id: int):
+async def remove_level_role_reward(guild_id: int, level_type: str, level: int, role_id: int):
     p = await get_pool()
     async with p.acquire() as conn:
         await conn.execute('''
             DELETE FROM level_role_rewards 
-            WHERE level_type = $1 AND level = $2 AND role_id = $3
-        ''', level_type, level, role_id)
+            WHERE guild_id = $1 AND level_type = $2 AND level = $3 AND role_id = $4
+        ''', guild_id, level_type, level, role_id)
 
 # --- 部屋価格管理用関数 ---
 async def get_all_room_prices() -> list[dict]:
@@ -1605,41 +1606,42 @@ async def mark_user_item_role_removed(user_item_id: int):
         except Exception:
             pass
 
-async def add_level_coin_reward(level_type: str, level: int, coins: int):
+async def add_level_coin_reward(guild_id: int, level_type: str, level: int, coins: int):
     p = await get_pool()
     async with p.acquire() as conn:
         await conn.execute('''
-            INSERT INTO level_coin_rewards (level_type, level, coins)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (level_type, level)
+            INSERT INTO level_coin_rewards (guild_id, level_type, level, coins)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id, level_type, level)
             DO UPDATE SET coins = EXCLUDED.coins
-        ''', level_type, level, coins)
+        ''', guild_id, level_type, level, coins)
 
-async def get_level_coin_rewards(level_type: str = None) -> list[dict]:
+async def get_level_coin_rewards(guild_id: int, level_type: str = None) -> list[dict]:
     p = await get_pool()
     async with p.acquire() as conn:
         if level_type:
             rows = await conn.fetch('''
                 SELECT level_type, level, coins 
                 FROM level_coin_rewards 
-                WHERE level_type = $1 
+                WHERE guild_id = $1 AND level_type = $2 
                 ORDER BY level ASC
-            ''', level_type)
+            ''', guild_id, level_type)
         else:
             rows = await conn.fetch('''
                 SELECT level_type, level, coins 
                 FROM level_coin_rewards 
+                WHERE guild_id = $1
                 ORDER BY level_type ASC, level ASC
-            ''')
+            ''', guild_id)
         return [{"level_type": r["level_type"], "level": r["level"], "coins": r["coins"]} for r in rows]
 
-async def remove_level_coin_reward(level_type: str, level: int):
+async def remove_level_coin_reward(guild_id: int, level_type: str, level: int):
     p = await get_pool()
     async with p.acquire() as conn:
         await conn.execute('''
             DELETE FROM level_coin_rewards 
-            WHERE level_type = $1 AND level = $2
-        ''', level_type, level)
+            WHERE guild_id = $1 AND level_type = $2 AND level = $3
+        ''', guild_id, level_type, level)
 
 # --- VCランキング取得用関数 ---
 async def get_vc_ranking(limit: int = 10) -> list[dict]:
