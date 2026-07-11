@@ -18,7 +18,7 @@ const pools = globalForDb.pools;
 
 export async function getGuildDbUrl(guildId: string | number): Promise<string | null> {
   const parsedId = typeof guildId === 'string' ? guildId : String(guildId);
-  if (isNaN(parsedId)) return null;
+  if (isNaN(Number(parsedId))) return null;
 
   try {
     const res = await masterPool.query(
