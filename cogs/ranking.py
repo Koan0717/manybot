@@ -136,6 +136,8 @@ class Ranking(commands.Cog):
             embed.add_field(name="💬 テキストチャット", value=tc_value, inline=False)
 
             # VC
+            current_session_str = ""
+            eval_time_cat_id = config.get_setting(self.bot, "EVAL_TIME_CATEGORY_ID", interaction.guild_id)
 
             if target_user.voice and target_user.voice.channel:
                 vc = target_user.voice.channel
