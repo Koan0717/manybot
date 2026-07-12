@@ -78,6 +78,10 @@ class Ranking(commands.Cog):
                 eval_time_sec += current_sec
             eval_time_str = f"{eval_time_sec // 3600}時間 {(eval_time_sec % 3600) // 60}分"
 
+            # 設定からXP取得量を計算
+            vc_xp_per_min = config.get_setting(self.bot, "VC_XP_PER_MIN", interaction.guild_id) or 15
+            tc_xp_reward = config.get_setting(self.bot, "TC_XP_REWARD", interaction.guild_id) or 10
+
             # ランクカード画像の生成
             import io
             from card_generator import generate_rank_card
@@ -95,7 +99,9 @@ class Ranking(commands.Cog):
                     tc_next_xp=tc_next,
                     tc_role_name=tc_role_name,
                     enable_tc=True,
-                    eval_time_str=eval_time_str
+                    eval_time_str=eval_time_str,
+                    vc_xp_per_min=vc_xp_per_min,
+                    tc_xp_reward=tc_xp_reward
                 )
                 file = discord.File(fp=io.BytesIO(card_bytes), filename="rank_card.png")
                 await interaction.followup.send(file=file)

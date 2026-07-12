@@ -50,8 +50,12 @@ def get_room_settings(bot, guild_id: int = None) -> dict:
     if guild_id and hasattr(bot, "bot_settings") and guild_id in bot.bot_settings:
         if "ROOM_PRICES" in bot.bot_settings[guild_id]:
             try:
-                import json
-                db_settings = json.loads(bot.bot_settings[guild_id]["ROOM_PRICES"])
+                raw_settings = bot.bot_settings[guild_id]["ROOM_PRICES"]
+                if isinstance(raw_settings, str):
+                    import json
+                    db_settings = json.loads(raw_settings)
+                else:
+                    db_settings = raw_settings
                 parsed_settings = {}
                 for room_type, durations in db_settings.items():
                     parsed_settings[room_type] = {}
