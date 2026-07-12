@@ -18,13 +18,20 @@ export default function GamblingSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('common');
   const [rouletteChartType, setRouletteChartType] = useState<'2x' | '3x' | '36x'>('2x');
+  const [channels, setChannels] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch(`/api/guilds/${guildId}/gambling`)
-      .then(r => r.json())
-      .then(data => {
+    Promise.all([
+      fetch(`/api/guilds/${guildId}/gambling`).then(res => res.ok ? res.json() : {}),
+      fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : [])
+    ]).then(([data, channelsData]) => {
         if (!data.error) {
           setSettings({
+            GAMBLE_CHINCHIRO_PANEL_CHANNEL: data.GAMBLE_CHINCHIRO_PANEL_CHANNEL ?? '',
+            GAMBLE_COINFLIP_PANEL_CHANNEL: data.GAMBLE_COINFLIP_PANEL_CHANNEL ?? '',
+            GAMBLE_SLOT_PANEL_CHANNEL: data.GAMBLE_SLOT_PANEL_CHANNEL ?? '',
+            GAMBLE_BLACKJACK_PANEL_CHANNEL: data.GAMBLE_BLACKJACK_PANEL_CHANNEL ?? '',
+            GAMBLE_ROULETTE_PANEL_CHANNEL: data.GAMBLE_ROULETTE_PANEL_CHANNEL ?? '',
             GAMBLE_MAX_PLAYS: data.GAMBLE_MAX_PLAYS ?? 10,
             GAMBLE_DAILY_LIMIT: data.GAMBLE_DAILY_LIMIT ?? 0,
             GAMBLE_MAX_BET: data.GAMBLE_MAX_BET ?? 100000,
@@ -71,6 +78,9 @@ export default function GamblingSettingsPage() {
             GAMBLE_ROULETTE_MUL_3X: data.GAMBLE_ROULETTE_MUL_3X ?? 3.0,
             GAMBLE_ROULETTE_MUL_36X: data.GAMBLE_ROULETTE_MUL_36X ?? 36.0
           });
+        }
+        if (!channelsData.error && Array.isArray(channelsData)) {
+          setChannels(channelsData.filter((c: any) => c.type === 0));
         }
       })
       .catch(err => {
@@ -188,6 +198,22 @@ export default function GamblingSettingsPage() {
     </div>
   );
 
+  const renderChannelSelect = (label: string, key: string) => (
+    <div className="flex flex-col space-y-2 bg-gray-800/40 p-4 rounded-lg border border-gray-700/50 hover:border-purple-500/30 transition-colors">
+      <label className="text-sm text-gray-300 font-medium">{label}</label>
+      <select
+        value={settings[key] || ''}
+        onChange={(e) => updateSetting(key, e.target.value)}
+        className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-purple-500 transition-colors"
+      >
+        <option value="">設置しない</option>
+        {channels.map(c => (
+          <option key={c.id} value={c.id}>#{c.name}</option>
+        ))}
+      </select>
+    </div>
+  );
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
       <div className="flex justify-between items-center bg-gray-900/80 p-6 rounded-2xl border border-purple-500/20 backdrop-blur-sm sticky top-0 z-10 shadow-2xl">
@@ -290,6 +316,11 @@ export default function GamblingSettingsPage() {
                   {renderInput('ヒフミ(ペナルティ)倍率', 'GAMBLE_CHINCHIRO_MUL_HIFUMI', false, '0.1')}
                   {renderInput('通常勝ち倍率', 'GAMBLE_CHINCHIRO_MUL_NORMAL', false, '0.1')}
                 </div>
+
+                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">パネル設置</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {renderChannelSelect('パネル設置先チャンネル', 'GAMBLE_CHINCHIRO_PANEL_CHANNEL')}
+                </div>
               </div>
             )}
 
@@ -300,6 +331,11 @@ export default function GamblingSettingsPage() {
                   {renderInput('勝ち確率', 'GAMBLE_COINFLIP_RATE_WIN', true)}
                   {renderInput('負け確率', 'GAMBLE_COINFLIP_RATE_LOSE', true)}
                   {renderInput('配当倍率', 'GAMBLE_COINFLIP_MUL', false, '0.1')}
+                </div>
+
+                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">パネル設置</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {renderChannelSelect('パネル設置先チャンネル', 'GAMBLE_COINFLIP_PANEL_CHANNEL')}
                 </div>
               </div>
             )}
@@ -322,6 +358,11 @@ export default function GamblingSettingsPage() {
                   {renderInput('3つ揃い倍率', 'GAMBLE_SLOT_MUL_THREE', false, '0.1')}
                   {renderInput('2つ揃い倍率', 'GAMBLE_SLOT_MUL_TWO', false, '0.1')}
                 </div>
+
+                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">パネル設置</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {renderChannelSelect('パネル設置先チャンネル', 'GAMBLE_SLOT_PANEL_CHANNEL')}
+                </div>
               </div>
             )}
 
@@ -340,6 +381,11 @@ export default function GamblingSettingsPage() {
                   {renderInput('通常勝ち倍率', 'GAMBLE_BLACKJACK_MUL_NORMAL', false, '0.1')}
                   {renderInput('BJ勝ち倍率', 'GAMBLE_BLACKJACK_MUL_BJ', false, '0.1')}
                 </div>
+
+                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">パネル設置</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {renderChannelSelect('パネル設置先チャンネル', 'GAMBLE_BLACKJACK_PANEL_CHANNEL')}
+                </div>
               </div>
             )}
 
@@ -357,6 +403,11 @@ export default function GamblingSettingsPage() {
                   {renderInput('2倍賭け配当', 'GAMBLE_ROULETTE_MUL_2X', false, '0.1')}
                   {renderInput('3倍賭け配当', 'GAMBLE_ROULETTE_MUL_3X', false, '0.1')}
                   {renderInput('1点賭け配当', 'GAMBLE_ROULETTE_MUL_36X', false, '0.1')}
+                </div>
+
+                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">パネル設置</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {renderChannelSelect('パネル設置先チャンネル', 'GAMBLE_ROULETTE_PANEL_CHANNEL')}
                 </div>
               </div>
             )}
