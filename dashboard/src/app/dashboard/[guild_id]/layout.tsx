@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Menu, X, LogOut } from 'lucide-react';
 
 export default function DashboardLayout({
   children,
@@ -16,6 +17,14 @@ export default function DashboardLayout({
 
   const [status, setStatus] = useState<{ is_new_server: boolean, has_dedicated_db: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+    router.refresh();
+  };
 
   useEffect(() => {
     fetch(`/api/guilds/${guildId}/status`)
@@ -76,46 +85,93 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-zinc-950 text-white">
-      {/* Sidebar */}
-      <aside className="w-64 bg-zinc-900 border-r border-zinc-800 p-4 hidden md:flex md:flex-col">
-        <div className="mb-8">
+    <div className="flex flex-col md:flex-row h-screen min-h-screen bg-zinc-950 text-white overflow-hidden">
+      {/* Mobile Header */}
+      <header className="md:hidden flex-none flex items-center justify-between bg-zinc-900 border-b border-zinc-800 p-4 z-30">
+        <div>
           <h2 className="text-xl font-bold text-red-500">Many bot</h2>
           <p className="text-xs text-zinc-400 mt-1">サーバーID: {guildId}</p>
-          {!status?.has_dedicated_db && (
-            <div className="mt-3 bg-red-950/50 border border-red-900 text-red-400 text-xs px-2 py-1.5 rounded flex items-center gap-1.5">
-              <span>⚠️</span>
-              <span>専用DB未設定<br/>(メインDB使用中)</span>
-            </div>
-          )}
         </div>
-        
-        <nav className="flex-1 space-y-2">
-          {navItems.map((item) => {
-            const isActive = pathname === item.path;
-            return (
-              <Link 
-                key={item.path} 
-                href={item.path}
-                className={`block px-4 py-3 rounded-lg transition-colors ${isActive ? 'bg-red-600/10 text-red-500 font-bold border-l-4 border-red-500' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-        
-        <div className="pt-4 border-t border-zinc-800">
-          <Link href="/" className="text-sm text-zinc-500 hover:text-white flex items-center gap-2">
-            ← サーバー選択に戻る
-          </Link>
-        </div>
-      </aside>
+        <button
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+        >
+          <Menu size={24} />
+        </button>
+      </header>
 
-      {/* Main Content */}
-      <main className="flex-1 p-8 overflow-y-auto h-screen">
-        {children}
-      </main>
+      {/* Sidebar and Main Content Container */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Mobile Sidebar Overlay */}
+        {isMobileMenuOpen && (
+          <div 
+            className="absolute inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm" 
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+
+        {/* Sidebar */}
+        <aside className={`
+          absolute md:static inset-y-0 left-0 z-50
+          w-64 bg-zinc-900 border-r border-zinc-800 p-4 flex flex-col
+          transform transition-transform duration-300 ease-in-out
+          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:translate-x-0 h-full
+        `}>
+          <div className="mb-8 flex justify-between items-start flex-shrink-0">
+            <div>
+              <h2 className="text-xl font-bold text-red-500">Many bot</h2>
+              <p className="text-xs text-zinc-400 mt-1">サーバーID: {guildId}</p>
+              {!status?.has_dedicated_db && (
+                <div className="mt-3 bg-red-950/50 border border-red-900 text-red-400 text-xs px-2 py-1.5 rounded flex items-center gap-1.5">
+                  <span>⚠️</span>
+                  <span>専用DB未設定<br/>(メインDB使用中)</span>
+                </div>
+              )}
+            </div>
+            <button 
+              className="md:hidden p-2 -mr-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              <X size={20} />
+            </button>
+          </div>
+          
+          <nav className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-2 pb-4">
+            {navItems.map((item) => {
+              const isActive = pathname === item.path;
+              return (
+                <Link 
+                  key={item.path} 
+                  href={item.path}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`block px-4 py-3 rounded-lg transition-colors ${isActive ? 'bg-red-600/10 text-red-500 font-bold border-l-4 border-red-500' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+          
+          <div className="pt-4 border-t border-zinc-800 mt-auto flex-shrink-0 space-y-2">
+            <Link href="/" className="text-sm text-zinc-500 hover:text-white flex items-center gap-2">
+              ← サーバー選択に戻る
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="text-sm text-zinc-500 hover:text-red-400 flex items-center gap-2 transition-colors w-full"
+            >
+              <LogOut size={14} />
+              ログアウト
+            </button>
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 p-4 md:p-8 overflow-y-auto w-full h-full">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
