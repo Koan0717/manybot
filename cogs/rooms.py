@@ -401,7 +401,7 @@ class VCRenamePanelView(discord.ui.View):
 
 # --- 購入用Views & Modals ---
 async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
-    configs = get_setting(bot, guild.id, "ROOM_PANEL_CONFIGS")
+    configs = get_setting(bot, "ROOM_PANEL_CONFIGS", guild.id)
     if not configs or not isinstance(configs, dict) or panel_id not in configs:
         return True # 設定がなければ全員許可
     
@@ -419,10 +419,37 @@ async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
         
     return True
 
+
 async def process_room_purchase(bot, interaction: discord.Interaction, room_type: str, duration: int, panel_id: str = None):
+    owner_id = interaction.user.id
+    if not hasattr(bot, 'processing_rooms'):
+        bot.processing_rooms = set()
+    if owner_id in bot.processing_rooms:
+        # 既にdeferされている可能性もあるため、応答を試みる
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message("現在処理中です。少しお待ちください。", ephemeral=True)
+        except:
+            pass
+        return
+    bot.processing_rooms.add(owner_id)
+    try:
+        await _process_room_purchase_inner(bot, interaction, room_type, duration, panel_id)
+    finally:
+        bot.processing_rooms.discard(owner_id)
+
+async def _process_room_purchase_inner(bot, interaction: discord.Interaction, room_type: str, duration: int, panel_id: str = None):
     await interaction.response.defer(ephemeral=True)
     owner_id = interaction.user.id
-    if room_type in ["宿", "高級宿"] and await database.has_room_type(owner_id, ["宿", "高級宿"]):
+    
+    if not hasattr(bot, 'processing_rooms'):
+        bot.processing_rooms = set()
+    if owner_id in bot.processing_rooms:
+        return await interaction.edit_original_response(content="処理中です。連打はご遠慮ください。")
+    bot.processing_rooms.add(owner_id)
+    
+    try:
+        if room_type in ["宿", "高級宿"] and await database.has_room_type(owner_id, ["宿", "高級宿"]):
         return await interaction.edit_original_response(content="既に「宿」を持っています！(1人1つまで)")
     if room_type == "カスタムVC" and await database.has_room_type(owner_id, ["カスタムVC"]):
         return await interaction.edit_original_response(content="既に「カスタムVC」を持っています！")
@@ -465,7 +492,7 @@ async def process_room_purchase(bot, interaction: discord.Interaction, room_type
                     overwrites[pending_role] = discord.PermissionOverwrite(view_channel=False, connect=False)
             target_category = interaction.channel.category
             if panel_id:
-                configs = get_setting(bot, interaction.guild.id, "ROOM_PANEL_CONFIGS")
+                configs = get_setting(bot, "ROOM_PANEL_CONFIGS", interaction.guild.id)
                 if configs and isinstance(configs, dict) and panel_id in configs:
                     cat_id = configs[panel_id].get("categoryId")
                     if cat_id:

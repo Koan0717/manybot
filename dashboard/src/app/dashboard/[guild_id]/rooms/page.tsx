@@ -345,7 +345,7 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
             { id: 'gamble_vc', name: '賭博VC作成パネル', desc: '賭博VCを作成するパネル' },
             { id: 'custom_vc', name: 'カスタムVC作成パネル', desc: '任意の名前・人数のカスタムVCを作成するパネル' },
           ].map(panel => (
-            <div key={panel.id} className="bg-zinc-900 rounded border border-zinc-700 overflow-hidden">
+            <div key={panel.id} className="bg-zinc-900 rounded border border-zinc-700">
               <div className="flex flex-col md:flex-row items-center justify-between p-4 gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
