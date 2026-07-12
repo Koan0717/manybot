@@ -1533,6 +1533,100 @@ class GambleGameSelect(discord.ui.Select):
         embed = await sub_view.build_embed()
         await interaction.response.edit_message(embed=embed, view=sub_view)
 
+class GamblePanelSetupButton(discord.ui.Button):
+    def __init__(self, game_key):
+        self.game_key = game_key
+        super().__init__(label="🪧 このパネルを設置", style=discord.ButtonStyle.primary, row=3)
+        
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user != self.view.user:
+            return await interaction.response.send_message("操作権限がありません。", ephemeral=True)
+            
+        channel = interaction.channel
+        val = self.game_key
+        
+        if val == "chinchiro":
+            embed = discord.Embed(
+                title="🎲 チンチロリン",
+                description=(
+                    "こちらのボタンからチンチロリンをプレイできます。\n\n"
+                    "**【配当倍率】**\n"
+                    "- **ピンゾロ**: `5.0倍`\n"
+                    "- **アラシ**: `3.0倍`\n"
+                    "- **シゴロ**: `2.0倍`\n"
+                    "- **通常出目**: `1.0倍`\n"
+                    "- **ヒフミ**: `支払い2.0倍` (没収)\n\n"
+                    "※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n"
+                    "※ 実際の倍率は設定によって異なる場合があります。"
+                ),
+                color=discord.Color.dark_green()
+            )
+            await channel.send(embed=embed, view=ChinchiroView())
+            await interaction.response.send_message("✅ チンチロリンパネルを設置しました。", ephemeral=True)
+        elif val == "coinflip":
+            embed = discord.Embed(
+                title="🪙 コイントス",
+                description=(
+                    "こちらのボタンからコイントスをプレイできます。\n表か裏かを当ててください。\n\n"
+                    "**【配当倍率】**\n"
+                    "- **的中**: `2.0倍`\n\n"
+                    "※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n"
+                    "※ 実際の倍率は設定によって異なる場合があります。"
+                ),
+                color=discord.Color.blue()
+            )
+            await channel.send(embed=embed, view=CoinflipView())
+            await interaction.response.send_message("✅ コイントスパネルを設置しました。", ephemeral=True)
+        elif val == "slot":
+            embed = discord.Embed(
+                title="🎰 スロット",
+                description=(
+                    "こちらのボタンからスロットをプレイできます。\n\n"
+                    "**【配当倍率】**\n"
+                    "- **7️⃣7️⃣7️⃣**: `10.0倍`\n"
+                    "- **⭐⭐⭐**: `5.0倍`\n"
+                    "- **その他絵柄3つ揃い**: `3.0倍`\n"
+                    "- **絵柄2つ揃い**: `1.5倍`\n\n"
+                    "※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n"
+                    "※ 実際の倍率は設定によって異なる場合があります。"
+                ),
+                color=discord.Color.gold()
+            )
+            await channel.send(embed=embed, view=SlotView())
+            await interaction.response.send_message("✅ スロットパネルを設置しました。", ephemeral=True)
+        elif val == "blackjack":
+            embed = discord.Embed(
+                title="🃏 ブラックジャック",
+                description=(
+                    "こちらのボタンからブラックジャックをプレイできます。\nディーラーと勝負して21に近づけてください。\n\n"
+                    "**【配当倍率】**\n"
+                    "- **通常勝利**: `2.0倍`\n"
+                    "- **ブラックジャック勝利**: `2.5倍`\n"
+                    "- **引き分け**: `1.0倍` (ベット額払い戻し)\n\n"
+                    "※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n"
+                    "※ 実際の倍率は設定によって異なる場合があります。"
+                ),
+                color=discord.Color.blue()
+            )
+            await channel.send(embed=embed, view=BlackjackView())
+            await interaction.response.send_message("✅ ブラックジャックパネルを設置しました。", ephemeral=True)
+        elif val == "roulette":
+            embed = discord.Embed(
+                title="🎡 ルーレット",
+                description=(
+                    "こちらのボタンからルーレットをプレイできます。\n玉がどの数字や色に落ちるかを予想します。\n\n"
+                    "**【配当倍率】**\n"
+                    "- **赤 / 黒 / 偶数 / 奇数 / ロー / ハイ**: `2.0倍`\n"
+                    "- **ダズン (1-12 / 13-24 / 25-36)**: `3.0倍`\n"
+                    "- **数字1点賭け (0-36)**: `36.0倍`\n\n"
+                    "※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n"
+                    "※ 実際の倍率は設定によって異なる場合があります。"
+                ),
+                color=discord.Color.red()
+            )
+            await channel.send(embed=embed, view=RouletteView())
+            await interaction.response.send_message("✅ ルーレットパネルを設置しました。", ephemeral=True)
+
 
 class GambleGameSettingsView(discord.ui.View):
     def __init__(self, user, game_key, bot, back_to="admin"):
@@ -1556,6 +1650,8 @@ class GambleGameSettingsView(discord.ui.View):
             self.add_item(GambleRateSelect(self.game_key))
             # 倍率個別設定セレクト
             self.add_item(GambleMultiplierSelect(self.game_key))
+            # このゲームのパネルを設置するボタン
+            self.add_item(GamblePanelSetupButton(self.game_key))
             
     async def build_embed(self):
         bot = self.bot
