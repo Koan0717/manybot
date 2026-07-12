@@ -400,7 +400,26 @@ class VCRenamePanelView(discord.ui.View):
         await interaction.response.send_modal(LimitModal())
 
 # --- 購入用Views & Modals ---
-async def process_room_purchase(bot, interaction: discord.Interaction, room_type: str, duration: int):
+async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
+    configs = get_setting(bot, guild.id, "ROOM_PANEL_CONFIGS")
+    if not configs or not isinstance(configs, dict) or panel_id not in configs:
+        return True # 設定がなければ全員許可
+    
+    config = configs[panel_id]
+    allow_temp = config.get("allowTemp", True)
+    allow_main_sub = config.get("allowMainSub", True)
+    
+    # 仮メン判定
+    if is_new_member(bot, member):
+        if not allow_temp: return False
+        
+    # 本・準メン判定
+    if is_main_or_sub_member(bot, member):
+        if not allow_main_sub: return False
+        
+    return True
+
+async def process_room_purchase(bot, interaction: discord.Interaction, room_type: str, duration: int, panel_id: str = None):
     await interaction.response.defer(ephemeral=True)
     owner_id = interaction.user.id
     if room_type in ["宿", "高級宿"] and await database.has_room_type(owner_id, ["宿", "高級宿"]):
@@ -444,7 +463,18 @@ async def process_room_purchase(bot, interaction: discord.Interaction, room_type
                 pending_role = get_role_by_setting(bot, interaction.guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
                 if pending_role:
                     overwrites[pending_role] = discord.PermissionOverwrite(view_channel=False, connect=False)
-            channel = await interaction.guild.create_voice_channel(name=f"{room_type}-{interaction.user.display_name}", category=interaction.channel.category, overwrites=overwrites, user_limit=(2 if room_type=="宿" else 0))
+            target_category = interaction.channel.category
+            if panel_id:
+                configs = get_setting(bot, interaction.guild.id, "ROOM_PANEL_CONFIGS")
+                if configs and isinstance(configs, dict) and panel_id in configs:
+                    cat_id = configs[panel_id].get("categoryId")
+                    if cat_id:
+                        try:
+                            cat = interaction.guild.get_channel(int(cat_id))
+                            if cat: target_category = cat
+                        except:
+                            pass
+            channel = await interaction.guild.create_voice_channel(name=f"{room_type}-{interaction.user.display_name}", category=target_category, overwrites=overwrites, user_limit=(2 if room_type=="宿" else 0))
             
             if duration == 0:
                 expire_at = database.get_now_naive() + datetime.timedelta(days=36500) # 無制限
@@ -572,11 +602,11 @@ class InnDurationSelectView(discord.ui.View):
 
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success, emoji="🛖")
     async def twelve_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await process_room_purchase(self.bot, interaction, "宿", 12)
+        await process_room_purchase(self.bot, interaction, "宿", 12, getattr(self, "panel_id", None))
 
     @discord.ui.button(label="24時間", style=discord.ButtonStyle.success, emoji="🛖")
     async def twenty_four_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await process_room_purchase(self.bot, interaction, "宿", 24)
+        await process_room_purchase(self.bot, interaction, "宿", 24, getattr(self, "panel_id", None))
 
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -587,6 +617,7 @@ class LuxuryInnDurationSelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.bot = bot
         self.member = member
+        self.panel_id = panel_id
         self.member = member
         p12 = get_room_price(self.bot, self.member, "高級宿", 12)
         p24 = get_room_price(self.bot, self.member, "高級宿", 24)
@@ -596,11 +627,11 @@ class LuxuryInnDurationSelectView(discord.ui.View):
 
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success, emoji="🏰")
     async def twelve_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await process_room_purchase(self.bot, interaction, "高級宿", 12)
+        await process_room_purchase(self.bot, interaction, "高級宿", 12, getattr(self, "panel_id", None))
 
     @discord.ui.button(label="24時間", style=discord.ButtonStyle.success, emoji="🏰")
     async def twenty_four_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await process_room_purchase(self.bot, interaction, "高級宿", 24)
+        await process_room_purchase(self.bot, interaction, "高級宿", 24, getattr(self, "panel_id", None))
 
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -630,12 +661,14 @@ class RoomView(discord.ui.View):
         
     @discord.ui.button(label="一般宿", style=discord.ButtonStyle.primary, emoji="🛖", custom_id="persistent_inn_btn")
     async def inn(self, it, btn):
+        if not await check_panel_permission(it.client, it.guild, it.user, "inn"):
+            return await it.response.send_message("このパネルを利用する権限がありません。", ephemeral=True)
         is_free = is_free_inn_member(it.client, it.user)
         if is_free:
             msg = "「一般宿」を作成しますか？\nあなたは対象ロールのため **無料** で作成可能です。"
         else:
             msg = "「一般宿」の利用期間を選択してください。"
-        await it.response.send_message(msg, view=InnDurationSelectView(it.client, is_free), ephemeral=True)
+        await it.response.send_message(msg, view=InnDurationSelectView(it.client, is_free, "inn"), ephemeral=True)
 
 class LuxuryRoomView(discord.ui.View):
     def __init__(self):
@@ -645,9 +678,11 @@ class LuxuryRoomView(discord.ui.View):
     async def luxury(self, it, btn):
         bot = it.client
         member = it.user
+        if not await check_panel_permission(bot, it.guild, member, "luxury_inn_single"):
+            return await it.response.send_message("このパネルを利用する権限がありません。", ephemeral=True)
         if not (has_admin_role(bot, member) or is_main_or_sub_member(bot, member) or is_new_member(bot, member) or is_downgrade_member(bot, member)):
             return await it.response.send_message("ロールがありません。", ephemeral=True)
-        await it.response.send_message("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user), ephemeral=True)
+        await it.response.send_message("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user, "luxury_inn_single"), ephemeral=True)
 
 class InnCombinedView(discord.ui.View):
     def __init__(self):
@@ -655,20 +690,24 @@ class InnCombinedView(discord.ui.View):
 
     @discord.ui.button(label="一般宿", style=discord.ButtonStyle.primary, emoji="🛖", custom_id="persistent_combined_inn_btn")
     async def inn(self, it, btn):
+        if not await check_panel_permission(it.client, it.guild, it.user, "inn_combined"):
+            return await it.response.send_message("このパネルを利用する権限がありません。", ephemeral=True)
         is_free = is_free_inn_member(it.client, it.user)
         if is_free:
             msg = "「一般宿」を作成しますか？\nあなたは対象ロールのため **無料** で作成可能です。"
         else:
             msg = "「一般宿」の利用期間を選択してください。"
-        await it.response.send_message(msg, view=InnDurationSelectView(it.client, is_free), ephemeral=True)
+        await it.response.send_message(msg, view=InnDurationSelectView(it.client, is_free, "inn_combined"), ephemeral=True)
 
     @discord.ui.button(label="高級宿", style=discord.ButtonStyle.primary, emoji="🏰", custom_id="persistent_combined_luxury_inn_btn")
     async def luxury(self, it, btn):
         bot = it.client
         member = it.user
+        if not await check_panel_permission(bot, it.guild, member, "inn_combined"):
+            return await it.response.send_message("このパネルを利用する権限がありません。", ephemeral=True)
         if not (has_admin_role(bot, member) or is_main_or_sub_member(bot, member) or is_new_member(bot, member) or is_downgrade_member(bot, member)):
             return await it.response.send_message("ロールがありません。", ephemeral=True)
-        await it.response.send_message("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user), ephemeral=True)
+        await it.response.send_message("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user, "inn_combined"), ephemeral=True)
 
 class CustomRoomView(discord.ui.View):
     def __init__(self):
@@ -682,6 +721,7 @@ class TempInnDurationSelectView(discord.ui.View):
     def __init__(self, bot, member=None):
         super().__init__(timeout=60)
         self.bot = bot
+        self.panel_id = panel_id
         self.member = member
         p12 = get_room_price(self.bot, getattr(self, "member", None), "宿", 12)
         p24 = get_room_price(self.bot, getattr(self, "member", None), "宿", 24)
@@ -691,25 +731,26 @@ class TempInnDurationSelectView(discord.ui.View):
 
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success, emoji="🛖")
     async def twelve_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await process_room_purchase(self.bot, interaction, "宿", 12)
+        await process_room_purchase(self.bot, interaction, "宿", 12, getattr(self, "panel_id", None))
 
     @discord.ui.button(label="24時間", style=discord.ButtonStyle.success, emoji="🛖")
     async def twenty_four_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await process_room_purchase(self.bot, interaction, "宿", 24)
+        await process_room_purchase(self.bot, interaction, "宿", 24, getattr(self, "panel_id", None))
 
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(content="キャンセルしました。", view=None)
 
 class MainInnConfirmView(discord.ui.View):
-    def __init__(self, bot, member=None):
+    def __init__(self, bot, member=None, panel_id=None):
         super().__init__(timeout=60)
         self.bot = bot
         self.member = member
+        self.panel_id = panel_id
 
     @discord.ui.button(label="作成する", style=discord.ButtonStyle.success, emoji="✅")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await process_room_purchase(self.bot, interaction, "宿", 0)
+        await process_room_purchase(self.bot, interaction, "宿", 0, getattr(self, "panel_id", None))
 
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -721,6 +762,8 @@ class MainInnPanelView(discord.ui.View):
         
     @discord.ui.button(label="一般宿を作成 (無料・無制限)", style=discord.ButtonStyle.primary, emoji="🛖", custom_id="persistent_inn_main_btn")
     async def inn_main(self, it, btn):
+        if not await check_panel_permission(it.client, it.guild, it.user, "main_inn"):
+            return await it.response.send_message("このパネルを利用する権限がありません。", ephemeral=True)
         if not (is_main_or_sub_member(it.client, it.user) or has_admin_role(it.client, it.user)):
             return await it.response.send_message("このパネルは対象ロール(本・準メンバー)をお持ちの方のみ利用可能です。仮メンバーの方は有料の一般宿をご利用ください。", ephemeral=True)
         await it.response.send_message("「一般宿」を無料・時間無制限で作成しますか？", view=MainInnConfirmView(it.client), ephemeral=True)
@@ -731,9 +774,11 @@ class TempInnPanelView(discord.ui.View):
         
     @discord.ui.button(label="一般宿を作成 (有料)", style=discord.ButtonStyle.primary, emoji="🛖", custom_id="persistent_inn_temp_btn")
     async def inn_temp(self, it, btn):
+        if not await check_panel_permission(it.client, it.guild, it.user, "inn_temp"):
+            return await it.response.send_message("このパネルを利用する権限がありません。", ephemeral=True)
         if is_main_or_sub_member(it.client, it.user):
             return await it.response.send_message("あなたは対象ロール(本・準メンバー)をお持ちのため、専用 of 無料パネルをご利用ください。", ephemeral=True)
-        await it.response.send_message("「一般宿」の利用期間を選択してください。", view=TempInnDurationSelectView(it.client), ephemeral=True)
+        await it.response.send_message("「一般宿」の利用期間を選択してください。", view=TempInnDurationSelectView(it.client, "inn_temp"), ephemeral=True)
 
 class LuxuryInnPanelView(discord.ui.View):
     def __init__(self):
@@ -743,9 +788,11 @@ class LuxuryInnPanelView(discord.ui.View):
     async def luxury(self, it, btn):
         bot = it.client
         member = it.user
+        if not await check_panel_permission(bot, it.guild, member, "luxury_inn_single"):
+            return await it.response.send_message("このパネルを利用する権限がありません。", ephemeral=True)
         if not (has_admin_role(bot, member) or is_main_or_sub_member(bot, member) or is_new_member(bot, member) or is_downgrade_member(bot, member)):
             return await it.response.send_message("ロールがありません。", ephemeral=True)
-        await it.response.send_message("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user), ephemeral=True)
+        await it.response.send_message("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user, "luxury_inn_single"), ephemeral=True)
 
 # --- Cogの定義 ---
 class Rooms(commands.Cog):

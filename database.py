@@ -9,6 +9,9 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 JST = datetime.timezone(datetime.timedelta(hours=9))
 
+def get_now_naive() -> datetime.datetime:
+    return datetime.datetime.now(JST).replace(tzinfo=None)
+
 # 接続プールを保持する変数
 # -- NEW POOL LOGIC --
 pools = {}

@@ -16,6 +16,7 @@ export async function GET(
     );
 
     let roomPrices = null;
+    let roomPanelConfigs = null;
     let toggles = {
       ENABLE_PRICE_MAIN_SUB: false,
       ENABLE_PRICE_NEW_MEMBER: false,
@@ -28,6 +29,10 @@ export async function GET(
         try {
           roomPrices = JSON.parse(row.setting_value);
         } catch (e) {}
+      } else if (row.setting_key === 'ROOM_PANEL_CONFIGS') {
+        try {
+          roomPanelConfigs = JSON.parse(row.setting_value);
+        } catch (e) {}
       } else {
         toggles[row.setting_key as keyof typeof toggles] = row.setting_value === 'true';
       }
@@ -37,7 +42,7 @@ export async function GET(
       "SELECT role_key, room_type, duration, price FROM role_room_prices ORDER BY role_key ASC, room_type ASC, duration ASC"
     );
 
-    return NextResponse.json({ ROOM_PRICES: roomPrices, toggles, role_prices: rolePricesResult.rows });
+    return NextResponse.json({ ROOM_PRICES: roomPrices, roomPanelConfigs, toggles, role_prices: rolePricesResult.rows });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -54,7 +59,7 @@ export async function POST(
     const { action } = body;
 
     if (action === 'save') {
-      const { ROOM_PRICES, toggles, role_prices } = body;
+      const { ROOM_PRICES, toggles, role_prices, ROOM_PANEL_CONFIGS } = body;
       
       const client = await pool.connect();
       try {
@@ -66,6 +71,15 @@ export async function POST(
              VALUES ($1, $2, $3)
              ON CONFLICT (guild_id, setting_key) DO UPDATE SET setting_value = $3`,
             [guildId, 'ROOM_PRICES', JSON.stringify(ROOM_PRICES)]
+          );
+        }
+
+        if (ROOM_PANEL_CONFIGS) {
+          await client.query(
+            `INSERT INTO bot_settings (guild_id, setting_key, setting_value)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (guild_id, setting_key) DO UPDATE SET setting_value = $3`,
+            [guildId, 'ROOM_PANEL_CONFIGS', JSON.stringify(ROOM_PANEL_CONFIGS)]
           );
         }
 
