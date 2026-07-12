@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 import database
-from helpers import send_log
+from helpers import send_log, apply_bot_nicknames
 
 class IPC(commands.Cog):
     def __init__(self, bot):
@@ -44,6 +44,7 @@ class IPC(commands.Cog):
                     elif panel_type == "reload_bot_settings":
                         try:
                             self.bot.bot_settings = await database.load_settings()
+                            await apply_bot_nicknames(self.bot)
                             print(f"[IPC] Reloaded bot_settings for all guilds")
                         except Exception as e:
                             print(f"[IPC ERROR] Failed to reload bot_settings: {e}")
@@ -55,6 +56,7 @@ class IPC(commands.Cog):
                             self.bot.role_room_prices.clear()
                             for rp in db_role_prices:
                                 self.bot.role_room_prices[(rp["role_key"], rp["room_type"], rp["duration"])] = rp["price"]
+                            await apply_bot_nicknames(self.bot)
                             print(f"[IPC] Reloaded bot_settings and role_room_prices")
                         except Exception as e:
                             print(f"[IPC ERROR] Failed to reload bot and role prices: {e}")
@@ -71,6 +73,7 @@ class IPC(commands.Cog):
                                         "categories": set(s["whitelist_category_ids"]),
                                         "blacklist_categories": set(s["blacklist_category_ids"])
                                     }
+                            await apply_bot_nicknames(self.bot)
                             print(f"[IPC] Reloaded rank and bot_settings for guild {guild_id}")
                         except Exception as e:
                             print(f"[IPC ERROR] Failed to reload rank and bot settings: {e}")

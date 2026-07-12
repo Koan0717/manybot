@@ -9,7 +9,7 @@ from helpers import (
     NEW_MEMBER_ROLE_NAME, INTERVIEWER_ROLE_NAMES, FREE_INN_ROLE_NAMES,
     EMBLEM_MANAGER_ROLE_NAME, EMBLEM_MASTER_ROLE_NAME, CONFESSION_PRIEST_ROLE_NAME,
     PRIEST_ROLE_NAME, ADMIN_ROLE_NAMES, EVALUATOR_ROLE_NAMES, DEFAULT_SETTINGS,
-    format_setting_status, circled_to_int, get_circled_number
+    format_setting_status, circled_to_int, get_circled_number, apply_bot_nicknames
 )
 # 注意: bot.pyの245行目あたりにあった bot_settings や triggers のキャッシュは bot 側にある。
 
@@ -2205,6 +2205,21 @@ class AdminGroup(app_commands.Group):
         super().__init__(name="運営", description="運営管理者専用コマンド")
         self.bot = bot
 
+    @app_commands.command(name="ボット名変更", description="【運営専用】このサーバー内でのボットの名前（ニックネーム）を変更します。")
+    @app_commands.describe(nickname="新しい名前を入力してください。未入力の場合は元の名前に戻ります。")
+    @is_admin()
+    async def set_bot_nickname(self, interaction: discord.Interaction, nickname: str = None):
+        await interaction.response.defer(ephemeral=True)
+        try:
+            await interaction.guild.me.edit(nick=nickname)
+            if nickname:
+                await interaction.followup.send(f"✅ ボットの名前を `{nickname}` に変更しました。", ephemeral=True)
+            else:
+                await interaction.followup.send("✅ ボットの名前を元に戻しました。", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.followup.send("❌ エラー: ボットの名前を変更する権限がありません。（ボットのロールが一番上にあるか確認してください）", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
     @app_commands.command(name="任意ロールパネル設置", description="【運営専用】ユーザーがリアクションを押すことで自由に付与・剥奪できるロールパネルを設置します")
     @is_admin()
@@ -2742,6 +2757,8 @@ class Admin(commands.Cog):
         for guild in self.bot.guilds:
             await self.update_invite_cache(guild)
         print("[Invite Cache] Initialized invite cache for all guilds.")
+        await apply_bot_nicknames(self.bot)
+        print("[Bot Nicknames] Initialized bot nicknames for all guilds.")
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):

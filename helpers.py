@@ -702,3 +702,26 @@ def format_setting_status(bot, guild, key):
         
     return str(val)
 
+async def apply_bot_nicknames(bot):
+    """
+    bot.bot_settings から BOT_NICKNAME を読み取り、各サーバーでのニックネームを更新する。
+    """
+    if not hasattr(bot, 'bot_settings'):
+        return
+        
+    for guild in bot.guilds:
+        settings = bot.bot_settings.get(guild.id, {})
+        nick = settings.get("BOT_NICKNAME")
+        
+        if nick == "":
+            nick = None  # 空文字の場合は元の名前に戻す
+            
+        # 現在のニックネームを取得（未設定の場合は None）
+        current_nick = guild.me.nick
+        
+        # ニックネームが設定値と異なる場合のみ更新を試みる
+        if current_nick != nick:
+            try:
+                await guild.me.edit(nick=nick)
+            except Exception as e:
+                print(f"[apply_bot_nicknames] Failed to edit nickname in {guild.name} ({guild.id}): {e}")
