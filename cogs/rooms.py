@@ -48,12 +48,12 @@ class ExtendInnSelectView(discord.ui.View):
             
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success)
     async def twelve(self, interaction: discord.Interaction, button: discord.ui.Button):
-        price = get_room_settings(self.bot)["宿"][12]["price"]
+        price = get_room_price(self.bot, interaction.user, "宿", 12)
         await process_room_extension(self.bot, interaction, "宿", 12, price)
         
     @discord.ui.button(label="24時間", style=discord.ButtonStyle.success)
     async def twenty_four(self, interaction: discord.Interaction, button: discord.ui.Button):
-        price = get_room_settings(self.bot)["宿"][24]["price"]
+        price = get_room_price(self.bot, interaction.user, "宿", 24)
         await process_room_extension(self.bot, interaction, "宿", 24, price)
         
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
@@ -99,12 +99,12 @@ class ExtendGameVCSelectView(discord.ui.View):
         
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success)
     async def twelve(self, interaction: discord.Interaction, button: discord.ui.Button):
-        price = get_room_settings(self.bot)["ゲームVC"][12]["price"]
+        price = get_room_price(self.bot, interaction.user, "ゲームVC", 12)
         await process_room_extension(self.bot, interaction, "ゲームVC", 12, price)
         
     @discord.ui.button(label="24時間", style=discord.ButtonStyle.success)
     async def twenty_four(self, interaction: discord.Interaction, button: discord.ui.Button):
-        price = get_room_settings(self.bot)["ゲームVC"][24]["price"]
+        price = get_room_price(self.bot, interaction.user, "ゲームVC", 24)
         await process_room_extension(self.bot, interaction, "ゲームVC", 24, price)
         
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
@@ -124,12 +124,12 @@ class ExtendGambleVCSelectView(discord.ui.View):
         
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success)
     async def twelve(self, interaction: discord.Interaction, button: discord.ui.Button):
-        price = get_room_settings(self.bot)["賭博VC"][12]["price"]
+        price = get_room_price(self.bot, interaction.user, "賭博VC", 12)
         await process_room_extension(self.bot, interaction, "賭博VC", 12, price)
         
     @discord.ui.button(label="24時間", style=discord.ButtonStyle.success)
     async def twenty_four(self, interaction: discord.Interaction, button: discord.ui.Button):
-        price = get_room_settings(self.bot)["賭博VC"][24]["price"]
+        price = get_room_price(self.bot, interaction.user, "賭博VC", 24)
         await process_room_extension(self.bot, interaction, "賭博VC", 24, price)
         
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")

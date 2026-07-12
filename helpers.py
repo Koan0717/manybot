@@ -343,7 +343,8 @@ def get_room_price(bot, user: discord.Member, room_type: str, duration: int) -> 
     if room_type == "高級宿" and is_free_inn_member(bot, user):
         return 0
 
-    base_price = get_room_settings(bot).get(room_type, {}).get(duration, {}).get("price", 0)
+    guild_id = user.guild.id if user and hasattr(user, "guild") else None
+    base_price = get_room_settings(bot, guild_id).get(room_type, {}).get(duration, {}).get("price", 0)
     role_prices = getattr(bot, "role_room_prices", {})
 
     # 1. 違反者

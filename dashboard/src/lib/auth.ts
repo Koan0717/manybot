@@ -12,7 +12,7 @@ const jwtSecret = new TextEncoder().encode(jwtSecretStr);
 
 export interface SessionPayload {
   username: string;
-  role: 'admin' | 'shop' | 'gambling';
+  role: 'admin' | 'shop' | 'gambling' | 'subadmin';
   guild_id?: string;
   iat?: number;
   exp?: number;
@@ -42,11 +42,22 @@ export async function validateCredentials(username: string, password: string): P
     const res = await masterPool.query('SELECT * FROM dashboard_users WHERE username = $1', [username]);
     if (res.rows.length > 0) {
       const user = res.rows[0];
-      const match = await bcrypt.compare(password, user.password);
+      // Compare plaintext (new behavior) or hashed (old behavior for backwards compatibility)
+      let match = false;
+      if (user.password === password) {
+        match = true;
+      } else {
+        try {
+          match = await bcrypt.compare(password, user.password);
+        } catch (e) {
+          match = false;
+        }
+      }
+      
       if (match) {
         return {
           username: user.username,
-          role: user.role as 'admin' | 'shop' | 'gambling',
+          role: user.role as 'admin' | 'shop' | 'gambling' | 'subadmin',
           guild_id: user.guild_id,
         };
       }

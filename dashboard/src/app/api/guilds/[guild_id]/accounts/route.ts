@@ -11,7 +11,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
 
   try {
     const res = await masterPool.query(
-      'SELECT id, username, role, guild_id, created_at FROM dashboard_users WHERE guild_id = $1 ORDER BY created_at DESC',
+      'SELECT id, username, password, role, guild_id, created_at FROM dashboard_users WHERE guild_id = $1 ORDER BY created_at DESC',
       [params.guild_id]
     );
     return NextResponse.json(res.rows);
@@ -35,12 +35,9 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(password, salt);
-
     const res = await masterPool.query(
-      'INSERT INTO dashboard_users (username, password, role, guild_id) VALUES ($1, $2, $3, $4) RETURNING id, username, role, guild_id, created_at',
-      [username, hash, role, params.guild_id]
+      'INSERT INTO dashboard_users (username, password, role, guild_id) VALUES ($1, $2, $3, $4) RETURNING id, username, password, role, guild_id, created_at',
+      [username, password, role, params.guild_id]
     );
 
     return NextResponse.json(res.rows[0]);

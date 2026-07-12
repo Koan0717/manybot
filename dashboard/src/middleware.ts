@@ -86,6 +86,13 @@ export async function middleware(request: NextRequest) {
         }
         return NextResponse.redirect(new URL(`/dashboard/${guildId}/gambling`, request.url));
       }
+
+      if (role === 'subadmin' && pathname.includes('/accounts')) {
+        if (pathname.startsWith('/api/')) {
+          return NextResponse.json({ error: 'アカウント管理の権限はありません' }, { status: 403 });
+        }
+        return NextResponse.redirect(new URL(`/dashboard/${guildId}`, request.url));
+      }
     } else {
       // Admin account: prevent access to unauthorized roles
       // No strict path locks, but we can do it if needed. Admin has access to all.
