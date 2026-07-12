@@ -23,7 +23,7 @@ class IPC(commands.Cog):
 
                 guild = self.bot.get_guild(guild_id)
                 if not guild:
-                    await database.delete_panel_request(req_id)
+                    await database.delete_panel_request(req_id, guild_id)
                     continue
 
                 if channel_id == 0:
@@ -84,12 +84,12 @@ class IPC(commands.Cog):
                         except Exception as e:
                             print(f"[IPC ERROR] Failed to reload vc triggers: {e}")
 
-                    await database.delete_panel_request(req_id)
+                    await database.delete_panel_request(req_id, guild_id)
                     continue
 
                 channel = guild.get_channel(channel_id)
                 if not channel:
-                    await database.delete_panel_request(req_id)
+                    await database.delete_panel_request(req_id, guild_id)
                     continue
 
                 embed = None
@@ -146,7 +146,7 @@ class IPC(commands.Cog):
                         print(f"Failed to send panel {panel_type} to {channel_id}: Forbidden")
                 
                 # リクエストを処理したら削除
-                await database.delete_panel_request(req_id)
+                await database.delete_panel_request(req_id, guild_id)
 
         except Exception as e:
             print(f"Error in IPC task: {e}")

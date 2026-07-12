@@ -978,13 +978,19 @@ async def remove_custom_ticket_panel(channel_id: int):
         await conn.execute('DELETE FROM custom_ticket_panels WHERE channel_id = $1', channel_id)
 
 async def get_panel_requests() -> list[dict]:
-    p = await get_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type FROM panel_requests ORDER BY created_at ASC LIMIT 10')
-        return [dict(row) for row in rows]
+    pools = await get_all_configured_pools()
+    all_requests = []
+    for p in pools:
+        try:
+            async with p.acquire() as conn:
+                rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type FROM panel_requests ORDER BY created_at ASC LIMIT 10')
+                all_requests.extend([dict(row) for row in rows])
+        except Exception as e:
+            pass
+    return all_requests
 
-async def delete_panel_request(request_id: int):
-    p = await get_pool()
+async def delete_panel_request(request_id: int, guild_id: int):
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('DELETE FROM panel_requests WHERE id = $1', request_id)
 
