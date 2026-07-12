@@ -79,6 +79,21 @@ class InterviewerGroup(app_commands.Group):
         embed.add_field(name="1. /面接官 入界許可 <ユーザー>", value="待機メンバーの入界手続き（仮ロール付与、初期通貨付与、ログ出力など）を完了します。", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+
+    @app_commands.command(name="チャット削除", description="【面接官専用】チャンネル内のメッセージを指定された件数分、一括削除します")
+    @app_commands.describe(count="削除するメッセージの件数")
+    async def clear_chat(self, interaction: discord.Interaction, count: int):
+        bot = self.bot
+        if not has_interviewer_role(bot, interaction.user):
+            return await interaction.response.send_message("このコマンドを実行する権限がありません（面接官ロールが必要です）。", ephemeral=True)
+            
+        if count <= 0:
+            return await interaction.response.send_message("1以上の件数を指定してください。", ephemeral=True)
+            
+        await interaction.response.defer(ephemeral=True)
+        deleted = await interaction.channel.purge(limit=count)
+        await interaction.followup.send(f"🧹 メッセージを {len(deleted)} 件削除しました。", ephemeral=True)
+
     def has_interviewer_permission(self):
         async def predicate(interaction: discord.Interaction):
             if not interaction.guild: return False
