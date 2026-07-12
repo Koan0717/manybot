@@ -12,6 +12,11 @@ class Logging(commands.Cog):
         self.bot = bot
         self.sticky_locks = {}
 
+    async def cog_load(self):
+        # 招待キャッシュの初期化
+        for guild in self.bot.guilds:
+            self.bot.loop.create_task(self.update_invite_cache(guild))
+
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
