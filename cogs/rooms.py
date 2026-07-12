@@ -7,7 +7,7 @@ from helpers import (
     JST, get_setting, is_free_inn_member, is_main_or_sub_member,
     get_room_settings, get_circled_number, circled_to_int, send_log,
     has_admin_role, is_new_member, is_downgrade_member, get_role_by_setting,
-    PENDING_MEMBER_ROLE_NAME
+    PENDING_MEMBER_ROLE_NAME, get_room_price
 )
 
 # --- モーダル ---
@@ -459,6 +459,12 @@ async def process_room_purchase(bot, interaction: discord.Interaction, room_type
             expire_str = "無制限" if duration == 0 else f"<t:{int(expire_at.timestamp())}:F>"
             embed = discord.Embed(title=f"🏠 {room_type}", description=f"作成者: {interaction.user.mention}\n利用期間: {f'{duration}時間' if duration > 0 else '無制限'}\n終了予定: {expire_str}", color=discord.Color.blue())
             await channel.send(content=f"{interaction.user.mention}", embed=embed, view=view)
+            
+            if interaction.user.voice and interaction.user.voice.channel:
+                try:
+                    await interaction.user.move_to(channel)
+                except:
+                    pass
 
             # 通貨ログ送信
             if price > 0:
@@ -888,6 +894,12 @@ class Rooms(commands.Cog):
                         reason=f"Auto-VC for {member.display_name}"
                     )
                     
+                    if member.voice and member.voice.channel and member.voice.channel.id == trigger_id:
+                        try:
+                            await member.move_to(new_channel)
+                        except:
+                            pass
+                    
                     now_naive = database.get_now_naive()
                     far_future = now_naive + datetime.timedelta(days=36500)
                     await database.add_room(new_channel.id, member.id, "一時部屋", far_future, trigger_channel_id=trigger_id)
@@ -901,18 +913,19 @@ class Rooms(commands.Cog):
                         )
                         await new_channel.send(embed=embed, view=VCRenamePanelView())
 
-                    for i in range(3):
-                        await asyncio.sleep(0.5 if i == 0 else 1.0)
-                        if member.voice and member.voice.channel and member.voice.channel.id == trigger_id:
-                            try:
-                                await member.move_to(new_channel)
-                                print(f"[Auto-VC] Successfully moved {member.display_name} on attempt {i+1}")
+                    # Move attempts are now done instantly above. We still keep a fallback just in case.
+                    async def delayed_move():
+                        for i in range(3):
+                            await asyncio.sleep(0.5 if i == 0 else 1.0)
+                            if member.voice and member.voice.channel and member.voice.channel.id == trigger_id:
+                                try:
+                                    await member.move_to(new_channel)
+                                    break
+                                except:
+                                    pass
+                            else:
                                 break
-                            except Exception as move_e:
-                                print(f"[Auto-VC] Move attempt {i+1} failed: {move_e}")
-                        else:
-                            print(f"[Auto-VC] User already left the trigger channel.")
-                            break
+                    self.bot.loop.create_task(delayed_move())
                 except Exception as e:
                     print(f"[Auto-VC] Error: {e}")
 
@@ -923,12 +936,16 @@ class Rooms(commands.Cog):
                 room_data = await database.get_room(before.channel.id)
                 if room_data:
                     if room_data["room_type"] in ["一時部屋", "宿", "ゲームVC", "賭博VC"]:
-                        try:
-                            print(f"[Auto-VC] Deleting empty room ({room_data['room_type']}): {before.channel.name}")
-                            await before.channel.delete()
-                            await database.remove_room(before.channel.id)
-                        except Exception as del_e:
-                            print(f"[Auto-VC] Delete error: {del_e}")
+                        # 期限が設定されている(有料)部屋は自動削除しない
+                        if room_data["expire_at"] and room_data["expire_at"].year < 2100 and room_data["room_type"] in ["宿", "ゲームVC", "賭博VC"]:
+                            pass # 有料の部屋は退出しても維持される
+                        else:
+                            try:
+                                print(f"[Auto-VC] Deleting empty room ({room_data['room_type']}): {before.channel.name}")
+                                await before.channel.delete()
+                                await database.remove_room(before.channel.id)
+                            except Exception as del_e:
+                                print(f"[Auto-VC] Delete error: {del_e}")
                     elif room_data["room_type"] == "カスタムVC":
                         self.bot.empty_custom_vcs[before.channel.id] = now_aware
 

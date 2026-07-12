@@ -324,6 +324,7 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
 
         <div className="space-y-4">
           {[
+            { id: 'inn', name: '一般宿作成パネル', desc: '一般宿単独の作成パネル' },
             { id: 'inn_combined', name: '一般宿・高級宿セットパネル', desc: '宿と高級宿の両方のボタンがあるパネル' },
             { id: 'main_inn', name: '本準メン専用の宿パネル', desc: '本/準メンバー専用の一般宿(無料)を作成するパネル' },
             { id: 'luxury_inn_single', name: '高級宿単体のパネル', desc: '高級宿単独の作成パネル' },
