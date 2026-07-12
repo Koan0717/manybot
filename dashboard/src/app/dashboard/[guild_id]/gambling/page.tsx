@@ -20,6 +20,11 @@ export default function GamblingSettingsPage() {
   const [activeTab, setActiveTab] = useState('common');
   const [rouletteChartType, setRouletteChartType] = useState<'2x' | '3x' | '36x'>('2x');
   const [channels, setChannels] = useState<any[]>([]);
+  
+  // Panel state
+  const [selectedChannelId, setSelectedChannelId] = useState<string>('');
+  const [selectedGameType, setSelectedGameType] = useState<string>('chinchiro');
+  const [sendingPanel, setSendingPanel] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -81,7 +86,7 @@ export default function GamblingSettingsPage() {
           });
         }
         if (!channelsData.error && Array.isArray(channelsData)) {
-          setChannels(channelsData.filter((c: any) => [0, 10, 11, 12].includes(c.type)));
+          setChannels(channelsData.filter((c: any) => [0, 5, 11, 12, 15].includes(c.type)));
         }
       })
       .catch(err => {
@@ -107,6 +112,40 @@ export default function GamblingSettingsPage() {
       setError('設定の保存に失敗しました');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const sendGamblingPanel = async () => {
+    if (!selectedChannelId) {
+      alert('送信先のチャンネルを選択してください');
+      return;
+    }
+    
+    const selectedChannel = channels.find(c => c.id === selectedChannelId);
+    
+    setSendingPanel(true);
+    try {
+      const res = await fetch(`/api/guilds/${guildId}/gambling/panel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          channel_id: selectedChannelId, 
+          channel_type: selectedChannel?.type,
+          game_type: selectedGameType
+        })
+      });
+      
+      if (res.ok) {
+        alert('ギャンブルパネルを送信しました！');
+        setSelectedChannelId('');
+      } else {
+        const data = await res.json();
+        alert(`送信に失敗しました: ${data.error || '不明なエラー'}`);
+      }
+    } catch (e) {
+      alert('エラーが発生しました');
+    } finally {
+      setSendingPanel(false);
     }
   };
 
@@ -233,14 +272,19 @@ export default function GamblingSettingsPage() {
           input: (base) => ({
             ...base,
             color: 'white',
-          })
-        }}
-        isSearchable
-        placeholder="検索して選択..."
-        noOptionsMessage={() => "見つかりませんでした"}
-      />
-    </div>
-  );
+  const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
+
+  const customStyles = {
+    control: (base: any) => ({ ...base, backgroundColor: '#18181b', borderColor: '#3f3f46', color: 'white', padding: '2px' }),
+    menu: (base: any) => ({ ...base, backgroundColor: '#27272a', zIndex: 9999 }),
+    option: (base: any, state: any) => ({
+      ...base,
+      backgroundColor: state.isFocused ? '#3f3f46' : '#27272a',
+      color: 'white',
+      ':active': { backgroundColor: '#52525b' }
+    }),
+    singleValue: (base: any) => ({ ...base, color: 'white' })
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
@@ -344,11 +388,6 @@ export default function GamblingSettingsPage() {
                   {renderInput('ヒフミ(ペナルティ)倍率', 'GAMBLE_CHINCHIRO_MUL_HIFUMI', false, '0.1')}
                   {renderInput('通常勝ち倍率', 'GAMBLE_CHINCHIRO_MUL_NORMAL', false, '0.1')}
                 </div>
-
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">パネル設置</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {renderChannelSelect('パネル設置先チャンネル', 'GAMBLE_CHINCHIRO_PANEL_CHANNEL')}
-                </div>
               </div>
             )}
 
@@ -359,11 +398,6 @@ export default function GamblingSettingsPage() {
                   {renderInput('勝ち確率', 'GAMBLE_COINFLIP_RATE_WIN', true)}
                   {renderInput('負け確率', 'GAMBLE_COINFLIP_RATE_LOSE', true)}
                   {renderInput('配当倍率', 'GAMBLE_COINFLIP_MUL', false, '0.1')}
-                </div>
-
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">パネル設置</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {renderChannelSelect('パネル設置先チャンネル', 'GAMBLE_COINFLIP_PANEL_CHANNEL')}
                 </div>
               </div>
             )}
@@ -386,11 +420,6 @@ export default function GamblingSettingsPage() {
                   {renderInput('3つ揃い倍率', 'GAMBLE_SLOT_MUL_THREE', false, '0.1')}
                   {renderInput('2つ揃い倍率', 'GAMBLE_SLOT_MUL_TWO', false, '0.1')}
                 </div>
-
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">パネル設置</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {renderChannelSelect('パネル設置先チャンネル', 'GAMBLE_SLOT_PANEL_CHANNEL')}
-                </div>
               </div>
             )}
 
@@ -409,11 +438,6 @@ export default function GamblingSettingsPage() {
                   {renderInput('通常勝ち倍率', 'GAMBLE_BLACKJACK_MUL_NORMAL', false, '0.1')}
                   {renderInput('BJ勝ち倍率', 'GAMBLE_BLACKJACK_MUL_BJ', false, '0.1')}
                 </div>
-
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">パネル設置</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {renderChannelSelect('パネル設置先チャンネル', 'GAMBLE_BLACKJACK_PANEL_CHANNEL')}
-                </div>
               </div>
             )}
 
@@ -431,11 +455,6 @@ export default function GamblingSettingsPage() {
                   {renderInput('2倍賭け配当', 'GAMBLE_ROULETTE_MUL_2X', false, '0.1')}
                   {renderInput('3倍賭け配当', 'GAMBLE_ROULETTE_MUL_3X', false, '0.1')}
                   {renderInput('1点賭け配当', 'GAMBLE_ROULETTE_MUL_36X', false, '0.1')}
-                </div>
-
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">パネル設置</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {renderChannelSelect('パネル設置先チャンネル', 'GAMBLE_ROULETTE_PANEL_CHANNEL')}
                 </div>
               </div>
             )}
@@ -504,6 +523,50 @@ export default function GamblingSettingsPage() {
             </div>
           </div>
         )}
+      </div>
+      
+      {/* ギャンブルパネルの設置 */}
+      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mt-8 mb-12">
+        <h2 className="text-xl font-bold text-white mb-4">ギャンブルパネルの設置</h2>
+        <p className="text-zinc-400 mb-6 text-sm">
+          指定したチャンネルやフォーラムに、ユーザーがギャンブルを遊ぶためのパネル（ボタン付きメッセージ）を送信します。<br/>
+          フォーラムを選択した場合は自動的に新しいスレッドが作成されてパネルが設置されます。
+        </p>
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+          <div className="flex-1 w-full max-w-[200px]">
+            <label className="block text-sm font-medium text-zinc-400 mb-2">ゲーム種類</label>
+            <select
+              value={selectedGameType}
+              onChange={(e) => setSelectedGameType(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-[11px] text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="chinchiro">🎲 チンチロリン</option>
+              <option value="coinflip">🪙 コイントス</option>
+              <option value="slot">🎰 スロット</option>
+              <option value="blackjack">🃏 ブラックジャック</option>
+              <option value="roulette">🎡 ルーレット</option>
+            </select>
+          </div>
+          <div className="flex-1 w-full">
+            <label className="block text-sm font-medium text-zinc-400 mb-2">送信先チャンネル</label>
+            <Select
+              options={channelOptions}
+              value={channelOptions.find(c => c.value === selectedChannelId) || null}
+              onChange={(selected: any) => setSelectedChannelId(selected ? selected.value : '')}
+              placeholder="チャンネルを検索・選択..."
+              isClearable
+              styles={customStyles}
+              noOptionsMessage={() => "チャンネルが見つかりません"}
+            />
+          </div>
+          <button
+            onClick={sendGamblingPanel}
+            disabled={sendingPanel || !selectedChannelId}
+            className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-lg font-bold shadow-lg transition-all"
+          >
+            {sendingPanel ? '送信中...' : 'パネルを送信'}
+          </button>
+        </div>
       </div>
     </div>
   );
