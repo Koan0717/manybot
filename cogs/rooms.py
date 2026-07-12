@@ -1001,7 +1001,8 @@ class Rooms(commands.Cog):
             self.bot.empty_custom_vcs.pop(after.channel.id, None)
         
         if before.channel is not None and (after.channel is None or before.channel != after.channel):
-            if len(before.channel.members) == 0:
+            humans = [m for m in before.channel.members if not m.bot]
+            if len(humans) == 0:
                 room_data = await database.get_room(before.channel.id)
                 if room_data:
                     if room_data["room_type"] in ["一時部屋", "宿", "ゲームVC", "賭博VC"]:
