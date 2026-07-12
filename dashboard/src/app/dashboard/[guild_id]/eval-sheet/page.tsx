@@ -88,6 +88,8 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
   const guildId = params.guild_id;
   const [settings, setSettings] = useState<any>({
     is_enabled: true,
+    auto_generate_period: true,
+    auto_fail_on_deadline: false,
     forum_channel_ids: [],
     self_intro_channel_ids: []
   });
@@ -149,7 +151,7 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6 shadow-xl">
         <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
           <div>
-            <h2 className="text-lg font-semibold text-white">自動生成の有効化</h2>
+            <h2 className="text-lg font-semibold text-white">評価シート自動生成の有効化</h2>
             <p className="text-sm text-zinc-400">この機能をONにすると、自己紹介時に自動でスレッドが生成されます。</p>
           </div>
           <button 
@@ -158,6 +160,34 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
             className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.is_enabled ? 'bg-blue-600' : 'bg-zinc-700'}`}
           >
             <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.is_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+          <div>
+            <h2 className="text-lg font-semibold text-white">評価期間の自動生成</h2>
+            <p className="text-sm text-zinc-400">この機能をONにすると、新規メンバーが参加・ロール付与された際に自動で評価期間を開始します。</p>
+          </div>
+          <button 
+            type="button"
+            onClick={() => handleChange('auto_generate_period', !settings.auto_generate_period)}
+            className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.auto_generate_period ? 'bg-blue-600' : 'bg-zinc-700'}`}
+          >
+            <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.auto_generate_period ? 'translate-x-6' : 'translate-x-0'}`} />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+          <div>
+            <h2 className="text-lg font-semibold text-white">締切時の自動評価落ち</h2>
+            <p className="text-sm text-zinc-400">評価期間の締切日になった際、自動で「評価落ち」のロール処理を行います。</p>
+          </div>
+          <button 
+            type="button"
+            onClick={() => handleChange('auto_fail_on_deadline', !settings.auto_fail_on_deadline)}
+            className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.auto_fail_on_deadline ? 'bg-blue-600' : 'bg-zinc-700'}`}
+          >
+            <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.auto_fail_on_deadline ? 'translate-x-6' : 'translate-x-0'}`} />
           </button>
         </div>
 
