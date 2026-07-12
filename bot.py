@@ -235,42 +235,7 @@ async def on_message(message):
 async def on_voice_state_update(member, before, after):
     try:
         if member.bot: return
-        
-        # VCログの送信
-        guild = member.guild
-        if guild:
-            embed = None
-            if before.channel is None and after.channel is not None:
-                embed = discord.Embed(
-                    title="🎙️ VC参加",
-                    description=f"{member.mention} が {after.channel.mention} に参加しました。",
-                    color=discord.Color.green(),
-                    timestamp=datetime.datetime.now(JST)
-                )
-                embed.set_author(name=f"{member} (ID: {member.id})", icon_url=member.display_avatar.url)
-            elif before.channel is not None and after.channel is None:
-                embed = discord.Embed(
-                    title="🎙️ VC退出",
-                    description=f"{member.mention} が {before.channel.mention} から退出しました。",
-                    color=discord.Color.red(),
-                    timestamp=datetime.datetime.now(JST)
-                )
-                embed.set_author(name=f"{member} (ID: {member.id})", icon_url=member.display_avatar.url)
-            elif before.channel is not None and after.channel is not None and before.channel.id != after.channel.id:
-                embed = discord.Embed(
-                    title="🎙️ VC移動",
-                    description=f"{member.mention} が {before.channel.mention} から {after.channel.mention} に移動しました。",
-                    color=discord.Color.blue(),
-                    timestamp=datetime.datetime.now(JST)
-                )
-                embed.set_author(name=f"{member} (ID: {member.id})", icon_url=member.display_avatar.url)
-                
-            if embed:
-                await send_log(bot, guild, "vc_join_leave", embed)
-    except Exception as log_e:
-        print(f"[ERROR] Failed to send VC log: {log_e}")
-
-    try:
+        # VCログはcogs/logging_cog.pyで処理するため削除    try:
         if member.bot: return
         user_id = member.id
         now_aware = datetime.datetime.now(JST)
