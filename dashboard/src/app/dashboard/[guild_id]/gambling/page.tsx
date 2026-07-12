@@ -22,9 +22,9 @@ export default function GamblingSettingsPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/guilds/${guildId}/gambling`).then(res => res.ok ? res.json() : {}),
+      fetch(`/api/guilds/${guildId}/gambling`).then(res => res.ok ? res.json() : { error: true }),
       fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : [])
-    ]).then(([data, channelsData]) => {
+    ]).then(([data, channelsData]: [any, any]) => {
         if (!data.error) {
           setSettings({
             GAMBLE_CHINCHIRO_PANEL_CHANNEL: data.GAMBLE_CHINCHIRO_PANEL_CHANNEL ?? '',
