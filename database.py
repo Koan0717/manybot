@@ -1046,6 +1046,7 @@ async def remove_log_channel(guild_id: int, log_type: str):
         await conn.execute('DELETE FROM log_settings WHERE guild_id = $1 AND log_type = $2', guild_id, log_type)
 
 
+
 # --- 自己紹介・評価設定管理用関数 ---
 async def get_evaluation_settings(guild_id: int) -> dict:
     p = await get_pool(guild_id)
@@ -1387,56 +1388,10 @@ async def get_user_evaluations(target_user_id: int) -> list[dict]:
         rows = await conn.fetch('''
             SELECT id as eval_id, evaluator_id, evaluator_name, score, stamp_count, comment, created_at
             FROM user_evaluations
-            WHERE target_user_id = $1 AND guild_id = $2
+            WHERE target_user_id = $1
             ORDER BY created_at DESC
-            LIMIT $3
-        ''', target_user_id, guild_id, limit)
+        ''', target_user_id)
         return [dict(r) for r in rows]
-
-async def update_available_commands(commands: list):
-    """
-    commands: list of dicts {"name": "...", "description": "...", "category": "..."}
-    """
-    p = await get_master_pool()
-    async with p.acquire() as conn:
-        async with conn.transaction():
-            # Truncate and re-insert
-            await conn.execute('TRUNCATE TABLE available_commands')
-            for cmd in commands:
-                await conn.execute(
-                    'INSERT INTO available_commands (command_name, description, category) VALUES ($1, $2, $3)',
-                    cmd["name"], cmd["description"], cmd["category"]
-                )
-
-async def get_all_available_commands():
-    p = await get_master_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT command_name, description, category FROM available_commands ORDER BY category, command_name')
-        return [dict(r) for r in rows]
-
-async def get_command_settings(guild_id: int):
-    p = await get_pool(guild_id)
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT command_name, is_enabled FROM command_settings WHERE guild_id = $1', guild_id)
-        return {r['command_name']: r['is_enabled'] for r in rows}
-
-async def update_command_setting(guild_id: int, command_name: str, is_enabled: bool):
-    p = await get_pool(guild_id)
-    async with p.acquire() as conn:
-        await conn.execute(
-            'INSERT INTO command_settings (guild_id, command_name, is_enabled) VALUES ($1, $2, $3) '
-            'ON CONFLICT (guild_id, command_name) DO UPDATE SET is_enabled = EXCLUDED.is_enabled',
-            guild_id, command_name, is_enabled
-        )
-
-async def is_command_enabled(guild_id: int, command_name: str) -> bool:
-    """Returns True if enabled or if not explicitly set (default is True)."""
-    p = await get_pool(guild_id)
-    async with p.acquire() as conn:
-        row = await conn.fetchrow('SELECT is_enabled FROM command_settings WHERE guild_id = $1 AND command_name = $2', guild_id, command_name)
-        if row is None:
-            return True
-        return row['is_enabled']
 
 async def set_initial_issued(guild_id: int, user_id: int):
     await get_user(guild_id, user_id)

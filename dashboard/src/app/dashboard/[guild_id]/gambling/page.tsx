@@ -490,7 +490,7 @@ export default function GamblingSettingsPage() {
           </div>
         )}
       </div>
-      
+
       {/* ギャンブルパネルの設置 */}
       <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mt-8 mb-12">
         <h2 className="text-xl font-bold text-white mb-4">ギャンブルパネルの設置</h2>
