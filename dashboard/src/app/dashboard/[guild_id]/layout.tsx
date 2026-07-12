@@ -19,6 +19,7 @@ export default function DashboardLayout({
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [isSubAccount, setIsSubAccount] = useState(false);
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -36,6 +37,7 @@ export default function DashboardLayout({
         if (!statusData.error) setStatus(statusData);
         if (authData.authenticated && authData.user) {
           setUserRole(authData.user.role);
+          setIsSubAccount(!!authData.user.guild_id);
         }
       })
       .finally(() => setLoading(false));
@@ -169,9 +171,11 @@ export default function DashboardLayout({
           </nav>
           
           <div className="pt-4 border-t border-zinc-800 mt-auto flex-shrink-0 space-y-2">
-            <Link href="/" className="text-sm text-zinc-500 hover:text-white flex items-center gap-2">
-              ← サーバー選択に戻る
-            </Link>
+            {!isSubAccount && (
+              <Link href="/" className="text-sm text-zinc-500 hover:text-white flex items-center gap-2">
+                ← サーバー選択に戻る
+              </Link>
+            )}
             <button
               onClick={handleLogout}
               className="text-sm text-zinc-500 hover:text-red-400 flex items-center gap-2 transition-colors w-full"
