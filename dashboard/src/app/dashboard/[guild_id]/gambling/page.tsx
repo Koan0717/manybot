@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { Save, AlertCircle, Settings, Dices, Coins, Cherry, Spade, Disc, Percent } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
+import Select from 'react-select';
 
 const COLORS = ['#8b5cf6', '#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1'];
 
@@ -80,7 +81,7 @@ export default function GamblingSettingsPage() {
           });
         }
         if (!channelsData.error && Array.isArray(channelsData)) {
-          setChannels(channelsData.filter((c: any) => c.type === 0));
+          setChannels(channelsData.filter((c: any) => [0, 10, 11, 12].includes(c.type)));
         }
       })
       .catch(err => {
@@ -198,19 +199,46 @@ export default function GamblingSettingsPage() {
     </div>
   );
 
+  const channelOptions = [{ value: '', label: '設置しない' }, ...channels.map(c => ({ value: c.id, label: `#${c.name}` }))];
+
   const renderChannelSelect = (label: string, key: string) => (
     <div className="flex flex-col space-y-2 bg-gray-800/40 p-4 rounded-lg border border-gray-700/50 hover:border-purple-500/30 transition-colors">
       <label className="text-sm text-gray-300 font-medium">{label}</label>
-      <select
-        value={settings[key] || ''}
-        onChange={(e) => updateSetting(key, e.target.value)}
-        className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-purple-500 transition-colors"
-      >
-        <option value="">設置しない</option>
-        {channels.map(c => (
-          <option key={c.id} value={c.id}>#{c.name}</option>
-        ))}
-      </select>
+      <Select
+        options={channelOptions}
+        value={channelOptions.find(o => o.value === (settings[key] || '')) || channelOptions[0]}
+        onChange={(selected: any) => updateSetting(key, selected ? selected.value : '')}
+        styles={{
+          control: (base) => ({
+            ...base,
+            backgroundColor: '#111827',
+            borderColor: '#4B5563',
+            color: 'white',
+          }),
+          menu: (base) => ({
+            ...base,
+            backgroundColor: '#111827',
+            color: 'white',
+          }),
+          option: (base, state) => ({
+            ...base,
+            backgroundColor: state.isFocused ? '#374151' : '#111827',
+            color: 'white',
+            ':active': { backgroundColor: '#4B5563' }
+          }),
+          singleValue: (base) => ({
+            ...base,
+            color: 'white',
+          }),
+          input: (base) => ({
+            ...base,
+            color: 'white',
+          })
+        }}
+        isSearchable
+        placeholder="検索して選択..."
+        noOptionsMessage={() => "見つかりませんでした"}
+      />
     </div>
   );
 

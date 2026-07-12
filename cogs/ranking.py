@@ -268,7 +268,7 @@ class Ranking(commands.Cog):
 
                 elapsed_minutes = int((now - last_reward_time).total_seconds() / 60)
                 if elapsed_minutes >= 1:
-                    xp_reward = elapsed_minutes * (config.get_setting(self.bot, "VC_XP_PER_MIN", guild_id) or 15)
+                    xp_reward = elapsed_minutes * (config.get_setting(self.bot, "VC_XP_PER_MIN", member.guild.id) or 15)
                     category_name = member.voice.channel.category.name if member.voice.channel and member.voice.channel.category else "なし"
                     print(f"[DEBUG] VC XP Awarding: {member.display_name} in {category_name}")
                     new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
@@ -300,7 +300,7 @@ class Ranking(commands.Cog):
 
                 elapsed_seconds = int((now - last_reward_time).total_seconds())
                 if elapsed_seconds >= 60:
-                    await database.add_evaluation_vc_time(guild_id, user_id, elapsed_seconds)
+                    await database.add_evaluation_vc_time(member.guild.id, user_id, elapsed_seconds)
                     print(f"[Eval Time] Mid-loop added {elapsed_seconds}s to {member.display_name}")
                     self.bot.eval_vc_sessions[user_id] = now
             else:
@@ -350,7 +350,7 @@ class Ranking(commands.Cog):
             if join_time:
                 elapsed_seconds = int((now_aware - join_time).total_seconds())
                 if elapsed_seconds > 0:
-                    await database.add_evaluation_vc_time(guild_id, user_id, elapsed_seconds)
+                    await database.add_evaluation_vc_time(member.guild.id, user_id, elapsed_seconds)
                     print(f"[Eval Time] Added {elapsed_seconds}s to {member.display_name}")
 
         if is_in_eval and not was_in_eval:
@@ -363,7 +363,7 @@ class Ranking(commands.Cog):
             if join_time:
                 duration_minutes = int((now_aware - join_time).total_seconds() / 60)
                 if duration_minutes > 0:
-                    xp_reward = duration_minutes * (config.get_setting(self.bot, "VC_XP_PER_MIN", guild_id) or 15)
+                    xp_reward = duration_minutes * (config.get_setting(self.bot, "VC_XP_PER_MIN", member.guild.id) or 15)
                     new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
                     if new_lv:
                         lv_channel = self.bot.get_channel(config.get_setting(self.bot, "LEVEL_UP_CHANNEL_ID"))
