@@ -440,8 +440,13 @@ class SaveLogSettingButton(discord.ui.Button):
             return await interaction.response.send_message("❌ ログ種別とチャンネルを両方選択してください。", ephemeral=True)
             
         await interaction.response.defer()
-        await database.save_log_channel(interaction.guild.id, view.selected_log_type, view.selected_channel.id)
-        await update_log_settings_config_view(interaction)
+        try:
+            await database.save_log_channel(interaction.guild.id, view.selected_log_type, view.selected_channel.id)
+            await update_log_settings_config_view(interaction)
+            await interaction.followup.send("✅ ログ設定を保存しました！", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ ログ設定の保存中にエラーが発生しました: {e}", ephemeral=True)
+            print(f"[Error] Log setting save failed: {e}")
 
 class RemoveLogSettingSelect(discord.ui.Select):
     def __init__(self, settings, guild: discord.Guild):
@@ -474,8 +479,14 @@ class RemoveLogSettingSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         log_type = self.values[0]
-        await database.remove_log_channel(interaction.guild.id, log_type)
-        await update_log_settings_config_view(interaction)
+        await interaction.response.defer()
+        try:
+            await database.remove_log_channel(interaction.guild.id, log_type)
+            await update_log_settings_config_view(interaction)
+            await interaction.followup.send("✅ ログ設定を解除しました！", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ ログ設定の解除中にエラーが発生しました: {e}", ephemeral=True)
+            print(f"[Error] Log setting remove failed: {e}")
 
 class LogSettingsConfigView(discord.ui.View):
     def __init__(self, settings, guild: discord.Guild):
