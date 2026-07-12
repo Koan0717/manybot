@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Switch } from '@headlessui/react';
 
 type CommandSetting = {
   command_name: string;
@@ -129,9 +128,8 @@ export default function CommandsPage({ params }: { params: { guild_id: string } 
                     </div>
                   </div>
                   <div>
-                    <Switch
-                      checked={cmd.is_enabled}
-                      onChange={() => toggleCommand(cmd.command_name, cmd.is_enabled)}
+                    <button
+                      onClick={() => toggleCommand(cmd.command_name, cmd.is_enabled)}
                       className={`${
                         cmd.is_enabled ? 'bg-teal-500' : 'bg-gray-600'
                       } relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none`}
@@ -141,7 +139,7 @@ export default function CommandsPage({ params }: { params: { guild_id: string } 
                           cmd.is_enabled ? 'translate-x-6' : 'translate-x-1'
                         } inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
                       />
-                    </Switch>
+                    </button>
                   </div>
                 </div>
               ))}

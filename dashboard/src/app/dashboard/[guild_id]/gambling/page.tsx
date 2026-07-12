@@ -238,40 +238,6 @@ export default function GamblingSettingsPage() {
     </div>
   );
 
-  const channelOptions = [{ value: '', label: '設置しない' }, ...channels.map(c => ({ value: c.id, label: `#${c.name}` }))];
-
-  const renderChannelSelect = (label: string, key: string) => (
-    <div className="flex flex-col space-y-2 bg-gray-800/40 p-4 rounded-lg border border-gray-700/50 hover:border-purple-500/30 transition-colors">
-      <label className="text-sm text-gray-300 font-medium">{label}</label>
-      <Select
-        options={channelOptions}
-        value={channelOptions.find(o => o.value === (settings[key] || '')) || channelOptions[0]}
-        onChange={(selected: any) => updateSetting(key, selected ? selected.value : '')}
-        styles={{
-          control: (base) => ({
-            ...base,
-            backgroundColor: '#111827',
-            borderColor: '#4B5563',
-            color: 'white',
-          }),
-          menu: (base) => ({
-            ...base,
-            backgroundColor: '#111827',
-            color: 'white',
-          }),
-          option: (base, state) => ({
-            ...base,
-            backgroundColor: state.isFocused ? '#374151' : '#111827',
-            color: 'white',
-            ':active': { backgroundColor: '#4B5563' }
-          }),
-          singleValue: (base) => ({
-            ...base,
-            color: 'white',
-          }),
-          input: (base) => ({
-            ...base,
-            color: 'white',
   const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
 
   const customStyles = {
