@@ -88,13 +88,14 @@ class Ranking(commands.Cog):
                     server_logo_bytes=server_logo_bytes,
                     vc_level=vc_lv,
                     vc_xp=vc_xp,
-                    vc_next=vc_next,
+                    vc_next_xp=vc_next,
+                    vc_role_name=vc_role_name,
                     tc_level=tc_lv,
                     tc_xp=tc_xp,
-                    tc_next=tc_next,
-                    eval_time=eval_time_str,
-                    vc_role=vc_role_name,
-                    tc_role=tc_role_name
+                    tc_next_xp=tc_next,
+                    tc_role_name=tc_role_name,
+                    enable_tc=True,
+                    eval_time_str=eval_time_str
                 )
                 file = discord.File(fp=io.BytesIO(card_bytes), filename="rank_card.png")
                 await interaction.followup.send(file=file)
