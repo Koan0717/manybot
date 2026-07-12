@@ -69,8 +69,8 @@ export function getSessionCookieOptions() {
   return {
     name: COOKIE_NAME,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict' as const,
+    secure: true, // Discord Activity (iframe) requires secure: true when sameSite is none
+    sameSite: 'none' as const, // Must be 'none' for iframe cross-site cookies
     path: '/',
     maxAge: SESSION_MAX_AGE,
   };
