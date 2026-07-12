@@ -39,9 +39,25 @@ export async function GET(
       // Table might not exist
     }
 
+    let guildName = null;
+    try {
+      const discordRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}`, {
+        headers: {
+          Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN || process.env.BOT_TOKEN}`
+        }
+      });
+      if (discordRes.ok) {
+        const guildData = await discordRes.json();
+        guildName = guildData.name;
+      }
+    } catch (e) {
+      // Ignore discord API errors
+    }
+
     return NextResponse.json({
       is_new_server: isNewServer,
-      has_dedicated_db: hasDedicatedDb
+      has_dedicated_db: hasDedicatedDb,
+      guild_name: guildName
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

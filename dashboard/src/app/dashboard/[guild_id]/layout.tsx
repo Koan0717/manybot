@@ -15,7 +15,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const guildId = params.guild_id;
 
-  const [status, setStatus] = useState<{ is_new_server: boolean, has_dedicated_db: boolean } | null>(null);
+  const [status, setStatus] = useState<{is_new_server: boolean, has_dedicated_db: boolean, guild_name?: string} | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -106,7 +106,9 @@ export default function DashboardLayout({
       {/* Mobile Header */}
       <header className="md:hidden flex-none flex items-center justify-between bg-zinc-900 border-b border-zinc-800 p-4 z-30">
         <div>
-          <h2 className="text-xl font-bold text-red-500">Many bot</h2>
+          <h2 className="font-bold text-red-500 text-lg">
+            Many bot <span className="text-sm font-normal text-zinc-300 ml-2">{status?.guild_name || ''}</span>
+          </h2>
           <p className="text-xs text-zinc-400 mt-1">サーバーID: {guildId}</p>
         </div>
         <button
@@ -137,7 +139,9 @@ export default function DashboardLayout({
         `}>
           <div className="mb-8 flex justify-between items-start flex-shrink-0">
             <div>
-              <h2 className="text-xl font-bold text-red-500">Many bot</h2>
+              <h2 className="text-xl font-bold text-red-500">
+                Many bot <span className="text-sm font-normal text-zinc-300 ml-2">{status?.guild_name || ''}</span>
+              </h2>
               <p className="text-xs text-zinc-400 mt-1">サーバーID: {guildId}</p>
               {!status?.has_dedicated_db && (
                 <div className="mt-3 bg-red-950/50 border border-red-900 text-red-400 text-xs px-2 py-1.5 rounded flex items-center gap-1.5">
