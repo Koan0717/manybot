@@ -10,6 +10,7 @@ import hashlib
 class Logging(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.sticky_locks = {}
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -43,24 +44,29 @@ class Logging(commands.Cog):
         
         # 1. 常設テンプレート (Sticky Template) 処理
         if message.guild:
-            sticky_data = await database.get_sticky_template(message.channel.id)
-            if sticky_data:
-                if sticky_data["last_message_id"]:
-                    try:
-                        old_msg = await message.channel.fetch_message(sticky_data["last_message_id"])
-                        await old_msg.delete()
-                    except:
-                        pass
-                if sticky_data.get("last_text_message_id"):
-                    try:
-                        old_text_msg = await message.channel.fetch_message(sticky_data["last_text_message_id"])
-                        await old_text_msg.delete()
-                    except:
-                        pass
+            channel_id = message.channel.id
+            if channel_id not in self.sticky_locks:
+                self.sticky_locks[channel_id] = asyncio.Lock()
+            
+            async with self.sticky_locks[channel_id]:
+                sticky_data = await database.get_sticky_template(channel_id)
+                if sticky_data:
+                    if sticky_data["last_message_id"]:
+                        try:
+                            old_msg = message.channel.get_partial_message(sticky_data["last_message_id"])
+                            await old_msg.delete()
+                        except:
+                            pass
+                    if sticky_data.get("last_text_message_id"):
+                        try:
+                            old_text_msg = message.channel.get_partial_message(sticky_data["last_text_message_id"])
+                            await old_text_msg.delete()
+                        except:
+                            pass
 
-                text_content = sticky_data['content']
-                new_msg = await message.channel.send(content=text_content)
-                await database.update_sticky_last_message(message.channel.id, new_msg.id, None)
+                    text_content = sticky_data['content']
+                    new_msg = await message.channel.send(content=text_content)
+                    await database.update_sticky_last_message(channel_id, new_msg.id, None)
 
         user_id = message.author.id
         now = datetime.datetime.now(config.JST)

@@ -2546,25 +2546,6 @@ class Admin(commands.Cog):
                     except Exception as e:
                         print(f"[ERROR] Timeout failed for {message.author.display_name}: {e}")
 
-        if message.guild:
-            sticky_data = await database.get_sticky_template(message.channel.id)
-            if sticky_data:
-                if sticky_data["last_message_id"]:
-                    try:
-                        old_msg = await message.channel.fetch_message(sticky_data["last_message_id"])
-                        await old_msg.delete()
-                    except:
-                        pass
-                if sticky_data.get("last_text_message_id"):
-                    try:
-                        old_text_msg = await message.channel.fetch_message(sticky_data.get("last_text_message_id"))
-                        await old_text_msg.delete()
-                    except:
-                        pass
-
-                text_content = sticky_data['content']
-                new_msg = await message.channel.send(content=text_content)
-                await database.update_sticky_last_message(message.channel.id, new_msg.id, None)
 
 
     @commands.Cog.listener()
