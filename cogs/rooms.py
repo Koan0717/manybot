@@ -442,14 +442,7 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
     await interaction.response.defer(ephemeral=True)
     owner_id = interaction.user.id
     
-    if not hasattr(bot, 'processing_rooms'):
-        bot.processing_rooms = set()
-    if owner_id in bot.processing_rooms:
-        return await interaction.edit_original_response(content="処理中です。連打はご遠慮ください。")
-    bot.processing_rooms.add(owner_id)
-    
-    try:
-        if room_type in ["宿", "高級宿"] and await database.has_room_type(owner_id, ["宿", "高級宿"]):
+    if room_type in ["宿", "高級宿"] and await database.has_room_type(owner_id, ["宿", "高級宿"]):
         return await interaction.edit_original_response(content="既に「宿」を持っています！(1人1つまで)")
     if room_type == "カスタムVC" and await database.has_room_type(owner_id, ["カスタムVC"]):
         return await interaction.edit_original_response(content="既に「カスタムVC」を持っています！")
