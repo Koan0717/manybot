@@ -41,7 +41,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
         setRoles(rolesData.filter((r: any) => r.id !== guildId)); // exclude @everyone
       }
       if (!channelsData.error && Array.isArray(channelsData)) {
-        setChannels(channelsData.filter(c => c.type === 0)); // Only text channels
+        setChannels(channelsData.filter(c => [0, 5, 11, 12, 15].includes(c.type))); // Include Text, Announcement, Threads, Forums
       }
     }).catch(err => {
       console.error(err);
@@ -139,12 +139,14 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
       return;
     }
     
+    const selectedChannel = channels.find(c => c.id === selectedChannelId);
+    
     setSendingPanel(true);
     try {
       const res = await fetch(`/api/guilds/${guildId}/shop/panel`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel_id: selectedChannelId })
+        body: JSON.stringify({ channel_id: selectedChannelId, channel_type: selectedChannel?.type })
       });
       
       if (res.ok) {
@@ -162,6 +164,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
   };
 
   const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}`, color: r.color }));
+  const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
 
   const customStyles = {
     control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white' }),
@@ -247,16 +250,18 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
           <div className="flex-1 w-full">
             <label className="block text-sm font-medium text-zinc-400 mb-2">送信先チャンネル</label>
-            <select
-              value={selectedChannelId}
-              onChange={(e) => setSelectedChannelId(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-            >
-              <option value="">チャンネルを選択してください</option>
-              {channels.map(c => (
-                <option key={c.id} value={c.id}># {c.name}</option>
-              ))}
-            </select>
+            <Select
+              options={channelOptions}
+              value={channelOptions.find(c => c.value === selectedChannelId) || null}
+              onChange={(selected: any) => setSelectedChannelId(selected ? selected.value : '')}
+              placeholder="チャンネルを検索・選択..."
+              isClearable
+              styles={{
+                ...customStyles,
+                control: (base: any) => ({ ...base, backgroundColor: '#18181b', borderColor: '#3f3f46', color: 'white', padding: '2px' })
+              }}
+              noOptionsMessage={() => "チャンネルが見つかりません"}
+            />
           </div>
           <button
             onClick={sendShopPanel}

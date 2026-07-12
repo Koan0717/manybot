@@ -12,7 +12,7 @@ export async function POST(
 
   try {
     const body = await request.json();
-    const { channel_id } = body;
+    const { channel_id, channel_type } = body;
 
     if (!channel_id) {
       return NextResponse.json({ error: "Channel ID is required" }, { status: 400 });
@@ -56,13 +56,24 @@ export async function POST(
       ]
     };
 
-    const response = await fetch(`https://discord.com/api/v10/channels/${channel_id}/messages`, {
+    let url = `https://discord.com/api/v10/channels/${channel_id}/messages`;
+    let postBody: any = payload;
+
+    if (channel_type === 15) { // GUILD_FORUM
+      url = `https://discord.com/api/v10/channels/${channel_id}/threads`;
+      postBody = {
+        name: "🛍️ ショップ",
+        message: payload
+      };
+    }
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `Bot ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(postBody)
     });
 
     if (!response.ok) {
