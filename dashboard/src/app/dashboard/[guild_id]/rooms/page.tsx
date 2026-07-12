@@ -325,6 +325,8 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
         <div className="space-y-4">
           {[
             { id: 'inn_combined', name: '一般宿・高級宿セットパネル', desc: '宿と高級宿の両方のボタンがあるパネル' },
+            { id: 'main_inn', name: '本準メン専用の宿パネル', desc: '本/準メンバー専用の一般宿(無料)を作成するパネル' },
+            { id: 'luxury_inn_single', name: '高級宿単体のパネル', desc: '高級宿単独の作成パネル' },
             { id: 'game_vc', name: 'ゲームVC作成パネル', desc: 'ゲームVCを作成するパネル' },
             { id: 'gamble_vc', name: '賭博VC作成パネル', desc: '賭博VCを作成するパネル' },
             { id: 'custom_vc', name: 'カスタムVC作成パネル', desc: '任意の名前・人数のカスタムVCを作成するパネル' },

@@ -75,6 +75,15 @@ class IPC(commands.Cog):
                         except Exception as e:
                             print(f"[IPC ERROR] Failed to reload rank and bot settings: {e}")
 
+                    elif panel_type == "reload_vc_triggers":
+                        try:
+                            self.bot.auto_vc_triggers = await database.get_auto_vc_triggers()
+                            db_configs = await database.get_all_auto_vc_configs()
+                            self.bot.auto_vc_configs = { c["channel_id"]: c for c in db_configs }
+                            print(f"[IPC] Reloaded VC triggers: {len(self.bot.auto_vc_triggers)} triggers")
+                        except Exception as e:
+                            print(f"[IPC ERROR] Failed to reload vc triggers: {e}")
+
                     await database.delete_panel_request(req_id)
                     continue
 
@@ -121,6 +130,14 @@ class IPC(commands.Cog):
                     from cogs.rooms import InnCombinedView
                     embed = discord.Embed(title="🏨 宿・高級宿", description="宿の作成はこちらからどうぞ。", color=discord.Color.blurple())
                     view = InnCombinedView()
+                elif panel_type == "main_inn":
+                    from cogs.rooms import MainInnPanelView
+                    embed = discord.Embed(title="🛖 一般宿 (本/準メン専用)", description="本/準メン専用の一般宿(無料・無制限)の作成はこちらのボタンからどうぞ。", color=discord.Color.green())
+                    view = MainInnPanelView()
+                elif panel_type == "luxury_inn_single":
+                    from cogs.rooms import LuxuryInnPanelView
+                    embed = discord.Embed(title="🏰 高級宿", description="高級宿の作成はこちらのボタンからどうぞ。", color=discord.Color.purple())
+                    view = LuxuryInnPanelView()
 
                 if embed and view:
                     try:

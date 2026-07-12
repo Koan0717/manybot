@@ -693,10 +693,16 @@ async def remove_auto_vc_trigger(channel_id: int):
         await conn.execute('DELETE FROM auto_vc_triggers WHERE channel_id = $1', channel_id)
 
 async def get_auto_vc_triggers() -> list[int]:
-    p = await get_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT channel_id FROM auto_vc_triggers')
-        return [row['channel_id'] for row in rows]
+    pools = await get_all_configured_pools()
+    all_triggers = []
+    for p in pools:
+        try:
+            async with p.acquire() as conn:
+                rows = await conn.fetch('SELECT channel_id FROM auto_vc_triggers')
+                all_triggers.extend([row['channel_id'] for row in rows])
+        except Exception as e:
+            print(f'[DB Error] Failed to fetch auto_vc_triggers: {e}')
+    return all_triggers
 
 # --- VC作成トリガー設定管理用関数 ---
 async def save_auto_vc_config(channel_id: int, base_name: str, allow_rename: bool, include_owner_name: bool, use_numbering: bool, allow_limit_change: bool, show_panel: bool):
@@ -730,18 +736,24 @@ async def remove_auto_vc_config(channel_id: int):
         await conn.execute('DELETE FROM auto_vc_config WHERE channel_id = $1', channel_id)
 
 async def get_all_auto_vc_configs() -> list[dict]:
-    p = await get_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel FROM auto_vc_config')
-        return [{
-            "channel_id": r["channel_id"],
-            "base_name": r["base_name"],
-            "allow_rename": r["allow_rename"],
-            "include_owner_name": r["include_owner_name"],
-            "use_numbering": r["use_numbering"],
-            "allow_limit_change": r["allow_limit_change"],
-            "show_panel": r["show_panel"]
-        } for r in rows]
+    pools = await get_all_configured_pools()
+    all_configs = []
+    for p in pools:
+        try:
+            async with p.acquire() as conn:
+                rows = await conn.fetch('SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel FROM auto_vc_config')
+                all_configs.extend([{
+                    "channel_id": r["channel_id"],
+                    "base_name": r["base_name"],
+                    "allow_rename": r["allow_rename"],
+                    "include_owner_name": r["include_owner_name"],
+                    "use_numbering": r["use_numbering"],
+                    "allow_limit_change": r["allow_limit_change"],
+                    "show_panel": r["show_panel"]
+                } for r in rows])
+        except Exception as e:
+            print(f'[DB Error] Failed to fetch auto_vc_configs: {e}')
+    return all_configs
 
 # --- お問い合わせパネル管理用関数 ---
 async def add_inquiry_panel(channel_id: int, mention_role_ids: list[int]):
