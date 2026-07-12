@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Save, AlertCircle, Coins, ListFilter } from 'lucide-react';
+import { Save, AlertCircle, Coins, ListFilter, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Select from 'react-select';
 
@@ -17,6 +17,8 @@ interface VCCoinsSettings {
   is_whitelist_mode: boolean;
   channels: string[];
   categories: string[];
+  vc_coin_reward_interval?: number;
+  vc_coin_reward_amount?: number;
 }
 
 export default function VCCoinsSettingsPage() {
@@ -26,7 +28,9 @@ export default function VCCoinsSettingsPage() {
   const [settings, setSettings] = useState<VCCoinsSettings>({
     is_whitelist_mode: true,
     channels: [],
-    categories: []
+    categories: [],
+    vc_coin_reward_interval: 10,
+    vc_coin_reward_amount: 100
   });
   const [discordChannels, setDiscordChannels] = useState<DiscordChannel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +45,9 @@ export default function VCCoinsSettingsPage() {
       setSettings({
         is_whitelist_mode: settingsData.is_whitelist_mode ?? true,
         channels: settingsData.channels || [],
-        categories: settingsData.categories || []
+        categories: settingsData.categories || [],
+        vc_coin_reward_interval: settingsData.vc_coin_reward_interval ?? 10,
+        vc_coin_reward_amount: settingsData.vc_coin_reward_amount ?? 100
       });
       setDiscordChannels(channelsData);
       setLoading(false);
@@ -199,6 +205,37 @@ export default function VCCoinsSettingsPage() {
                 styles={customStyles}
                 placeholder="VCを選択..."
                 noOptionsMessage={() => "VCが見つかりません"}
+              />
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-gray-800/50 border border-green-500/20 p-6 rounded-xl space-y-6 md:col-span-2">
+          <div className="flex items-center space-x-3 text-xl font-semibold text-green-300 border-b border-green-500/20 pb-4">
+            <Clock className="text-green-400" />
+            <h2>獲得量設定</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex flex-col space-y-2">
+              <label className="text-sm font-medium text-gray-400">獲得間隔 (分)</label>
+              <input
+                type="number"
+                min="1"
+                value={settings.vc_coin_reward_interval}
+                onChange={(e) => setSettings(prev => ({ ...prev, vc_coin_reward_interval: parseInt(e.target.value) || 1 }))}
+                className="bg-[#111827] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-green-500 transition-colors"
+              />
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <label className="text-sm font-medium text-gray-400">獲得量 (コイン)</label>
+              <input
+                type="number"
+                min="0"
+                value={settings.vc_coin_reward_amount}
+                onChange={(e) => setSettings(prev => ({ ...prev, vc_coin_reward_amount: parseInt(e.target.value) || 0 }))}
+                className="bg-[#111827] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-green-500 transition-colors"
               />
             </div>
           </div>
