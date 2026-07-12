@@ -1948,7 +1948,8 @@ class PanelSelect(discord.ui.Select):
             discord.SelectOption(label="高級宿", description="高級宿の購入パネルを設置します", emoji="🏰", value="luxury_inn"),
             discord.SelectOption(label="一般宿・高級宿セット", description="一般宿と高級宿の両方の購入ボタンがあるパネルを設置します", emoji="🏨", value="inn_combined"),
             discord.SelectOption(label="カスタムVC", description="カスタムVCの作成パネルを設置します", emoji="✨", value="custom_vc"),
-            discord.SelectOption(label="ゲームVC・賭博VCセット", description="ゲームVCと賭博VCの両方の購入ボタンがあるパネルを設置します", emoji="🎮", value="game_vc"),
+            discord.SelectOption(label="ゲームVC", description="ゲームVCの購入ボタンがあるパネルを設置します", emoji="🎮", value="game_vc"),
+            discord.SelectOption(label="賭博VC", description="賭博VCの購入ボタンがあるパネルを設置します", emoji="🎲", value="gamble_vc"),
             discord.SelectOption(label="スタンプ依頼", description="スタンプ制作依頼のパネルを設置します", emoji="🎨", value="stamp"),
             discord.SelectOption(label="告解・相談室", description="告解・相談依頼のパネルを設置します", emoji="⛪", value="confession"),
             discord.SelectOption(label="VC管理", description="VC名・人数制限変更のパネルを設置します", emoji="⚙️", value="vc_manage"),
@@ -2095,10 +2096,15 @@ class PanelSelect(discord.ui.Select):
             await channel.send(embed=embed, view=CustomRoomView())
             await interaction.response.send_message("✅ カスタムVCパネルを設置しました。", ephemeral=True)
         elif val == "game_vc":
-            embed = discord.Embed(title="🎮 ゲームVC & 賭博VC", description="ゲームVCや賭博VCを作成できます。", color=discord.Color.blue())
+            embed = discord.Embed(title="🎮 ゲームVC", description="ゲームVCを作成できます。", color=discord.Color.blue())
             from cogs.rooms import GameRoomPanelView
             await channel.send(embed=embed, view=GameRoomPanelView())
-            await interaction.response.send_message("✅ ゲームVC・賭博VCセットパネルを設置しました。", ephemeral=True)
+            await interaction.response.send_message("✅ ゲームVCパネルを設置しました。", ephemeral=True)
+        elif val == "gamble_vc":
+            embed = discord.Embed(title="🎲 賭博VC", description="賭博VCを作成できます。", color=discord.Color.blue())
+            from cogs.rooms import GambleRoomPanelView
+            await channel.send(embed=embed, view=GambleRoomPanelView())
+            await interaction.response.send_message("✅ 賭博VCパネルを設置しました。", ephemeral=True)
         elif val == "stamp":
             embed = discord.Embed(title="🎨 スタンプ依頼", description="スタンプ制作を依頼できます。", color=discord.Color.blue())
             await channel.send(embed=embed, view=EmblemRequestPanelView())

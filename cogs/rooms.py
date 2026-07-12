@@ -602,6 +602,10 @@ class GameRoomPanelView(discord.ui.View):
         msg = "「ゲームVC」の利用期間を選択してください。"
         await it.response.send_message(msg, view=GameVCDurationSelectView(it.client, it.user), ephemeral=True)
 
+class GambleRoomPanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
     @discord.ui.button(label="賭博VCを作成", style=discord.ButtonStyle.primary, emoji="🎲", custom_id="persistent_gamble_vc_btn")
     async def gamble_vc(self, it, btn):
         msg = "「賭博VC」の利用期間を選択してください。"
@@ -840,6 +844,7 @@ class Rooms(commands.Cog):
         self.bot.add_view(TempInnPanelView())
         self.bot.add_view(LuxuryInnPanelView())
         self.bot.add_view(GameRoomPanelView())
+        self.bot.add_view(GambleRoomPanelView())
         
     @tasks.loop(minutes=1)
     async def check_expired_rooms(self):
