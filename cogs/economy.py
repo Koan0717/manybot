@@ -50,5 +50,56 @@ class Economy(commands.Cog):
         embed.add_field(name="金額", value=f"{amount:,} {currency_name}", inline=True)
         await send_log(self.bot, interaction.guild, "currency", embed)
 
+    @app_commands.command(name="初期発行", description="指定したユーザー（複数可）に初期発行額の通貨を付与します。")
+    @app_commands.describe(users_mentions="付与するユーザーのメンションをスペース区切りで指定（例: @user1 @user2）")
+    async def initial_issue(self, interaction: discord.Interaction, users_mentions: str):
+        if not (has_admin_role(self.bot, interaction.user) or has_banker_role(self.bot, interaction.user)):
+            await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
+            return
+
+        import re
+        user_ids = set(re.findall(r'<@!?(\d+)>', users_mentions))
+        
+        if not user_ids:
+            await interaction.response.send_message("有効なユーザーメンションが見つかりませんでした。\n`/初期発行 @user` のようにメンションを指定してください。", ephemeral=True)
+            return
+            
+        await interaction.response.defer()
+        
+        init_coins = get_setting(self.bot, "INITIAL_COINS") or 30000
+        currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
+        
+        success_users = []
+        for uid in user_ids:
+            member = interaction.guild.get_member(int(uid))
+            if member:
+                await database.add_balance(interaction.guild.id, member.id, init_coins)
+                success_users.append(member.mention)
+                
+        if not success_users:
+            await interaction.followup.send("サーバー内に該当するユーザーが見つかりませんでした。")
+            return
+            
+        msg = f"{' '.join(success_users)} に初期発行額 **{init_coins:,} {currency_name}** を付与しました！"
+        await interaction.followup.send(msg)
+
+        # 通貨ログ送信
+        embed = discord.Embed(
+            title="🏦 初期発行",
+            description="管理者または銀行員によって初期発行が行われました。",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name="実行者", value=f"{interaction.user.mention} ({interaction.user.id})", inline=False)
+        
+        # メンション文字列が1024文字を超えないように制限
+        mentions_str = " ".join(success_users)
+        if len(mentions_str) > 1024:
+            mentions_str = mentions_str[:1021] + "..."
+            
+        embed.add_field(name="対象者", value=mentions_str, inline=False)
+        embed.add_field(name="付与額", value=f"{init_coins:,} {currency_name}", inline=False)
+        await send_log(self.bot, interaction.guild, "currency", embed)
+
 async def setup(bot):
     await bot.add_cog(Economy(bot))
