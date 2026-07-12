@@ -142,7 +142,7 @@ class Ranking(commands.Cog):
             if target_user.voice and target_user.voice.channel:
                 vc = target_user.voice.channel
                 cat = vc.category
-                join_time_vc = self.bot.vc_sessions.get(target_user.id)
+                join_time_vc = getattr(self.bot, "vc_join_times", {}).get(target_user.id, self.bot.vc_sessions.get(target_user.id))
                 if join_time_vc:
                     now_aware = datetime.datetime.now(config.JST)
                     delta_sec = (now_aware - join_time_vc).total_seconds()
@@ -252,6 +252,18 @@ class Ranking(commands.Cog):
     @tasks.loop(minutes=1)
     async def vc_reward_loop(self):
         now = datetime.datetime.now(config.JST)
+        
+        if not hasattr(self.bot, "vc_join_times"):
+            self.bot.vc_join_times = {}
+            
+        # 再起動時に既にVCにいるユーザーをトラッキング対象に追加
+        for guild in self.bot.guilds:
+            for vc in guild.voice_channels:
+                if config.is_xp_enabled(self.bot, vc):
+                    for member in vc.members:
+                        if not member.bot and member.id not in self.bot.vc_sessions:
+                            self.bot.vc_sessions[member.id] = now
+                            self.bot.vc_join_times[member.id] = now
         for user_id, last_reward_time in list(self.bot.vc_sessions.items()):
             member = None
             for guild in self.bot.guilds:
@@ -359,6 +371,8 @@ class Ranking(commands.Cog):
 
         # VCから退出・移動した時
         if before.channel is not None and (after.channel is None or before.channel.id != after.channel.id):
+            if hasattr(self.bot, "vc_join_times"):
+                self.bot.vc_join_times.pop(user_id, None)
             join_time = self.bot.vc_sessions.pop(user_id, None)
             if join_time:
                 duration_minutes = int((now_aware - join_time).total_seconds() / 60)
@@ -379,6 +393,9 @@ class Ranking(commands.Cog):
                 if in_correct_category:
                     print(f"[VC XP] Started session for {member.display_name}")
                     self.bot.vc_sessions[user_id] = now_aware
+                    if not hasattr(self.bot, "vc_join_times"):
+                        self.bot.vc_join_times = {}
+                    self.bot.vc_join_times[user_id] = now_aware
 
 async def setup(bot):
     cog = Ranking(bot)
