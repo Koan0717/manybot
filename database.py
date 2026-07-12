@@ -284,6 +284,7 @@ async def setup_db_schema(p):
                 guild_id BIGINT,
                 log_type VARCHAR(50),
                 channel_id BIGINT,
+                is_enabled BOOLEAN DEFAULT TRUE,
                 PRIMARY KEY (guild_id, log_type)
             )
         ''')
@@ -1013,8 +1014,10 @@ async def save_log_channel(guild_id: int, log_type: str, channel_id: int):
 async def get_log_channel(guild_id: int, log_type: str) -> int:
     p = await get_pool(guild_id)
     async with p.acquire() as conn:
-        row = await conn.fetchrow('SELECT channel_id FROM log_settings WHERE guild_id = $1 AND log_type = $2', guild_id, log_type)
-        return row['channel_id'] if row else None
+        row = await conn.fetchrow('SELECT channel_id, is_enabled FROM log_settings WHERE guild_id = $1 AND log_type = $2', guild_id, log_type)
+        if row and (row['is_enabled'] is None or row['is_enabled']):
+            return row['channel_id']
+        return None
 
 async def get_all_log_settings(guild_id: int) -> dict:
     p = await get_pool(guild_id)
