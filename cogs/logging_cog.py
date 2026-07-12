@@ -288,17 +288,19 @@ class Logging(commands.Cog):
     async def on_member_update(self, before, after):
         human_role = config.get_role_by_setting(self.bot, after.guild, "NEW_MEMBER_ROLE_ID", config.NEW_MEMBER_ROLE_NAME)
         if human_role and human_role in after.roles and human_role not in before.roles:
-            existing = await database.get_evaluation_period(after.guild.id, after.id)
-            if not existing:
-                now = datetime.datetime.now(config.JST)
-                if 23 <= now.hour <= 23:
-                    start_time = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-                else:
-                    start_time = now + datetime.timedelta(minutes=5)
-                
-                end_time = start_time + datetime.timedelta(days=14)
-                await database.add_evaluation_period(after.guild.id, after.id, start_time, end_time)
-                print(f"[Evaluation] Started for {after.display_name}: {start_time} to {end_time}")
+            eval_settings = await database.get_evaluation_settings(after.guild.id)
+            if eval_settings and eval_settings.get("auto_generate_period", True):
+                existing = await database.get_evaluation_period(after.guild.id, after.id)
+                if not existing:
+                    now = datetime.datetime.now(config.JST)
+                    if 23 <= now.hour <= 23:
+                        start_time = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                    else:
+                        start_time = now + datetime.timedelta(minutes=5)
+                    
+                    end_time = start_time + datetime.timedelta(days=14)
+                    await database.add_evaluation_period(after.guild.id, after.id, start_time, end_time)
+                    print(f"[Evaluation] Started for {after.display_name}: {start_time} to {end_time}")
 
         # 評価落ちロール付与検知
         eval_failed_role = config.get_role_by_setting(self.bot, after.guild, "EVALUATION_FAILED_ROLE_ID", config.EVALUATION_FAILED_ROLE_NAME)

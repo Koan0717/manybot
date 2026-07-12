@@ -378,6 +378,34 @@ class ShopItemSelect(discord.ui.Select):
                     embed.add_field(name="延長日数", value=f"{extend_days}日間", inline=True)
                     embed.add_field(name="新しい終了予定", value=f"{end_str} (<t:{end_t}:R>)", inline=False)
                     await send_log(self.bot, interaction.guild, "shop", embed)
+                    
+                    # 評価スレッドへの通知（アクティブなスレッドのみ対象）
+                    eval_settings = await database.get_evaluation_settings(interaction.guild.id)
+                    if eval_settings:
+                        forum_ids = eval_settings.get("forum_channel_ids", [])
+                        notified = False
+                        for forum_id in forum_ids:
+                            if notified: break
+                            forum = interaction.guild.get_channel(forum_id)
+                            if isinstance(forum, discord.ForumChannel):
+                                for thread in forum.threads:
+                                    if thread.owner_id == self.bot.user.id and (str(interaction.user.id) in thread.name or interaction.user.name.lower() in thread.name.lower()):
+                                        try:
+                                            await thread.send(f"🎉 {interaction.user.mention} 評価期間を **{extend_days}日間** 延長するアイテムを購入しました！\n新しい終了予定: {end_str} (<t:{end_t}:R>)")
+                                            notified = True
+                                            break
+                                        except Exception:
+                                            pass
+                                    else:
+                                        # スレッド名で判別できない場合は最初のメッセージを確認
+                                        try:
+                                            starter = await thread.fetch_message(thread.id)
+                                            if str(interaction.user.id) in starter.content:
+                                                await thread.send(f"🎉 {interaction.user.mention} 評価期間を **{extend_days}日間** 延長するアイテムを購入しました！\n新しい終了予定: {end_str} (<t:{end_t}:R>)")
+                                                notified = True
+                                                break
+                                        except Exception:
+                                            pass
                 else:
                     # 有効期限の計算
                     import datetime as dt

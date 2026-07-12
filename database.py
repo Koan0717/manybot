@@ -299,6 +299,8 @@ async def setup_db_schema(p):
         ''')
         try:
             await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT TRUE')
+            await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_generate_period BOOLEAN DEFAULT TRUE')
+            await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_fail_on_deadline BOOLEAN DEFAULT FALSE')
         except Exception as e:
             print(f"[Migration] evaluation_settings migration warning: {e}")
         await conn.execute('''
@@ -1048,10 +1050,12 @@ async def remove_log_channel(guild_id: int, log_type: str):
 async def get_evaluation_settings(guild_id: int) -> dict:
     p = await get_pool(guild_id)
     async with p.acquire() as conn:
-        row = await conn.fetchrow('SELECT is_enabled, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
+        row = await conn.fetchrow('SELECT is_enabled, auto_generate_period, auto_fail_on_deadline, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
         if row:
             return {
                 "is_enabled": row["is_enabled"] if row["is_enabled"] is not None else True,
+                "auto_generate_period": row["auto_generate_period"] if row["auto_generate_period"] is not None else True,
+                "auto_fail_on_deadline": row["auto_fail_on_deadline"] if row["auto_fail_on_deadline"] is not None else False,
                 "forum_channel_ids": row["forum_channel_ids"] or [],
                 "self_intro_channel_ids": row["self_intro_channel_ids"] or []
             }
@@ -1060,18 +1064,25 @@ async def get_evaluation_settings(guild_id: int) -> dict:
 async def get_all_evaluation_settings() -> list[dict]:
     p = await get_pool()
     async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT guild_id, is_enabled, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings')
-        return [{"guild_id": r["guild_id"], "is_enabled": r["is_enabled"] if r["is_enabled"] is not None else True, "forum_channel_ids": r["forum_channel_ids"] or [], "self_intro_channel_ids": r["self_intro_channel_ids"] or []} for r in rows]
+        rows = await conn.fetch('SELECT guild_id, is_enabled, auto_generate_period, auto_fail_on_deadline, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings')
+        return [{
+            "guild_id": r["guild_id"], 
+            "is_enabled": r["is_enabled"] if r["is_enabled"] is not None else True,
+            "auto_generate_period": r["auto_generate_period"] if r["auto_generate_period"] is not None else True,
+            "auto_fail_on_deadline": r["auto_fail_on_deadline"] if r["auto_fail_on_deadline"] is not None else False,
+            "forum_channel_ids": r["forum_channel_ids"] or [], 
+            "self_intro_channel_ids": r["self_intro_channel_ids"] or []
+        } for r in rows]
 
-async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], self_intro_channel_ids: list[int], is_enabled: bool = True):
+async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], self_intro_channel_ids: list[int], is_enabled: bool = True, auto_generate_period: bool = True, auto_fail_on_deadline: bool = False):
     p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
-            INSERT INTO evaluation_settings (guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO evaluation_settings (guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled, auto_generate_period, auto_fail_on_deadline)
+            VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT (guild_id)
-            DO UPDATE SET forum_channel_ids = $2, self_intro_channel_ids = $3, is_enabled = $4
-        ''', guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled)
+            DO UPDATE SET forum_channel_ids = $2, self_intro_channel_ids = $3, is_enabled = $4, auto_generate_period = $5, auto_fail_on_deadline = $6
+        ''', guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled, auto_generate_period, auto_fail_on_deadline)
 
 
 # --- ランク対象設定管理用関数 ---
@@ -1742,3 +1753,13 @@ async def get_top_users(guild_id: int, mode: str, limit: int = 10) -> list[dict]
                 LIMIT $2
             ''', guild_id, limit)
         return [{"user_id": r["user_id"], "level": r["level"], "xp": r["xp"]} for r in rows]
+async def get_expired_evaluation_periods() -> list:
+    p = await get_pool()
+    async with p.acquire() as conn:
+        now = get_now_naive()
+        rows = await conn.fetch('''
+            SELECT guild_id, user_id, start_time, end_time 
+            FROM evaluation_periods 
+            WHERE end_time < 
+        ''', now)
+        return [dict(row) for row in rows]

@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import datetime
 import database
@@ -203,10 +203,86 @@ class Evaluation(commands.Cog):
     async def cog_load(self):
         self.bot.tree.add_command(EvaluationGroup(self.bot))
         self.bot.tree.add_command(EvaluatorSheetGroup(self.bot))
+        self.check_evaluation_deadlines.start()
 
     async def cog_unload(self):
         self.bot.tree.remove_command("評価員")
         self.bot.tree.remove_command("評価シート")
+        self.check_evaluation_deadlines.cancel()
+
+    @tasks.loop(minutes=5)
+    async def check_evaluation_deadlines(self):
+        expired_periods = await database.get_expired_evaluation_periods()
+        for period in expired_periods:
+            guild_id = period["guild_id"]
+            user_id = period["user_id"]
+            
+            # Check settings
+            eval_settings = await database.get_evaluation_settings(guild_id)
+            if not eval_settings or not eval_settings.get("auto_fail_on_deadline", False):
+                continue
+                
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                continue
+                
+            member = guild.get_member(user_id)
+            if not member:
+                continue
+                
+            # Requirements: Only when they have NEW_MEMBER_ROLE (仮メン)
+            temp_member_role = get_role_by_setting(self.bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
+            if not temp_member_role or temp_member_role not in member.roles:
+                continue
+                
+            eval_failed_role = get_role_by_setting(self.bot, guild, "DOWNGRADE_ROLE_ID", "評価落ち")
+            if not eval_failed_role:
+                continue
+                
+            try:
+                # Add fail role and remove temp member role
+                roles_to_add = [eval_failed_role]
+                roles_to_remove = [temp_member_role]
+                
+                await member.add_roles(*roles_to_add, reason="評価期間締切超過のため自動評価落ち")
+                await member.remove_roles(*roles_to_remove, reason="評価期間締切超過のため自動評価落ち")
+                
+                # Delete the period from DB since it's processed
+                await database.remove_evaluation_period(guild_id, user_id)
+                
+                # Send notification to the evaluation thread if possible
+                forum_ids = eval_settings.get("forum_channel_ids", [])
+                notified = False
+                for forum_id in forum_ids:
+                    if notified: break
+                    forum = guild.get_channel(forum_id)
+                    if isinstance(forum, discord.ForumChannel):
+                        for thread in forum.threads:
+                            if thread.owner_id == self.bot.user.id and (str(member.id) in thread.name or member.name.lower() in thread.name.lower()):
+                                try:
+                                    await thread.send(f"{member.mention} 評価期間の締切を超過したため、自動で評価落ちとなりました。")
+                                    notified = True
+                                    break
+                                except Exception:
+                                    pass
+                            else:
+                                # Sometimes thread name doesn't match, check starter message
+                                try:
+                                    starter = await thread.fetch_message(thread.id)
+                                    if str(member.id) in starter.content:
+                                        await thread.send(f"{member.mention} 評価期間の締切を超過したため、自動で評価落ちとなりました。")
+                                        notified = True
+                                        break
+                                except Exception:
+                                    pass
+                                    
+                print(f"[Evaluation] Auto-failed {member.display_name} due to deadline.")
+            except Exception as e:
+                print(f"[Evaluation ERROR] Failed to auto-fail {member.display_name}: {e}")
+
+    @check_evaluation_deadlines.before_loop
+    async def before_check_evaluation_deadlines(self):
+        await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel):
@@ -227,17 +303,19 @@ class Evaluation(commands.Cog):
         bot = self.bot
         human_role = get_role_by_setting(bot, after.guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
         if human_role and human_role in after.roles and human_role not in before.roles:
-            existing = await database.get_evaluation_period(after.guild.id, after.id)
-            if not existing:
-                now = datetime.datetime.now(JST)
-                if 23 <= now.hour <= 23:
-                    start_time = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-                else:
-                    start_time = now + datetime.timedelta(minutes=5)
-                
-                end_time = start_time + datetime.timedelta(days=14)
-                await database.add_evaluation_period(after.guild.id, after.id, start_time, end_time)
-                print(f"[Evaluation] Started for {after.display_name}: {start_time} to {end_time}")
+            eval_settings = await database.get_evaluation_settings(after.guild.id)
+            if eval_settings and eval_settings.get("auto_generate_period", True):
+                existing = await database.get_evaluation_period(after.guild.id, after.id)
+                if not existing:
+                    now = datetime.datetime.now(JST)
+                    if 23 <= now.hour <= 23:
+                        start_time = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                    else:
+                        start_time = now + datetime.timedelta(minutes=5)
+                    
+                    end_time = start_time + datetime.timedelta(days=14)
+                    await database.add_evaluation_period(after.guild.id, after.id, start_time, end_time)
+                    print(f"[Evaluation] Started for {after.display_name}: {start_time} to {end_time}")
 
         # 評価落ちロール付与検知
         eval_failed_role = get_role_by_setting(bot, after.guild, "DOWNGRADE_ROLE_ID", "評価落ち")
