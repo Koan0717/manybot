@@ -7,8 +7,13 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
   
   const [items, setItems] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
+  const [channels, setChannels] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Panel state
+  const [selectedChannelId, setSelectedChannelId] = useState<string>('');
+  const [sendingPanel, setSendingPanel] = useState(false);
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -28,11 +33,15 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
   useEffect(() => {
     Promise.all([
       fetch(`/api/guilds/${guildId}/shop`).then(res => res.ok ? res.json() : []),
-      fetch(`/api/guilds/${guildId}/roles`).then(res => res.ok ? res.json() : [])
-    ]).then(([itemsData, rolesData]: [any, any]) => {
+      fetch(`/api/guilds/${guildId}/roles`).then(res => res.ok ? res.json() : []),
+      fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : [])
+    ]).then(([itemsData, rolesData, channelsData]: [any, any, any]) => {
       setItems(Array.isArray(itemsData) ? itemsData : []);
       if (!rolesData.error) {
         setRoles(rolesData.filter((r: any) => r.id !== guildId)); // exclude @everyone
+      }
+      if (!channelsData.error && Array.isArray(channelsData)) {
+        setChannels(channelsData.filter(c => c.type === 0)); // Only text channels
       }
     }).catch(err => {
       console.error(err);
@@ -124,6 +133,34 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
     }
   };
 
+  const sendShopPanel = async () => {
+    if (!selectedChannelId) {
+      alert('送信先のチャンネルを選択してください');
+      return;
+    }
+    
+    setSendingPanel(true);
+    try {
+      const res = await fetch(`/api/guilds/${guildId}/shop/panel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel_id: selectedChannelId })
+      });
+      
+      if (res.ok) {
+        alert('ショップパネルを送信しました！');
+        setSelectedChannelId('');
+      } else {
+        const data = await res.json();
+        alert(`送信に失敗しました: ${data.error || '不明なエラー'}`);
+      }
+    } catch (e) {
+      alert('エラーが発生しました');
+    } finally {
+      setSendingPanel(false);
+    }
+  };
+
   const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}`, color: r.color }));
 
   const customStyles = {
@@ -200,6 +237,35 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
             </table>
           </div>
         )}
+      </div>
+
+      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mt-8 mb-12">
+        <h2 className="text-xl font-bold text-white mb-4">ショップパネルの設置</h2>
+        <p className="text-zinc-400 mb-6 text-sm">
+          指定したチャンネルに、ユーザーがショップを利用するためのパネル（ボタン付きメッセージ）を送信します。
+        </p>
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+          <div className="flex-1 w-full">
+            <label className="block text-sm font-medium text-zinc-400 mb-2">送信先チャンネル</label>
+            <select
+              value={selectedChannelId}
+              onChange={(e) => setSelectedChannelId(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+            >
+              <option value="">チャンネルを選択してください</option>
+              {channels.map(c => (
+                <option key={c.id} value={c.id}># {c.name}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={sendShopPanel}
+            disabled={sendingPanel || !selectedChannelId}
+            className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-lg font-bold shadow-lg transition-all"
+          >
+            {sendingPanel ? '送信中...' : 'パネルを送信'}
+          </button>
+        </div>
       </div>
 
       {/* Modal */}
