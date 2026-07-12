@@ -149,9 +149,13 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
     const payload: Record<string, any> = {};
     for (const setting of ROLE_SETTINGS) {
       const val = settings[setting.key];
-      if (!val) continue;
-      
-      payload[setting.key] = val;
+      if (val !== undefined && val !== null) {
+        payload[setting.key] = val;
+      }
+    }
+    
+    if (settings['BOT_NICKNAME'] !== undefined) {
+      payload['BOT_NICKNAME'] = settings['BOT_NICKNAME'];
     }
     
     try {
@@ -177,6 +181,25 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
     <div className="max-w-4xl mx-auto pb-20">
       <h1 className="text-3xl font-bold mb-8 text-white">基本・評価設定</h1>
       
+      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mb-8">
+        <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">ボットプロファイル設定</h2>
+        <p className="text-sm text-zinc-400 mb-6">
+          このサーバー内でのボットのニックネームを設定できます。（未設定の場合はデフォルト名になります）
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm text-zinc-300 font-bold">ボットのニックネーム</label>
+            <input 
+              type="text" 
+              value={settings['BOT_NICKNAME'] || ''}
+              onChange={(e) => handleChange('BOT_NICKNAME', e.target.value, false)}
+              placeholder="例: サポートBot"
+              className="bg-zinc-900 border border-zinc-700 rounded p-2 text-white focus:border-red-500 focus:outline-none transition-colors"
+            />
+          </div>
+        </div>
+      </div>
+
       <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mb-8">
         <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">すべてのロール設定</h2>
         <p className="text-sm text-zinc-400 mb-6">
