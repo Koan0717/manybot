@@ -1,65 +1,93 @@
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
+import * as jose from 'jose';
+import bcrypt from 'bcryptjs';
+import { masterPool } from '@/lib/db';
 
 const COOKIE_NAME = 'dashboard_session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days in seconds
 
-// In-memory session store
-// Note: Sessions are lost on server restart (user will need to re-login)
-const activeSessions = new Set<string>();
+const jwtSecretStr = process.env.JWT_SECRET || 'fallback_secret_key_change_me_later';
+const jwtSecret = new TextEncoder().encode(jwtSecretStr);
 
-/**
- * Generate a cryptographically secure random session token
- */
-export function generateSessionToken(): string {
-  return crypto.randomBytes(32).toString('hex');
+export interface SessionPayload {
+  username: string;
+  role: 'admin' | 'shop' | 'gambling';
+  guild_id?: string;
+  iat?: number;
+  exp?: number;
 }
 
 /**
- * Validate credentials against environment variables
+ * Validate credentials against environment variables or database
  */
-export function validateCredentials(username: string, password: string): boolean {
-  const validUsername = process.env.DASHBOARD_USERNAME;
-  const validPassword = process.env.DASHBOARD_PASSWORD;
+export async function validateCredentials(username: string, password: string): Promise<SessionPayload | null> {
+  const adminUsername = process.env.DASHBOARD_USERNAME;
+  const adminPassword = process.env.DASHBOARD_PASSWORD;
 
-  if (!validUsername || !validPassword) {
-    console.error('DASHBOARD_USERNAME or DASHBOARD_PASSWORD is not set in environment variables');
-    return false;
+  // Check if it's the super admin
+  if (adminUsername && adminPassword) {
+    if (
+      username.length === adminUsername.length &&
+      crypto.timingSafeEqual(Buffer.from(username), Buffer.from(adminUsername)) &&
+      password.length === adminPassword.length &&
+      crypto.timingSafeEqual(Buffer.from(password), Buffer.from(adminPassword))
+    ) {
+      return { username, role: 'admin' };
+    }
   }
 
-  // Use timing-safe comparison to prevent timing attacks
-  const usernameMatch =
-    username.length === validUsername.length &&
-    crypto.timingSafeEqual(Buffer.from(username), Buffer.from(validUsername));
+  // Check database for sub-accounts
+  try {
+    const res = await masterPool.query('SELECT * FROM dashboard_users WHERE username = $1', [username]);
+    if (res.rows.length > 0) {
+      const user = res.rows[0];
+      const match = await bcrypt.compare(password, user.password);
+      if (match) {
+        return {
+          username: user.username,
+          role: user.role as 'admin' | 'shop' | 'gambling',
+          guild_id: user.guild_id,
+        };
+      }
+    }
+  } catch (error) {
+    console.error('Failed to validate credentials against DB:', error);
+  }
 
-  const passwordMatch =
-    password.length === validPassword.length &&
-    crypto.timingSafeEqual(Buffer.from(password), Buffer.from(validPassword));
-
-  return usernameMatch && passwordMatch;
+  return null;
 }
 
 /**
- * Create a new session and return the token
+ * Create a new session and return the JWT token
  */
-export function createSession(): string {
-  const token = generateSessionToken();
-  activeSessions.add(token);
-  return token;
+export async function createSession(payload: SessionPayload): Promise<string> {
+  const jwt = await new jose.SignJWT(payload as any)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('7d')
+    .sign(jwtSecret);
+  
+  return jwt;
 }
 
 /**
  * Validate a session token
  */
-export function validateSession(token: string): boolean {
-  return activeSessions.has(token);
+export async function validateSession(token: string): Promise<SessionPayload | null> {
+  try {
+    const { payload } = await jose.jwtVerify(token, jwtSecret);
+    return payload as unknown as SessionPayload;
+  } catch (error) {
+    return null;
+  }
 }
 
 /**
- * Delete a session (logout)
+ * Delete a session (logout) - JWTs are stateless so we just clear the cookie on the client side
  */
 export function deleteSession(token: string): void {
-  activeSessions.delete(token);
+  // No-op for stateless JWT
 }
 
 /**
@@ -87,10 +115,10 @@ export function getSessionTokenFromCookies(): string | undefined {
 /**
  * Check if the current request is authenticated
  */
-export function isAuthenticated(): boolean {
+export async function isAuthenticated(): Promise<SessionPayload | null> {
   const token = getSessionTokenFromCookies();
-  if (!token) return false;
-  return validateSession(token);
+  if (!token) return null;
+  return await validateSession(token);
 }
 
 export { COOKIE_NAME };

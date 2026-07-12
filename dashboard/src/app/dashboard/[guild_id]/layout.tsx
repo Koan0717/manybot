@@ -18,6 +18,7 @@ export default function DashboardLayout({
   const [status, setStatus] = useState<{ is_new_server: boolean, has_dedicated_db: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -27,30 +28,43 @@ export default function DashboardLayout({
   };
 
   useEffect(() => {
-    fetch(`/api/guilds/${guildId}/status`)
-      .then(res => res.json())
-      .then(data => {
-        if (!data.error) setStatus(data);
+    Promise.all([
+      fetch(`/api/guilds/${guildId}/status`).then(res => res.json()),
+      fetch('/api/auth/check').then(res => res.json())
+    ])
+      .then(([statusData, authData]) => {
+        if (!statusData.error) setStatus(statusData);
+        if (authData.authenticated && authData.user) {
+          setUserRole(authData.user.role);
+        }
       })
       .finally(() => setLoading(false));
   }, [guildId]);
 
-  const navItems = [
-    { label: '基本・評価設定', path: `/dashboard/${guildId}` },
-    { label: 'VCルーム設定', path: `/dashboard/${guildId}/rooms` },
-    { label: 'VCトリガー設定', path: `/dashboard/${guildId}/vc-triggers` },
-    { label: 'ショップ設定', path: `/dashboard/${guildId}/shop` },
-    { label: 'チケット設定', path: `/dashboard/${guildId}/tickets` },
-    { label: 'ランク設定', path: `/dashboard/${guildId}/rank` },
-    { label: '評価シート自動生成', path: `/dashboard/${guildId}/eval-sheet` },
-    { label: '経済・レベリング設定', path: `/dashboard/${guildId}/economy` },
-    { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling` },
-    { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards` },
-    { label: 'VCコイン獲得制限', path: `/dashboard/${guildId}/vc-coins` },
-    { label: 'コマンド設定', path: `/dashboard/${guildId}/commands` },
-    { label: 'ログ出力設定', path: `/dashboard/${guildId}/logs` },
-    { label: 'データベース設定', path: `/dashboard/${guildId}/database` },
+  let navItems = [
+    { label: '基本・評価設定', path: `/dashboard/${guildId}`, roles: ['admin'] },
+    { label: 'VCルーム設定', path: `/dashboard/${guildId}/rooms`, roles: ['admin'] },
+    { label: 'VCトリガー設定', path: `/dashboard/${guildId}/vc-triggers`, roles: ['admin'] },
+    { label: 'ショップ設定', path: `/dashboard/${guildId}/shop`, roles: ['admin', 'shop'] },
+    { label: 'チケット設定', path: `/dashboard/${guildId}/tickets`, roles: ['admin'] },
+    { label: 'ランク設定', path: `/dashboard/${guildId}/rank`, roles: ['admin'] },
+    { label: '評価シート自動生成', path: `/dashboard/${guildId}/eval-sheet`, roles: ['admin'] },
+    { label: '経済・レベリング設定', path: `/dashboard/${guildId}/economy`, roles: ['admin'] },
+    { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling'] },
+    { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin'] },
+    { label: 'VCコイン獲得制限', path: `/dashboard/${guildId}/vc-coins`, roles: ['admin'] },
+    { label: 'コマンド設定', path: `/dashboard/${guildId}/commands`, roles: ['admin'] },
+    { label: 'ログ出力設定', path: `/dashboard/${guildId}/logs`, roles: ['admin'] },
+    { label: 'データベース設定', path: `/dashboard/${guildId}/database`, roles: ['admin'] },
+    { label: 'アカウント設定', path: `/dashboard/${guildId}/accounts`, roles: ['admin'] },
   ];
+
+  if (userRole) {
+    navItems = navItems.filter(item => item.roles.includes(userRole));
+    // Remove "アカウント設定" if it's a sub-account (sub-accounts have guild_id, superadmin doesn't)
+    // Actually, 'admin' role means superadmin if they don't have guild_id, but if we just rely on role it's fine.
+    // Let's assume only superadmin gets 'admin' role, sub-accounts get 'shop' or 'gambling'.
+  }
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-white">読み込み中...</div>;

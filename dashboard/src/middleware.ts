@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import * as jose from 'jose';
 
 const COOKIE_NAME = 'dashboard_session';
 
@@ -9,7 +10,7 @@ const PUBLIC_PATHS = [
   '/api/auth/login',
 ];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public paths
@@ -48,20 +49,65 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Session token exists — allow the request
-  // Note: Full token validation happens at the API route level
-  // Middleware only checks for cookie existence for performance
+  // Validate JWT
+  try {
+    const jwtSecretStr = process.env.JWT_SECRET || 'fallback_secret_key_change_me_later';
+    const jwtSecret = new TextEncoder().encode(jwtSecretStr);
+    const { payload } = await jose.jwtVerify(sessionToken, jwtSecret);
+
+    const role = payload.role as string;
+    const guildId = payload.guild_id as string | undefined;
+
+    // Check guild specific restrictions
+    if (guildId) {
+      // Sub-accounts can only access their specific guild
+      const dashboardGuildMatch = pathname.match(/^\/dashboard\/([^\/]+)/);
+      const apiGuildMatch = pathname.match(/^\/api\/guilds\/([^\/]+)/);
+
+      if (dashboardGuildMatch && dashboardGuildMatch[1] !== guildId) {
+        return NextResponse.redirect(new URL(`/dashboard/${guildId}`, request.url));
+      }
+
+      if (apiGuildMatch && apiGuildMatch[1] !== guildId) {
+        return NextResponse.json({ error: '他のサーバーへアクセスする権限がありません' }, { status: 403 });
+      }
+
+      // Role-based restrictions
+      if (role === 'shop' && !pathname.includes('/shop') && pathname !== `/dashboard/${guildId}`) {
+        if (pathname.startsWith('/api/')) {
+          return NextResponse.json({ error: 'ショップ設定の権限しかありません' }, { status: 403 });
+        }
+        return NextResponse.redirect(new URL(`/dashboard/${guildId}/shop`, request.url));
+      }
+      
+      if (role === 'gambling' && !pathname.includes('/gambling') && pathname !== `/dashboard/${guildId}`) {
+        if (pathname.startsWith('/api/')) {
+          return NextResponse.json({ error: 'ギャンブル設定の権限しかありません' }, { status: 403 });
+        }
+        return NextResponse.redirect(new URL(`/dashboard/${guildId}/gambling`, request.url));
+      }
+    } else {
+      // Admin account: prevent access to unauthorized roles
+      // No strict path locks, but we can do it if needed. Admin has access to all.
+    }
+
+  } catch (err) {
+    // Invalid token
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'セッションが無効です。再度ログインしてください。' },
+        { status: 401 }
+      );
+    }
+    const loginUrl = new URL('/login', request.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.ico
-     */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 };

@@ -14,23 +14,33 @@ export default function Home() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // 1. もしDiscord Activityから起動した場合、現在のサーバーIDを取得して自動でリダイレクトすることも可能
-    // 今回は一覧から選ばせるため、APIからBotの参加サーバー一覧を取得します。
-    
-    fetch('/api/guilds')
+    // Check authentication status to handle sub-account redirection
+    fetch('/api/auth/check')
       .then(res => res.json())
-      .then(data => {
-        if (data.error) {
-          setError(data.error);
-        } else {
-          setGuilds(data);
+      .then(authData => {
+        if (authData.authenticated && authData.user && authData.user.guild_id) {
+          // It's a sub-account bound to a specific guild, redirect them immediately
+          router.push(`/dashboard/${authData.user.guild_id}`);
+          return;
         }
+
+        // Otherwise, it's a super admin, fetch guilds list
+        fetch('/api/guilds')
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) {
+              setError(data.error);
+            } else {
+              setGuilds(data);
+            }
+          })
+          .catch(err => {
+            setError('サーバー一覧の取得に失敗しました。');
+          })
+          .finally(() => setLoading(false));
       })
-      .catch(err => {
-        setError('サーバー一覧の取得に失敗しました。');
-      })
-      .finally(() => setLoading(false));
-  }, []);
+      .catch(() => setLoading(false));
+  }, [router]);
 
   const handleSelectGuild = (guildId: string) => {
     router.push(`/dashboard/${guildId}`);

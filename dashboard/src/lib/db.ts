@@ -16,6 +16,27 @@ if (!globalForDb.pools) {
 }
 const pools = globalForDb.pools;
 
+export async function initDb() {
+  try {
+    await masterPool.query(`
+      CREATE TABLE IF NOT EXISTS dashboard_users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) NOT NULL,
+        guild_id VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  } catch (error) {
+    console.error('Failed to initialize dashboard_users table:', error);
+  }
+}
+
+// Automatically try to initialize on startup
+initDb();
+
+
 export async function getGuildDbUrl(guildId: string | number): Promise<string | null> {
   const parsedId = typeof guildId === 'string' ? guildId : String(guildId);
   if (isNaN(Number(parsedId))) return null;

@@ -13,7 +13,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!validateCredentials(username, password)) {
+    const payload = await validateCredentials(username, password);
+
+    if (!payload) {
       return NextResponse.json(
         { error: 'ユーザー名またはパスワードが正しくありません' },
         { status: 401 }
@@ -21,10 +23,10 @@ export async function POST(request: Request) {
     }
 
     // Create session and set cookie
-    const token = createSession();
+    const token = await createSession(payload);
     const cookieOptions = getSessionCookieOptions();
 
-    const response = NextResponse.json({ success: true });
+    const response = NextResponse.json({ success: true, payload });
     response.cookies.set(cookieOptions.name, token, {
       httpOnly: cookieOptions.httpOnly,
       secure: cookieOptions.secure,
@@ -35,9 +37,11 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
+    console.error('Login error:', error);
     return NextResponse.json(
       { error: 'ログイン処理中にエラーが発生しました' },
       { status: 500 }
     );
   }
 }
+
