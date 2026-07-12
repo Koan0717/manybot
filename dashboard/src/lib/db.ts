@@ -5,7 +5,7 @@ const globalForDb = globalThis as unknown as {
   pools: { [url: string]: Pool };
 };
 
-const masterPool = globalForDb.masterPool ?? new Pool({ connectionString: process.env.DATABASE_URL?.replace('?sslmode=require', ''), ssl: { rejectUnauthorized: false } });
+export const masterPool = globalForDb.masterPool ?? new Pool({ connectionString: process.env.DATABASE_URL?.replace('?sslmode=require', ''), ssl: { rejectUnauthorized: false } });
 
 if (process.env.NODE_ENV !== 'production') {
   globalForDb.masterPool = masterPool;

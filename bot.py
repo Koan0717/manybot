@@ -219,10 +219,44 @@ class EconomyBot(commands.Bot):
             await self.tree.sync()
         except Exception as e:
             print(f"[ERROR] Failed to sync slash commands: {e}")
+            
+        # Sync commands to database for dashboard toggle feature
+        commands_to_sync = []
+        import discord
+        for cmd in self.tree.walk_commands():
+            if isinstance(cmd, discord.app_commands.Command):
+                cog_name = cmd.binding.__class__.__name__ if cmd.binding else "General"
+                commands_to_sync.append({
+                    "name": cmd.qualified_name,
+                    "description": cmd.description or "説明なし",
+                    "category": cog_name
+                })
+        try:
+            await database.update_available_commands(commands_to_sync)
+            print("[OK] Synced available commands to database.")
+        except Exception as e:
+            print(f"[ERROR] Failed to sync available commands to DB: {e}")
+
         print(f"[OK] Bot is ready! Logged in as {self.user} (ID: {self.user.id})")
         print("[OK] Slash commands and persistent views are synced.")
 
 bot = EconomyBot()
+
+@bot.tree.interaction_check
+async def check_command_enabled(interaction: discord.Interaction):
+    if interaction.guild_id is None:
+        return True # DMs are allowed
+    
+    if interaction.command is None:
+        return True
+    
+    cmd_name = interaction.command.qualified_name
+    is_enabled = await database.is_command_enabled(interaction.guild_id, cmd_name)
+    if not is_enabled:
+        await interaction.response.send_message("❌ このコマンドはこのサーバーでは無効化されています。", ephemeral=True)
+        return False
+        
+    return True
 
 # --- 中央集権イベント (メインハンドラ) ---
 @bot.event

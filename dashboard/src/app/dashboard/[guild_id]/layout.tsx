@@ -47,6 +47,7 @@ export default function DashboardLayout({
     { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling` },
     { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards` },
     { label: 'VCコイン獲得制限', path: `/dashboard/${guildId}/vc-coins` },
+    { label: 'コマンド設定', path: `/dashboard/${guildId}/commands` },
     { label: 'ログ出力設定', path: `/dashboard/${guildId}/logs` },
     { label: 'データベース設定', path: `/dashboard/${guildId}/database` },
   ];

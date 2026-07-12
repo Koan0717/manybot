@@ -455,7 +455,22 @@ async def setup_db_schema(p):
         except Exception as e:
             print(f"[Migration] users event_points migration warning: {e}")
 
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS available_commands (
+                command_name TEXT PRIMARY KEY,
+                description TEXT,
+                category TEXT
+            )
+        ''')
 
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS command_settings (
+                guild_id BIGINT,
+                command_name TEXT,
+                is_enabled BOOLEAN,
+                PRIMARY KEY (guild_id, command_name)
+            )
+        ''')
 
 async def setup_db():
     p = await get_master_pool()
@@ -1372,10 +1387,56 @@ async def get_user_evaluations(target_user_id: int) -> list[dict]:
         rows = await conn.fetch('''
             SELECT id as eval_id, evaluator_id, evaluator_name, score, stamp_count, comment, created_at
             FROM user_evaluations
-            WHERE target_user_id = $1
+            WHERE target_user_id = $1 AND guild_id = $2
             ORDER BY created_at DESC
-        ''', target_user_id)
+            LIMIT $3
+        ''', target_user_id, guild_id, limit)
         return [dict(r) for r in rows]
+
+async def update_available_commands(commands: list):
+    """
+    commands: list of dicts {"name": "...", "description": "...", "category": "..."}
+    """
+    p = await get_master_pool()
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            # Truncate and re-insert
+            await conn.execute('TRUNCATE TABLE available_commands')
+            for cmd in commands:
+                await conn.execute(
+                    'INSERT INTO available_commands (command_name, description, category) VALUES ($1, $2, $3)',
+                    cmd["name"], cmd["description"], cmd["category"]
+                )
+
+async def get_all_available_commands():
+    p = await get_master_pool()
+    async with p.acquire() as conn:
+        rows = await conn.fetch('SELECT command_name, description, category FROM available_commands ORDER BY category, command_name')
+        return [dict(r) for r in rows]
+
+async def get_command_settings(guild_id: int):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        rows = await conn.fetch('SELECT command_name, is_enabled FROM command_settings WHERE guild_id = $1', guild_id)
+        return {r['command_name']: r['is_enabled'] for r in rows}
+
+async def update_command_setting(guild_id: int, command_name: str, is_enabled: bool):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        await conn.execute(
+            'INSERT INTO command_settings (guild_id, command_name, is_enabled) VALUES ($1, $2, $3) '
+            'ON CONFLICT (guild_id, command_name) DO UPDATE SET is_enabled = EXCLUDED.is_enabled',
+            guild_id, command_name, is_enabled
+        )
+
+async def is_command_enabled(guild_id: int, command_name: str) -> bool:
+    """Returns True if enabled or if not explicitly set (default is True)."""
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        row = await conn.fetchrow('SELECT is_enabled FROM command_settings WHERE guild_id = $1 AND command_name = $2', guild_id, command_name)
+        if row is None:
+            return True
+        return row['is_enabled']
 
 async def set_initial_issued(guild_id: int, user_id: int):
     await get_user(guild_id, user_id)
