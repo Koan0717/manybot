@@ -31,7 +31,7 @@ export async function GET(
 
     // 2. Fetch ticket panels only for these channels
     const result = await pool.query(
-      `SELECT channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix 
+      `SELECT channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type 
        FROM custom_ticket_panels 
        WHERE channel_id = ANY($1::bigint[])`,
       [channelIds]
@@ -54,15 +54,15 @@ export async function POST(
     const { action } = body;
 
     if (action === 'save') {
-      const { channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix } = body.panel;
+      const { channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type } = body.panel;
       
       await pool.query(
         `INSERT INTO custom_ticket_panels (
-          channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (channel_id) DO UPDATE SET 
-          panel_title = $2, panel_description = $3, button_label = $4, button_emoji = $5, mention_role_ids = $6, target_role_ids = $7, ticket_prefix = $8`,
-        [channel_id, panel_title, panel_description, button_label || 'チケット作成', button_emoji || '', mention_role_ids || [], target_role_ids || [], ticket_prefix || 'ticket']
+          panel_title = $2, panel_description = $3, button_label = $4, button_emoji = $5, mention_role_ids = $6, target_role_ids = $7, ticket_prefix = $8, panel_type = $9`,
+        [channel_id, panel_title, panel_description, button_label || 'チケット作成', button_emoji || '', mention_role_ids || [], target_role_ids || [], ticket_prefix || 'ticket', panel_type || 'custom_ticket']
       );
       return NextResponse.json({ success: true });
     }

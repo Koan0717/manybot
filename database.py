@@ -258,7 +258,8 @@ async def setup_db_schema(p):
                 button_emoji TEXT,
                 mention_role_ids BIGINT[] NOT NULL,
                 target_role_ids BIGINT[] NOT NULL,
-                ticket_prefix TEXT NOT NULL
+                ticket_prefix TEXT NOT NULL,
+                panel_type TEXT DEFAULT 'custom_ticket'
             )
         ''')
         try:
@@ -266,6 +267,7 @@ async def setup_db_schema(p):
             await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_emoji TEXT")
             await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS target_role_ids BIGINT[] DEFAULT '{}'::BIGINT[]")
             await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS ticket_prefix TEXT DEFAULT 'ticket'")
+            await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS panel_type TEXT DEFAULT 'custom_ticket'")
         except Exception as e:
             print(f"[Migration] custom_ticket_panels migration warning: {e}")
 
@@ -943,23 +945,16 @@ async def get_panel_channel_by_dest(dest_channel_id: int) -> list[int]:
         return [r['panel_channel_id'] for r in rows]
 
 # --- カスタムチケットパネル管理用関数 ---
-async def add_custom_ticket_panel(
-    channel_id: int,
-    panel_title: str,
-    panel_description: str,
-    button_label: str,
-    button_emoji: str,
-    mention_role_ids: list[int],
-    target_role_ids: list[int],
-    ticket_prefix: str
-):
-    p = await get_pool()
+async def save_custom_ticket_panel(channel_id: int, panel_title: str, panel_description: str, button_label: str = "チケットを作成する", button_emoji: str = None, mention_role_ids: list[int] = None, target_role_ids: list[int] = None, ticket_prefix: str = "ticket", panel_type: str = "custom_ticket"):
+    mention_role_ids = mention_role_ids or []
+    target_role_ids = target_role_ids or []
+    p = await get_pool(0)
     async with p.acquire() as conn:
         await conn.execute('''
             INSERT INTO custom_ticket_panels (
-                channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix
+                channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
             ) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
             ON CONFLICT (channel_id) 
             DO UPDATE SET 
                 panel_title = $2,
@@ -968,14 +963,15 @@ async def add_custom_ticket_panel(
                 button_emoji = $5,
                 mention_role_ids = $6,
                 target_role_ids = $7,
-                ticket_prefix = $8
-        ''', channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix)
+                ticket_prefix = $8,
+                panel_type = $9
+        ''', channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type)
 
 async def get_custom_ticket_panel(channel_id: int) -> dict:
     p = await get_pool()
     async with p.acquire() as conn:
         row = await conn.fetchrow('''
-            SELECT panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix 
+            SELECT panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type 
             FROM custom_ticket_panels 
             WHERE channel_id = $1
         ''', channel_id)
@@ -987,7 +983,8 @@ async def get_custom_ticket_panel(channel_id: int) -> dict:
                 "button_emoji": row["button_emoji"],
                 "mention_role_ids": row["mention_role_ids"] or [],
                 "target_role_ids": row["target_role_ids"] or [],
-                "ticket_prefix": row["ticket_prefix"] or "ticket"
+                "ticket_prefix": row["ticket_prefix"] or "ticket",
+                "panel_type": row.get("panel_type") or "custom_ticket"
             }
         return None
 

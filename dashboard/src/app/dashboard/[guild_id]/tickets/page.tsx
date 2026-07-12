@@ -22,7 +22,8 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
     button_emoji: '',
     mention_role_ids: [] as string[],
     target_role_ids: [] as string[],
-    ticket_prefix: 'ticket'
+    ticket_prefix: 'ticket',
+    panel_type: 'custom_ticket'
   });
   const [saving, setSaving] = useState(false);
 
@@ -76,7 +77,8 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         button_emoji: panel.button_emoji || '',
         mention_role_ids: panel.mention_role_ids?.map(String) || [],
         target_role_ids: panel.target_role_ids?.map(String) || [],
-        ticket_prefix: panel.ticket_prefix || 'ticket'
+        ticket_prefix: panel.ticket_prefix || 'ticket',
+        panel_type: panel.panel_type || 'custom_ticket'
       });
     } else {
       setEditingPanel(null);
@@ -88,7 +90,8 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         button_emoji: '🎫',
         mention_role_ids: [],
         target_role_ids: [],
-        ticket_prefix: 'ticket'
+        ticket_prefix: 'ticket',
+        panel_type: 'custom_ticket'
       });
     }
     setIsModalOpen(true);
@@ -133,6 +136,14 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
 
   const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}`, color: r.color }));
   const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
+  const panelTypeOptions = [
+    { value: 'custom_ticket', label: '標準のチケット (カスタム設定)' },
+    { value: 'emblem_req', label: 'スタンプ依頼' },
+    { value: 'confession_req', label: '告解・相談' },
+    { value: 'inquiry_req', label: 'お問い合わせ' },
+    { value: 'interview_req', label: '入界手続き (面接)' },
+    { value: 'anonymous_chat', label: '匿名チャット' }
+  ];
 
   const customStyles = {
     control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white' }),
@@ -248,11 +259,26 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                   <Select
                     options={channelOptions}
                     value={channelOptions.find(o => o.value === formData.channel_id)}
-                    onChange={(selected: any) => setFormData({...formData, channel_id: selected?.value || ''})}
+                    onChange={(val: any) => setFormData({ ...formData, channel_id: val ? val.value : '' })}
                     styles={customStyles}
                     placeholder="チャンネルを選択..."
-                    isDisabled={!!editingPanel} // Cannot change channel once created
+                    isDisabled={!!editingPanel}
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-zinc-400 mb-1">パネルの種類（機能） <span className="text-red-500">*</span></label>
+                  <Select
+                    options={panelTypeOptions}
+                    value={panelTypeOptions.find(o => o.value === formData.panel_type) || panelTypeOptions[0]}
+                    onChange={(val: any) => setFormData({ ...formData, panel_type: val ? val.value : 'custom_ticket' })}
+                    styles={customStyles}
+                    placeholder="種類を選択..."
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">選択した種類に応じた機能がボタンに割り当てられます。</p>
+                </div>
+
+                <div>
                   {editingPanel && <p className="text-xs text-red-400 mt-1">※既存パネルの設置先チャンネルは変更できません</p>}
                 </div>
 
