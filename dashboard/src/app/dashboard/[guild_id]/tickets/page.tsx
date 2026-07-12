@@ -225,7 +225,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                         const res = await fetch(`/api/guilds/${guildId}/rooms`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ action: 'deploy_panel', channel_id: panel.channel_id, panel_type: 'custom_ticket' })
+                          body: JSON.stringify({ action: 'deploy_panel', channel_id: panel.channel_id, panel_type: 'custom_ticket' }) // Bot側でDBから取得して判定するためこのままでOK
                         });
                         if (res.ok) alert('パネルの設置をリクエストしました！');
                         else alert('リクエストに失敗しました。');
