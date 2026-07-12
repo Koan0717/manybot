@@ -235,7 +235,7 @@ async def on_message(message):
 async def on_voice_state_update(member, before, after):
     try:
         if member.bot: return
-        # VCログはcogs/logging_cog.pyで処理するため削除    try:
+        # VCログはcogs/logging_cog.pyで処理するため削除
         if member.bot: return
         user_id = member.id
         now_aware = datetime.datetime.now(JST)
