@@ -2588,5 +2588,15 @@ class Admin(commands.Cog):
         print("[Bot Nicknames] Initialized bot nicknames for all guilds.")
 
 
+    @commands.command(name="sync")
+    @commands.has_permissions(administrator=True)
+    async def sync_commands(self, ctx):
+        await ctx.send("コマンドを同期しています...")
+        try:
+            synced = await self.bot.tree.sync()
+            await ctx.send(f"グローバルで {len(synced)} 個のコマンドを同期しました。Discordに反映されるまで少し時間がかかる場合があります。")
+        except Exception as e:
+            await ctx.send(f"同期中にエラーが発生しました: {e}")
+
 async def setup(bot):
     await bot.add_cog(Admin(bot))
