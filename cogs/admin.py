@@ -2133,8 +2133,23 @@ class PanelSelect(discord.ui.Select):
             await channel.send(embed=embed, view=AnonymousChatPanelView())
             await interaction.response.send_message("✅ 匿名チャットパネルを設置しました。", ephemeral=True)
         elif val == "custom_ticket":
-            embed = discord.Embed(title="🎫 カスタムチケット", description="チケットを作成できます。", color=discord.Color.blue())
-            await channel.send(embed=embed, view=CustomTicketPanelView())
+            import database
+            panel = await database.get_custom_ticket_panel(channel.id)
+            if panel:
+                embed = discord.Embed(
+                    title=panel["panel_title"],
+                    description=panel["panel_description"],
+                    color=discord.Color.blue()
+                )
+                view = CustomTicketPanelView()
+                button = view.children[0]
+                button.label = panel.get("button_label", "チケットを作成する")
+                if panel.get("button_emoji"):
+                    button.emoji = panel["button_emoji"]
+            else:
+                embed = discord.Embed(title="🎫 カスタムチケット", description="チケットを作成できます。", color=discord.Color.blue())
+                view = CustomTicketPanelView()
+            await channel.send(embed=embed, view=view)
             await interaction.response.send_message("✅ カスタムチケットパネルを設置しました。", ephemeral=True)
 
 class PanelSetupView(discord.ui.View):

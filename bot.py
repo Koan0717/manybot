@@ -101,9 +101,16 @@ class EconomyBot(commands.Bot):
         await database.setup_db()
         try:
             from cogs.shop import ShopPanelView
+            from cogs.utility import CustomTicketPanelView, EmblemRequestPanelView, ConfessionRequestPanelView, InquiryRequestPanelView, AnonymousChatPanelView, TicketControlView
             self.add_view(ShopPanelView(self))
+            self.add_view(CustomTicketPanelView())
+            self.add_view(EmblemRequestPanelView())
+            self.add_view(ConfessionRequestPanelView())
+            self.add_view(InquiryRequestPanelView())
+            self.add_view(AnonymousChatPanelView())
+            self.add_view(TicketControlView())
         except Exception as e:
-            print(f'Failed to load ShopPanelView: {e}')
+            print(f'Failed to load persistent views: {e}')
         self.bot_settings = await database.load_settings()
 
         # 荒らし対策設定のロード
