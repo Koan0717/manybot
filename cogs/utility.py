@@ -260,7 +260,7 @@ class ConfessionSelectView(discord.ui.View):
             ))
         
         if not options:
-            self.add_item(discord.ui.Button(label="現在、対応可能な司祭がいません", disabled=True))
+            self.add_item(discord.ui.Button(label="現在、対応可能な司祭がいません", disabled=True, custom_id="no_priests_btn"))
         else:
             select = discord.ui.Select(
                 placeholder="担当する司祭を選択してください...",
@@ -283,8 +283,15 @@ class ConfessionRequestPanelView(discord.ui.View):
 
     @discord.ui.button(label="告解・相談をする", style=discord.ButtonStyle.primary, emoji="⛪", custom_id="persistent_confession_req_btn")
     async def request_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = ConfessionSelectView(interaction.client, interaction.guild)
-        await interaction.response.send_message("担当者を選択してください：", view=view, ephemeral=True)
+        try:
+            view = ConfessionSelectView(interaction.client, interaction.guild)
+            await interaction.response.send_message("担当者を選択してください：", view=view, ephemeral=True)
+        except Exception as e:
+            print(f"[Confession Error] {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"内部エラーが発生しました: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"内部エラーが発生しました: {e}", ephemeral=True)
 
 # --- お問い合わせ ---
 class InquiryRequestModal(discord.ui.Modal, title="お問い合わせ"):
