@@ -32,8 +32,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for session cookie
-  const sessionToken = request.cookies.get(COOKIE_NAME)?.value;
+  // Check for session cookie or query param or auth header
+  let sessionToken = request.cookies.get(COOKIE_NAME)?.value;
+
+  if (!sessionToken) {
+    const authHeader = request.headers.get('authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      sessionToken = authHeader.substring(7);
+    }
+  }
+  
+  if (!sessionToken) {
+    const urlToken = request.nextUrl.searchParams.get('session_token');
+    if (urlToken) {
+      sessionToken = urlToken;
+    }
+  }
 
   if (!sessionToken) {
     // No session token — redirect or return 401
@@ -43,7 +57,33 @@ export async function middleware(request: NextRequest) {
         { status: 401 }
       );
     }
-    // Redirect to login page
+    
+    const isRSC = request.headers.has('RSC') || request.headers.get('x-middleware-prefetch');
+    if (!isRSC && pathname !== '/login') {
+      return new NextResponse(`
+        <!DOCTYPE html>
+        <html>
+          <head><title>認証を確認中...</title></head>
+          <body style="background-color: #09090b; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif;">
+            <div>認証情報を確認しています...</div>
+            <script>
+              const token = localStorage.getItem('dashboard_session');
+              if (token) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('session_token', token);
+                window.location.replace(url.toString());
+              } else {
+                const loginUrl = new URL('/login', window.location.origin);
+                loginUrl.searchParams.set('redirect', window.location.pathname);
+                window.location.replace(loginUrl.toString());
+              }
+            </script>
+          </body>
+        </html>
+      `, { headers: { 'Content-Type': 'text/html' } });
+    }
+
+    // Redirect to login page for RSC requests
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);

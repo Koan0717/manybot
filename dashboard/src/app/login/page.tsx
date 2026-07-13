@@ -29,7 +29,16 @@ function LoginForm() {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        router.push(redirect);
+        if (data.token) {
+          localStorage.setItem('dashboard_session', data.token);
+        }
+        
+        // Always pass token in URL to handle ITP blocked cookies
+        const url = new URL(redirect, window.location.href);
+        if (data.token) {
+          url.searchParams.set('session_token', data.token);
+        }
+        router.push(url.pathname + url.search);
         router.refresh();
       } else {
         setError(data.error || 'ログインに失敗しました');
@@ -66,11 +75,25 @@ function LoginForm() {
           className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/80 rounded-2xl p-8 shadow-2xl shadow-black/40"
         >
           {error && (
-            <div className="bg-red-950/60 border border-red-800/60 text-red-300 px-4 py-3 rounded-xl mb-6 text-sm flex items-center gap-3">
-              <svg className="w-5 h-5 flex-shrink-0 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-              </svg>
-              <span>{error}</span>
+            <div className="bg-red-950/60 border border-red-800/60 text-red-300 px-4 py-3 rounded-xl mb-6 text-sm flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <svg className="w-5 h-5 flex-shrink-0 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                </svg>
+                <span>{error}</span>
+              </div>
+              {error.includes('ログインから進まない') || error.includes('サーバーに接続できません') || true ? (
+                <div className="mt-2 text-xs text-red-200">
+                  <p>※スマホ・iPad（iOS）のDiscordアプリ内で開いている場合、Appleのセキュリティ仕様によりログインできないことがあります。</p>
+                  <button 
+                    type="button"
+                    onClick={() => window.open(window.location.href, '_blank')}
+                    className="mt-3 px-3 py-1.5 bg-red-800/50 hover:bg-red-700/50 rounded-lg text-white font-bold inline-flex items-center gap-1 border border-red-500/30 w-full justify-center"
+                  >
+                    外部ブラウザ（Safari等）で開く
+                  </button>
+                </div>
+              ) : null}
             </div>
           )}
 

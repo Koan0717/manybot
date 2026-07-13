@@ -26,14 +26,13 @@ export async function POST(request: Request) {
     const token = await createSession(payload);
     const cookieOptions = getSessionCookieOptions();
 
-    const response = NextResponse.json({ success: true, payload });
-    response.cookies.set(cookieOptions.name, token, {
-      httpOnly: cookieOptions.httpOnly,
-      secure: cookieOptions.secure,
-      sameSite: cookieOptions.sameSite,
-      path: cookieOptions.path,
-      maxAge: cookieOptions.maxAge,
-    });
+    const response = NextResponse.json({ success: true, payload, token });
+    
+    // Next.js 14 doesn't support 'partitioned' in the types yet, so we append it manually
+    response.headers.append(
+      'Set-Cookie',
+      `${cookieOptions.name}=${token}; Path=${cookieOptions.path}; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${cookieOptions.maxAge}`
+    );
 
     return response;
   } catch (error) {
