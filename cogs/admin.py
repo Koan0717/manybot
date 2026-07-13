@@ -2152,6 +2152,7 @@ class PanelSelect(discord.ui.Select):
             await channel.send(embed=embed, view=view)
             await interaction.response.send_message("✅ カスタムチケットパネルを設置しました。", ephemeral=True)
 
+
 class PanelSetupView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
