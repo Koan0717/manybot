@@ -354,17 +354,15 @@ class Evaluation(commands.Cog):
         guild = message.guild
         if guild:
             try:
-                with open("eval_debug.log", "a", encoding="utf-8") as f:
-                    cfg = self.bot.get_evaluation_config(guild.id)
-                    human_role = get_role_by_setting(self.bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
-                    f.write(f"[DEBUG] msg_id={message.id} channel={message.channel.id}\n")
-                    f.write(f"  cfg={cfg}\n")
-                    f.write(f"  human_role={human_role.name if human_role else None}\n")
-                    has_role = human_role in getattr(message.author, 'roles', [])
-                    f.write(f"  has_role={has_role}\n")
+                cfg = self.bot.get_evaluation_config(guild.id)
+                human_role = get_role_by_setting(self.bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
+                print(f"[DEBUG-EVAL] msg_id={message.id} channel={message.channel.id}")
+                print(f"  cfg={cfg}")
+                print(f"  human_role={human_role.name if human_role else None}")
+                has_role = human_role in getattr(message.author, 'roles', [])
+                print(f"  has_role={has_role}")
             except Exception as e:
-                with open("eval_debug.log", "a", encoding="utf-8") as f:
-                    f.write(f"[DEBUG ERROR] {e}\n")
+                print(f"[DEBUG-EVAL ERROR] {e}")
                 
             cfg = self.bot.get_evaluation_config(guild.id)
             if not cfg.get("is_enabled", True):
