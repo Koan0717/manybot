@@ -692,11 +692,52 @@ class CustomTicketSelectView(discord.ui.View):
     def __init__(self, options, panel):
         super().__init__(timeout=60)
         self.panel = panel
-        select = discord.ui.Select(placeholder="担当者を選択してください...", options=options[:25])
-        select.callback = self.select_callback
-        self.add_item(select)
+        self.selected_staff_id = None
+        self.selected_player_id = None
+        
+        self.staff_select = discord.ui.Select(placeholder="担当者を選択してください...", options=options[:25], custom_id="staff_select")
+        
+        if "スタンプ" in panel.get("panel_title", ""):
+            self.staff_select.callback = self.staff_select_callback
+            self.add_item(self.staff_select)
+            
+            self.player_select = discord.ui.UserSelect(placeholder="同行プレイヤーを選択（任意）", min_values=0, max_values=1, custom_id="player_select")
+            self.player_select.callback = self.player_select_callback
+            self.add_item(self.player_select)
+            
+            self.next_btn = discord.ui.Button(label="次へ", style=discord.ButtonStyle.primary, row=2)
+            self.next_btn.callback = self.next_callback
+            self.add_item(self.next_btn)
+        else:
+            self.staff_select.callback = self.immediate_callback
+            self.add_item(self.staff_select)
 
-    async def select_callback(self, interaction: discord.Interaction):
+    async def staff_select_callback(self, interaction: discord.Interaction):
+        self.selected_staff_id = int(interaction.data['values'][0])
+        await interaction.response.defer()
+        
+    async def player_select_callback(self, interaction: discord.Interaction):
+        values = interaction.data.get('values')
+        if values:
+            self.selected_player_id = int(values[0])
+        else:
+            self.selected_player_id = None
+        await interaction.response.defer()
+        
+    async def next_callback(self, interaction: discord.Interaction):
+        if not self.selected_staff_id:
+            return await interaction.response.send_message("❌ まず担当者を選択してください。", ephemeral=True)
+            
+        target_member = interaction.guild.get_member(self.selected_staff_id)
+        extra_member = interaction.guild.get_member(self.selected_player_id) if self.selected_player_id else None
+        
+        if not target_member:
+            return await interaction.response.send_message("❌ 担当メンバーが見つかりませんでした。", ephemeral=True)
+            
+        modal = CustomTicketRequestModal(target_member=target_member, panel=self.panel, extra_member=extra_member)
+        await interaction.response.send_modal(modal)
+
+    async def immediate_callback(self, interaction: discord.Interaction):
         user_id = int(interaction.data['values'][0])
         target_member = interaction.guild.get_member(user_id)
         if not target_member:
@@ -708,13 +749,14 @@ class CustomTicketSelectView(discord.ui.View):
 class CustomTicketRequestModal(discord.ui.Modal):
     details = discord.ui.TextInput(label="ご用件・相談内容の詳細", style=discord.TextStyle.paragraph, placeholder="内容を詳しく入力してください。", required=True, max_length=1000)
 
-    def __init__(self, target_member, panel):
+    def __init__(self, target_member, panel, extra_member=None):
         title = panel["panel_title"]
         if len(title) > 45:
             title = title[:42] + "..."
         super().__init__(title=title)
         self.target_member = target_member
         self.panel = panel
+        self.extra_member = extra_member
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -745,6 +787,8 @@ class CustomTicketRequestModal(discord.ui.Modal):
         if self.target_member:
             overwrites[self.target_member] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
             
+        if getattr(self, 'extra_member', None):
+            overwrites[self.extra_member] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
         for role_name in ADMIN_ROLE_NAMES:
             role = discord.utils.get(guild.roles, name=role_name)
             if role:
@@ -774,6 +818,8 @@ class CustomTicketRequestModal(discord.ui.Modal):
             desc_text = f"**作成者:** {interaction.user.mention}\n"
             if self.target_member:
                 desc_text += f"**担当者:** {self.target_member.mention}\n"
+            if getattr(self, 'extra_member', None):
+                desc_text += f"**同行プレイヤー:** {self.extra_member.mention}\n"
             desc_text += f"\n**【内容】**\n{self.details.value}\n\n"
             desc_text += "内容の確認や相談はこちらのチャンネルで行ってください。\n"
             desc_text += "完了したら下のボタンでチケットを閉じることができます。"
@@ -783,7 +829,8 @@ class CustomTicketRequestModal(discord.ui.Modal):
             mentions = [interaction.user.mention]
             if self.target_member:
                 mentions.append(self.target_member.mention)
-                
+            if getattr(self, 'extra_member', None):
+                mentions.append(self.extra_member.mention)
             for rid in self.panel.get("mention_role_ids", []):
                 role = guild.get_role(rid)
                 if role:
