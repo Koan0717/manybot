@@ -300,13 +300,13 @@ async def on_voice_state_update(member, before, after):
             if join_time:
                 duration_seconds = int((now_aware - join_time).total_seconds())
                 if before.channel.category:
-                    await database.add_vc_duration(guild.id, user_id, before.channel.category.id, duration_seconds)
+                    await database.add_vc_duration(member.guild.id, user_id, before.channel.category.id, duration_seconds)
                 
                 duration_minutes = duration_seconds // 60
                 if duration_minutes > 0:
                     if is_rank_eligible(bot, before.channel):
-                        xp_reward = duration_minutes * (helpers.get_setting(self, "VC_XP_PER_MIN", guild_id) or 15)
-                        new_lv = await database.add_xp(guild.id, user_id, xp_reward, "vc")
+                        xp_reward = duration_minutes * (get_setting(bot, "VC_XP_PER_MIN", member.guild.id) or 15)
+                        new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
                         if new_lv:
                             lv_channel = bot.get_channel(get_setting(bot, "LEVEL_UP_CHANNEL_ID"))
                             if lv_channel:
@@ -320,7 +320,7 @@ async def on_voice_state_update(member, before, after):
                         if coins_per_min is None: coins_per_min = 12
                         coins_reward = duration_minutes * coins_per_min
                         if coins_reward > 0:
-                            await database.add_balance(guild.id, user_id, coins_reward)
+                            await database.add_balance(member.guild.id, user_id, coins_reward)
                             print(f"[DEBUG] VC Coins Awarding on Leave: {member.display_name} - {coins_reward} coins")
     except Exception as global_e:
         print(f"CRITICAL ERROR in on_voice_state_update: {global_e}")

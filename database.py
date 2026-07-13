@@ -67,33 +67,40 @@ async def set_guild_db_url(guild_id: int, url: str):
 
 async def get_pool(guild_id: int = None):
     if guild_id is None:
-        for frame_info in inspect.stack()[1:10]:
-            frame = frame_info.frame
-            if 'interaction' in frame.f_locals:
-                obj = frame.f_locals['interaction']
-                if hasattr(obj, 'guild') and obj.guild:
-                    guild_id = obj.guild.id
-                    break
-            elif 'message' in frame.f_locals:
-                obj = frame.f_locals['message']
-                if hasattr(obj, 'guild') and obj.guild:
-                    guild_id = obj.guild.id
-                    break
-            elif 'member' in frame.f_locals:
-                obj = frame.f_locals['member']
-                if hasattr(obj, 'guild') and obj.guild:
-                    guild_id = obj.guild.id
-                    break
-            elif 'guild' in frame.f_locals:
-                obj = frame.f_locals['guild']
-                if hasattr(obj, 'id'):
-                    guild_id = obj.id
-                    break
-            elif 'channel' in frame.f_locals:
-                obj = frame.f_locals['channel']
-                if hasattr(obj, 'guild') and obj.guild:
-                    guild_id = obj.guild.id
-                    break
+        try:
+            import sys
+            f = sys._getframe(1)
+            for _ in range(15):
+                if f is None: break
+                locs = f.f_locals
+                if 'interaction' in locs:
+                    obj = locs['interaction']
+                    if hasattr(obj, 'guild') and obj.guild:
+                        guild_id = obj.guild.id
+                        break
+                elif 'message' in locs:
+                    obj = locs['message']
+                    if hasattr(obj, 'guild') and obj.guild:
+                        guild_id = obj.guild.id
+                        break
+                elif 'member' in locs:
+                    obj = locs['member']
+                    if hasattr(obj, 'guild') and obj.guild:
+                        guild_id = obj.guild.id
+                        break
+                elif 'guild' in locs:
+                    obj = locs['guild']
+                    if hasattr(obj, 'id'):
+                        guild_id = obj.id
+                        break
+                elif 'channel' in locs:
+                    obj = locs['channel']
+                    if hasattr(obj, 'guild') and obj.guild:
+                        guild_id = obj.guild.id
+                        break
+                f = f.f_back
+        except Exception:
+            pass
 
     if guild_id:
         url = await get_guild_db_url(guild_id)
