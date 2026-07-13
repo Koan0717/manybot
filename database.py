@@ -1037,13 +1037,16 @@ async def remove_custom_ticket_panel(channel_id: int):
     async with p.acquire() as conn:
         await conn.execute('DELETE FROM custom_ticket_panels WHERE channel_id = $1', channel_id)
 
-async def get_panel_requests() -> list[dict]:
+async def get_panel_requests(guild_ids: list[int] = None) -> list[dict]:
     pools = await get_all_configured_pools()
     all_requests = []
     for p in pools:
         try:
             async with p.acquire() as conn:
-                rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type FROM panel_requests ORDER BY created_at ASC LIMIT 10')
+                if guild_ids is not None:
+                    rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type FROM panel_requests WHERE guild_id = ANY($1::bigint[]) ORDER BY created_at ASC LIMIT 10', guild_ids)
+                else:
+                    rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type FROM panel_requests ORDER BY created_at ASC LIMIT 10')
                 all_requests.extend([dict(row) for row in rows])
         except Exception as e:
             pass
