@@ -285,6 +285,28 @@ class Logging(commands.Cog):
 
 
     @commands.Cog.listener()
+    async def check_manual_join(self, before, after, human_role):
+        await asyncio.sleep(2)  # Wait for audit logs to populate
+        try:
+            async for entry in after.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_role_update):
+                if entry.target.id == after.id:
+                    if human_role in entry.after.roles and human_role not in entry.before.roles:
+                        if entry.user and not entry.user.bot:
+                            interviewer = entry.user
+                            
+                            new_total = await database.increment_interviewer_stats(after.guild.id, interviewer.id)
+                            
+                            embed = discord.Embed(
+                                title="👔 手動入界手続き",
+                                description=f"面接官が手動で入界手続きを行いました。\n\n**対象者:** {after.mention}\n**面接官:** {interviewer.mention}\n\n**今回の対応人数:** 1人\n**面接合計対応人数:** {new_total}人",
+                                color=discord.Color.green(),
+                                timestamp=datetime.datetime.now(config.JST)
+                            )
+                            await config.send_log(self.bot, after.guild, "interviewer", embed)
+                        break
+        except Exception as e:
+            print(f"[ManualJoin] Error checking audit logs: {e}")
+
     async def on_member_update(self, before, after):
         human_role = config.get_role_by_setting(self.bot, after.guild, "NEW_MEMBER_ROLE_ID", config.NEW_MEMBER_ROLE_NAME)
         if human_role and human_role in after.roles and human_role not in before.roles:
@@ -301,6 +323,11 @@ class Logging(commands.Cog):
                     end_time = start_time + datetime.timedelta(days=14)
                     await database.add_evaluation_period(after.guild.id, after.id, start_time, end_time)
                     print(f"[Evaluation] Started for {after.display_name}: {start_time} to {end_time}")
+
+            # 面接官の手動入界検知
+            auto_detect = config.get_setting(self.bot, "AUTO_DETECT_MANUAL_JOIN", after.guild.id)
+            if str(auto_detect).lower() == "true" or auto_detect is True:
+                self.bot.loop.create_task(self.check_manual_join(before, after, human_role))
 
         # 評価落ちロール付与検知
         eval_failed_role = config.get_role_by_setting(self.bot, after.guild, "EVALUATION_FAILED_ROLE_ID", config.EVALUATION_FAILED_ROLE_NAME)

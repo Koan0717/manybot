@@ -352,6 +352,15 @@ async def setup_db_schema(p):
         ''')
 
         await conn.execute('''
+            CREATE TABLE IF NOT EXISTS interviewer_stats (
+                guild_id BIGINT,
+                interviewer_id BIGINT,
+                total_handled INTEGER DEFAULT 0,
+                PRIMARY KEY (guild_id, interviewer_id)
+            )
+        ''')
+
+        await conn.execute('''
             CREATE TABLE IF NOT EXISTS user_evaluations (
                 id SERIAL PRIMARY KEY,
                 guild_id BIGINT,
@@ -1819,3 +1828,38 @@ async def get_expired_evaluation_periods() -> list:
         except Exception as e:
             print(f'[DB Error] Failed to fetch expired evaluation periods: {e}')
     return all_expired
+
+
+async def get_interviewer_stats(guild_id: int, interviewer_id: int) -> int:
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow('SELECT total_handled FROM interviewer_stats WHERE guild_id = $1 AND interviewer_id = $2', guild_id, interviewer_id)
+        return row['total_handled'] if row else 0
+
+async def increment_interviewer_stats(guild_id: int, interviewer_id: int) -> int:
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow('''
+            INSERT INTO interviewer_stats (guild_id, interviewer_id, total_handled)
+            VALUES ($1, $2, 1)
+            ON CONFLICT (guild_id, interviewer_id) 
+            DO UPDATE SET total_handled = interviewer_stats.total_handled + 1
+            RETURNING total_handled
+        ''', guild_id, interviewer_id)
+        return row['total_handled']
+
+async def set_interviewer_stats(guild_id: int, interviewer_id: int, total: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO interviewer_stats (guild_id, interviewer_id, total_handled)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (guild_id, interviewer_id) 
+            DO UPDATE SET total_handled = $3
+        ''', guild_id, interviewer_id, total)
+
+async def get_all_interviewer_stats(guild_id: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch('SELECT interviewer_id, total_handled FROM interviewer_stats WHERE guild_id = $1 ORDER BY total_handled DESC', guild_id)
+        return [{"interviewer_id": str(r['interviewer_id']), "total_handled": r['total_handled']} for r in rows]

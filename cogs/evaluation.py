@@ -410,6 +410,10 @@ class Evaluation(commands.Cog):
                                     print(f"[Evaluation Thread] Created for {message.author.display_name} in forum {forum_id}")
                                 except Exception as e:
                                     print(f"[ERROR] Failed to create forum thread in forum {forum_id}: {e}")
+                                    try:
+                                        await message.channel.send(f"⚠️ {message.author.mention} 評価シート（スレッド）の自動生成に失敗しました。\nエラー: `{e}`\nフォーラムの「タグ必須」設定やボットの権限（スレッド作成権限など）を確認してください。", delete_after=15)
+                                    except:
+                                        pass
 
 async def setup(bot):
     await bot.add_cog(Evaluation(bot))
