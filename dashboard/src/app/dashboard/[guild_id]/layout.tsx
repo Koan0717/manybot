@@ -57,6 +57,7 @@ export default function DashboardLayout({
     { label: 'VCコイン獲得制限', path: `/dashboard/${guildId}/vc-coins`, roles: ['admin', 'subadmin'] },
     { label: 'コマンド設定', path: `/dashboard/${guildId}/commands`, roles: ['admin', 'subadmin'] },
     { label: 'ログ出力設定', path: `/dashboard/${guildId}/logs`, roles: ['admin', 'subadmin'] },
+    { label: '面接官設定', path: `/dashboard/${guildId}/interviewer`, roles: ['admin', 'subadmin'] },
     { label: 'データベース設定', path: `/dashboard/${guildId}/database`, roles: ['admin', 'subadmin'] },
     { label: 'アカウント設定', path: `/dashboard/${guildId}/accounts`, roles: ['admin'] },
   ];
