@@ -9,7 +9,7 @@ export async function GET(
   const pool = await getPool(guildId);
   try {
     const result = await pool.query(
-      'SELECT setting_value FROM bot_settings WHERE guild_id =  AND setting_key = ',
+      'SELECT setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key = $2',
       [guildId, 'AUTO_DETECT_MANUAL_JOIN']
     );
     let autoDetect = false;
@@ -22,7 +22,7 @@ export async function GET(
     }
 
     const statsResult = await pool.query(
-      'SELECT interviewer_id, total_handled FROM interviewer_stats WHERE guild_id =  ORDER BY total_handled DESC',
+      'SELECT interviewer_id, total_handled FROM interviewer_stats WHERE guild_id = $1 ORDER BY total_handled DESC',
       [guildId]
     );
 
@@ -50,10 +50,10 @@ export async function POST(
     if (body.action === 'update_stat') {
       const { interviewer_id, total_handled } = body;
       await pool.query(
-        INSERT INTO interviewer_stats (guild_id, interviewer_id, total_handled)
-         VALUES (, , )
+        `INSERT INTO interviewer_stats (guild_id, interviewer_id, total_handled)
+         VALUES ($1, $2, $3)
          ON CONFLICT (guild_id, interviewer_id) 
-         DO UPDATE SET total_handled = ,
+         DO UPDATE SET total_handled = $3`,
         [guildId, interviewer_id, total_handled]
       );
       return NextResponse.json({ success: true });
@@ -62,7 +62,7 @@ export async function POST(
     if (body.action === 'delete_stat') {
       const { interviewer_id } = body;
       await pool.query(
-        DELETE FROM interviewer_stats WHERE guild_id =  AND interviewer_id = ,
+        `DELETE FROM interviewer_stats WHERE guild_id = $1 AND interviewer_id = $2`,
         [guildId, interviewer_id]
       );
       return NextResponse.json({ success: true });
@@ -71,10 +71,10 @@ export async function POST(
     if (body.action === 'save_setting') {
       const { autoDetect } = body;
       await pool.query(
-        INSERT INTO bot_settings (guild_id, setting_key, setting_value)
-         VALUES (, , )
+        `INSERT INTO bot_settings (guild_id, setting_key, setting_value)
+         VALUES ($1, $2, $3)
          ON CONFLICT (guild_id, setting_key)
-         DO UPDATE SET setting_value = ,
+         DO UPDATE SET setting_value = $3`,
         [guildId, 'AUTO_DETECT_MANUAL_JOIN', JSON.stringify(autoDetect)]
       );
       return NextResponse.json({ success: true });
