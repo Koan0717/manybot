@@ -951,7 +951,7 @@ class Utility(commands.Cog):
         self.bot.add_view(CustomTicketPanelView())
         
         # コマンドグループの追加
-        self.bot.tree.add_command(EventGroup(self.bot))
+        self.bot.tree.add_command(EventGroup(self.bot), override=True)
 
     async def cog_unload(self):
         self.bot.tree.remove_command("イベント")

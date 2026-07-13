@@ -1088,17 +1088,23 @@ async def get_evaluation_settings(guild_id: int) -> dict:
         return None
 
 async def get_all_evaluation_settings() -> list[dict]:
-    p = await get_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT guild_id, is_enabled, auto_generate_period, auto_fail_on_deadline, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings')
-        return [{
-            "guild_id": r["guild_id"], 
-            "is_enabled": r["is_enabled"] if r["is_enabled"] is not None else True,
-            "auto_generate_period": r["auto_generate_period"] if r["auto_generate_period"] is not None else True,
-            "auto_fail_on_deadline": r["auto_fail_on_deadline"] if r["auto_fail_on_deadline"] is not None else False,
-            "forum_channel_ids": r["forum_channel_ids"] or [], 
-            "self_intro_channel_ids": r["self_intro_channel_ids"] or []
-        } for r in rows]
+    pools = await get_all_configured_pools()
+    all_settings = []
+    for p in pools:
+        try:
+            async with p.acquire() as conn:
+                rows = await conn.fetch('SELECT guild_id, is_enabled, auto_generate_period, auto_fail_on_deadline, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings')
+                all_settings.extend([{
+                    "guild_id": r["guild_id"], 
+                    "is_enabled": r["is_enabled"] if r["is_enabled"] is not None else True,
+                    "auto_generate_period": r["auto_generate_period"] if r["auto_generate_period"] is not None else True,
+                    "auto_fail_on_deadline": r["auto_fail_on_deadline"] if r["auto_fail_on_deadline"] is not None else False,
+                    "forum_channel_ids": r["forum_channel_ids"] or [], 
+                    "self_intro_channel_ids": r["self_intro_channel_ids"] or []
+                } for r in rows])
+        except Exception as e:
+            print(f'[DB Error] Failed to fetch evaluation_settings: {e}')
+    return all_settings
 
 async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], self_intro_channel_ids: list[int], is_enabled: bool = True, auto_generate_period: bool = True, auto_fail_on_deadline: bool = False):
     p = await get_pool(guild_id)
@@ -1128,19 +1134,25 @@ async def get_rank_settings(guild_id: int) -> dict:
             return {"whitelist": [], "blacklist": [], "categories": [], "blacklist_categories": []}
 
 async def get_all_rank_settings() -> list[dict]:
-    p = await get_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM rank_settings')
-        return [
-            {
-                "guild_id": r["guild_id"],
-                "whitelist": r["whitelist_channel_ids"] or [],
-                "blacklist": r["blacklist_channel_ids"] or [],
-                "categories": r["whitelist_category_ids"] or [],
-                "blacklist_categories": r["blacklist_category_ids"] or []
-            }
-            for r in rows
-        ]
+    pools = await get_all_configured_pools()
+    all_settings = []
+    for p in pools:
+        try:
+            async with p.acquire() as conn:
+                rows = await conn.fetch('SELECT guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM rank_settings')
+                all_settings.extend([
+                    {
+                        "guild_id": r["guild_id"],
+                        "whitelist": r["whitelist_channel_ids"] or [],
+                        "blacklist": r["blacklist_channel_ids"] or [],
+                        "categories": r["whitelist_category_ids"] or [],
+                        "blacklist_categories": r["blacklist_category_ids"] or []
+                    }
+                    for r in rows
+                ])
+        except Exception as e:
+            print(f'[DB Error] Failed to fetch rank_settings: {e}')
+    return all_settings
 
 async def set_rank_settings(guild_id: int, whitelist_ids: list[int], blacklist_ids: list[int], category_ids: list[int], blacklist_category_ids: list[int]):
     p = await get_pool(guild_id)
@@ -1170,19 +1182,25 @@ async def get_vc_coins_settings(guild_id: int) -> dict:
             return {"whitelist": [], "blacklist": [], "categories": [], "blacklist_categories": []}
 
 async def get_all_vc_coins_settings() -> list[dict]:
-    p = await get_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_settings')
-        return [
-            {
-                "guild_id": r["guild_id"],
-                "whitelist": r["whitelist_channel_ids"] or [],
-                "blacklist": r["blacklist_channel_ids"] or [],
-                "categories": r["whitelist_category_ids"] or [],
-                "blacklist_categories": r["blacklist_category_ids"] or []
-            }
-            for r in rows
-        ]
+    pools = await get_all_configured_pools()
+    all_settings = []
+    for p in pools:
+        try:
+            async with p.acquire() as conn:
+                rows = await conn.fetch('SELECT guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_settings')
+                all_settings.extend([
+                    {
+                        "guild_id": r["guild_id"],
+                        "whitelist": r["whitelist_channel_ids"] or [],
+                        "blacklist": r["blacklist_channel_ids"] or [],
+                        "categories": r["whitelist_category_ids"] or [],
+                        "blacklist_categories": r["blacklist_category_ids"] or []
+                    }
+                    for r in rows
+                ])
+        except Exception as e:
+            print(f'[DB Error] Failed to fetch vc_coins_settings: {e}')
+    return all_settings
 
 async def set_vc_coins_settings(guild_id: int, whitelist_ids: list[int], blacklist_ids: list[int], category_ids: list[int], blacklist_category_ids: list[int]):
     p = await get_pool(guild_id)
@@ -1467,18 +1485,24 @@ async def get_antigrief_settings(guild_id: int) -> dict:
             return {"categories": [], "channels": [], "exempt_roles": []}
 
 async def get_all_antigrief_settings() -> list[dict]:
-    p = await get_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT guild_id, target_category_ids, target_channel_ids, exempt_role_ids FROM antigrief_settings')
-        return [
-            {
-                "guild_id": r["guild_id"],
-                "categories": r["target_category_ids"] or [],
-                "channels": r["target_channel_ids"] or [],
-                "exempt_roles": r["exempt_role_ids"] or []
-            }
-            for r in rows
-        ]
+    pools = await get_all_configured_pools()
+    all_settings = []
+    for p in pools:
+        try:
+            async with p.acquire() as conn:
+                rows = await conn.fetch('SELECT guild_id, target_category_ids, target_channel_ids, exempt_role_ids FROM antigrief_settings')
+                all_settings.extend([
+                    {
+                        "guild_id": r["guild_id"],
+                        "categories": r["target_category_ids"] or [],
+                        "channels": r["target_channel_ids"] or [],
+                        "exempt_roles": r["exempt_role_ids"] or []
+                    }
+                    for r in rows
+                ])
+        except Exception as e:
+            print(f'[DB Error] Failed to fetch antigrief_settings: {e}')
+    return all_settings
 
 async def set_antigrief_settings(guild_id: int, category_ids: list[int], channel_ids: list[int], exempt_role_ids: list[int]):
     p = await get_pool(guild_id)
@@ -1780,12 +1804,18 @@ async def get_top_users(guild_id: int, mode: str, limit: int = 10) -> list[dict]
             ''', guild_id, limit)
         return [{"user_id": r["user_id"], "level": r["level"], "xp": r["xp"]} for r in rows]
 async def get_expired_evaluation_periods() -> list:
-    p = await get_pool()
-    async with p.acquire() as conn:
-        now = get_now_naive()
-        rows = await conn.fetch('''
-            SELECT guild_id, user_id, start_time, end_time 
-            FROM evaluation_periods 
-            WHERE end_time < 
-        ''', now)
-        return [dict(row) for row in rows]
+    pools = await get_all_configured_pools()
+    now = get_now_naive()
+    all_expired = []
+    for p in pools:
+        try:
+            async with p.acquire() as conn:
+                rows = await conn.fetch('''
+                    SELECT guild_id, user_id, start_time, end_time 
+                    FROM evaluation_periods 
+                    WHERE end_time < $1
+                ''', now)
+                all_expired.extend([dict(row) for row in rows])
+        except Exception as e:
+            print(f'[DB Error] Failed to fetch expired evaluation periods: {e}')
+    return all_expired
