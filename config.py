@@ -338,7 +338,7 @@ async def send_economy_log(guild: discord.Guild, title: str, description: str, u
     await send_log(guild, "economy", embed)
 
 async def send_gambling_log(guild: discord.Guild, user: discord.Member, game_name: str, bet: int, count: int):
-    bal = await database.get_balance(user.id)
+    bal = await database.get_balance(guild.id, user.id)
     rem = 10 - count
     await send_economy_log(
         guild, 

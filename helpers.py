@@ -466,7 +466,7 @@ async def check_and_assign_level_coins(bot, member: discord.Member, level_type: 
             
     if coins_to_add > 0:
         try:
-            await database.add_balance(member.id, coins_to_add)
+            await database.add_balance(member.guild.id, member.id, coins_to_add)
             currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
             lv_channel_id = get_setting(bot, "LEVEL_UP_CHANNEL_ID")
             lv_channel = member.guild.get_channel(lv_channel_id)
