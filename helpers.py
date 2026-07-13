@@ -344,7 +344,7 @@ def get_room_price(bot, user: discord.Member, room_type: str, duration: int) -> 
             return 0
         return -1 # Should not happen usually, caught before
 
-    if room_type == "高級宿" and is_free_inn_member(bot, user):
+    if room_type == "宿" and is_free_inn_member(bot, user):
         return 0
 
     guild_id = user.guild.id if user and hasattr(user, "guild") else None
