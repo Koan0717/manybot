@@ -2593,8 +2593,9 @@ class Admin(commands.Cog):
     async def sync_commands(self, ctx):
         await ctx.send("コマンドを同期しています...")
         try:
-            synced = await self.bot.tree.sync()
-            await ctx.send(f"グローバルで {len(synced)} 個のコマンドを同期しました。Discordに反映されるまで少し時間がかかる場合があります。")
+            self.bot.tree.copy_global_to(guild=ctx.guild)
+            synced = await self.bot.tree.sync(guild=ctx.guild)
+            await ctx.send(f"このサーバーに {len(synced)} 個のコマンドを同期しました！\n※これで即座にDiscordへ反映されるはずです。")
         except Exception as e:
             await ctx.send(f"同期中にエラーが発生しました: {e}")
 

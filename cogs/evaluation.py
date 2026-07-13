@@ -386,6 +386,10 @@ class Evaluation(commands.Cog):
                                 forum_channel = await self.bot.fetch_channel(forum_id)
                             except Exception as e:
                                 print(f"[ERROR] Failed to fetch forum channel {forum_id}: {e}")
+                                try:
+                                    await message.channel.send(f"⚠️ {message.author.mention} エラー: フォーラムチャンネルにアクセスできません（権限不足）。Discord側でボットに「チャンネルを見る」権限を付与してください！", delete_after=15)
+                                except:
+                                    pass
                                 continue
 
                         if isinstance(forum_channel, discord.ForumChannel):
