@@ -1053,9 +1053,13 @@ async def get_panel_requests(guild_ids: list[int] = None) -> list[dict]:
     return all_requests
 
 async def delete_panel_request(request_id: int, guild_id: int):
-    p = await get_pool(guild_id)
-    async with p.acquire() as conn:
-        await conn.execute('DELETE FROM panel_requests WHERE id = $1', request_id)
+    pools = await get_all_configured_pools()
+    for p in pools:
+        try:
+            async with p.acquire() as conn:
+                await conn.execute('DELETE FROM panel_requests WHERE id = $1', request_id)
+        except Exception:
+            pass
 
 async def set_log_channel(guild_id: int, log_type: str, channel_id: int):
     p = await get_pool(guild_id)
