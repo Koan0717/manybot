@@ -184,8 +184,12 @@ class EconomyBot(commands.Bot):
         # ロール別部屋価格のキャッシュロード
         try:
             db_role_prices = await database.get_all_role_room_prices()
-            for rp in db_role_prices:
-                self.role_room_prices[(rp["role_key"], rp["room_type"], rp["duration"])] = rp["price"]
+            self.role_room_prices.clear()
+            for g_id, prices in db_role_prices.items():
+                if g_id not in self.role_room_prices:
+                    self.role_room_prices[g_id] = {}
+                for rp in prices:
+                    self.role_room_prices[g_id][(rp["role_key"], rp["room_type"], rp["duration"])] = rp["price"]
         except Exception as e:
             print(f"[ERROR] Failed to load role room prices from DB: {e}")
 

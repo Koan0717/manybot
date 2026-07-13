@@ -54,8 +54,11 @@ class IPC(commands.Cog):
                             self.bot.bot_settings = await database.load_settings()
                             db_role_prices = await database.get_all_role_room_prices()
                             self.bot.role_room_prices.clear()
-                            for rp in db_role_prices:
-                                self.bot.role_room_prices[(rp["role_key"], rp["room_type"], rp["duration"])] = rp["price"]
+                            for g_id, prices in db_role_prices.items():
+                                if g_id not in self.bot.role_room_prices:
+                                    self.bot.role_room_prices[g_id] = {}
+                                for rp in prices:
+                                    self.bot.role_room_prices[g_id][(rp["role_key"], rp["room_type"], rp["duration"])] = rp["price"]
                             await apply_bot_nicknames(self.bot)
                             print(f"[IPC] Reloaded bot_settings and role_room_prices")
                         except Exception as e:

@@ -349,7 +349,10 @@ def get_room_price(bot, user: discord.Member, room_type: str, duration: int) -> 
 
     guild_id = user.guild.id if user and hasattr(user, "guild") else None
     base_price = get_room_settings(bot, guild_id).get(room_type, {}).get(duration, {}).get("price", 0)
-    role_prices = getattr(bot, "role_room_prices", {})
+    all_role_prices = getattr(bot, "role_room_prices", {})
+    role_prices = all_role_prices.get(guild_id)
+    if role_prices is None:
+        role_prices = all_role_prices.get('default', {})
 
     # 1. 違反者
     if get_setting(bot, "ENABLE_PRICE_VIOLATOR") and is_violator_member(bot, user):

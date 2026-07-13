@@ -894,11 +894,37 @@ async def update_room_price(room_type: str, duration: int, price: int):
             DO UPDATE SET price = EXCLUDED.price
         ''', room_type, duration, price)
 
-async def get_all_role_room_prices() -> list[dict]:
-    p = await get_pool()
-    async with p.acquire() as conn:
-        rows = await conn.fetch('SELECT role_key, room_type, duration, price FROM role_room_prices ORDER BY role_key ASC, room_type ASC, duration ASC')
-        return [{"role_key": r["role_key"], "room_type": r["room_type"], "duration": r["duration"], "price": r["price"]} for r in rows]
+async def get_all_role_room_prices() -> dict:
+    results = {}
+    master = await get_master_pool()
+    
+    guild_urls = {}
+    try:
+        rows = await master.fetch("SELECT guild_id, database_url FROM guild_databases")
+        for r in rows:
+            guild_urls[r['guild_id']] = r['database_url']
+    except Exception:
+        pass
+        
+    for g_id, url in guild_urls.items():
+        if url not in pools:
+            pools[url] = await asyncpg.create_pool(url, statement_cache_size=0, min_size=1, max_size=10)
+        p = pools[url]
+        try:
+            async with p.acquire() as conn:
+                db_rows = await conn.fetch('SELECT role_key, room_type, duration, price FROM role_room_prices ORDER BY role_key ASC, room_type ASC, duration ASC')
+                results[g_id] = [{"role_key": r["role_key"], "room_type": r["room_type"], "duration": r["duration"], "price": r["price"]} for r in db_rows]
+        except Exception:
+            pass
+            
+    try:
+        async with master.acquire() as conn:
+            master_rows = await conn.fetch('SELECT role_key, room_type, duration, price FROM role_room_prices ORDER BY role_key ASC, room_type ASC, duration ASC')
+            results['default'] = [{"role_key": r["role_key"], "room_type": r["room_type"], "duration": r["duration"], "price": r["price"]} for r in master_rows]
+    except Exception:
+        pass
+        
+    return results
 
 async def save_role_room_price(role_key: str, room_type: str, duration: int, price: int):
     p = await get_pool()
