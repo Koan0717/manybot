@@ -1090,7 +1090,20 @@ class ManageLevelRolesButton(discord.ui.Button):
 
 # --- 部屋の価格設定 ---
 # --- 部屋の価格設定 ---
-class RoomPriceSelect(discord.ui.Select):
+class TargetRoleSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="共通価格", value="common"),
+            discord.SelectOption(label="評価落ち", value="DOWNGRADE_ROLE"),
+            discord.SelectOption(label="仮メンバー", value="NEW_MEMBER_ROLE"),
+            discord.SelectOption(label="本・準メンバー", value="MAIN_SUB_MEMBER_ROLE")
+        ]
+        super().__init__(placeholder="価格を設定する対象を選択...", options=options, row=0)
+    async def callback(self, interaction: discord.Interaction):
+        self.view.selected_target = self.values[0]
+        await interaction.response.defer(ephemeral=True)
+
+class RoomTypeSelect(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="一般宿 (12時間)", value="宿:12"),
@@ -1101,17 +1114,11 @@ class RoomPriceSelect(discord.ui.Select):
             discord.SelectOption(label="ゲームVC (12時間)", value="ゲームVC:12"),
             discord.SelectOption(label="ゲームVC (24時間)", value="ゲームVC:24"),
             discord.SelectOption(label="賭博VC (12時間)", value="賭博VC:12"),
-            discord.SelectOption(label="賭博VC (24時間)", value="賭博VC:24"),
-            discord.SelectOption(label="評価落ち用 高級宿 (12時間)", value="role:DOWNGRADE_ROLE:高級宿:12"),
-            discord.SelectOption(label="評価落ち用 高級宿 (24時間)", value="role:DOWNGRADE_ROLE:高級宿:24"),
-            discord.SelectOption(label="仮メンバー用 高級宿 (12時間)", value="role:NEW_MEMBER_ROLE:高級宿:12"),
-            discord.SelectOption(label="仮メンバー用 高級宿 (24時間)", value="role:NEW_MEMBER_ROLE:高級宿:24"),
-            discord.SelectOption(label="本・準メン用 高級宿 (12時間)", value="role:MAIN_SUB_MEMBER_ROLE:高級宿:12"),
-            discord.SelectOption(label="本・準メン用 高級宿 (24時間)", value="role:MAIN_SUB_MEMBER_ROLE:高級宿:24")
+            discord.SelectOption(label="賭博VC (24時間)", value="賭博VC:24")
         ]
-        super().__init__(placeholder="価格を変更する部屋種別を選択...", options=options, row=0)
+        super().__init__(placeholder="価格を設定する部屋種別を選択...", options=options, row=1)
     async def callback(self, interaction: discord.Interaction):
-        self.view.selected_item = self.values[0]
+        self.view.selected_room = self.values[0]
         await interaction.response.defer(ephemeral=True)
 
 class PriceInputModal(discord.ui.Modal, title='新しい価格の入力'):
@@ -1125,14 +1132,16 @@ class PriceInputModal(discord.ui.Modal, title='新しい価格の入力'):
             bot = interaction.client
             price = int(self.price_input.value)
             if price < 0: raise ValueError
-            parts = self.view_ref.selected_item.split(":")
+            
+            target = self.view_ref.selected_target
+            room = self.view_ref.selected_room
+            rtype, dur_str = room.split(":")
+            dur = int(dur_str)
             
             currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
             
-            if parts[0] == "role":
-                role_key = parts[1]
-                rtype = parts[2]
-                dur = int(parts[3])
+            if target != "common":
+                role_key = target
                 await database.save_role_room_price(role_key, rtype, dur, price)
                 bot.role_room_prices[(role_key, rtype, dur)] = price
                 
@@ -1144,7 +1153,6 @@ class PriceInputModal(discord.ui.Modal, title='新しい価格の入力'):
                 role_label = role_labels.get(role_key, role_key)
                 await interaction.response.send_message(f"✅ 更新しました: {role_label}用 {rtype} ({dur}時間) ➔ {price:,} {currency_name}", ephemeral=True)
             else:
-                rtype, dur = parts[0], int(parts[1])
                 await database.update_room_price(rtype, dur, price)
                 await interaction.response.send_message(f"✅ 更新しました: {rtype} ({dur}時間) ➔ {price:,} {currency_name}", ephemeral=True)
                 
@@ -1155,23 +1163,42 @@ class PriceInputModal(discord.ui.Modal, title='新しい価格の入力'):
             print(f"[ERROR] PriceInputModal submission error: {e}")
             await interaction.response.send_message(f"❌ システムエラーが発生しました: {e}", ephemeral=True)
 
-class RoomPricesConfigView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=180)
-        self.selected_item = None
-        self.add_item(RoomPriceSelect())
-        self.add_item(BackToAdminPanelButton(row=2))
+class FreeInnToggleBtn(discord.ui.Button):
+    def __init__(self, is_enabled: bool):
+        lbl = "本メン・準メン宿無料化: ON" if is_enabled else "本メン・準メン宿無料化: OFF"
+        st = discord.ButtonStyle.success if is_enabled else discord.ButtonStyle.secondary
+        super().__init__(label=lbl, style=st, row=3, custom_id="free_inn_toggle")
+    async def callback(self, interaction: discord.Interaction):
+        bot = interaction.client
+        guild_id = interaction.guild.id if interaction.guild else None
+        current = get_setting(bot, "ENABLE_FREE_INN_MAIN_SUB") or False
+        new_val = not current
+        update_setting(bot, "ENABLE_FREE_INN_MAIN_SUB", new_val)
+        if guild_id:
+            await database.save_bot_setting(guild_id, "ENABLE_FREE_INN_MAIN_SUB", "true" if new_val else "false")
+        await update_room_prices_config_view(interaction)
 
-    @discord.ui.button(label="価格を入力する", style=discord.ButtonStyle.success, row=1)
+class RoomPricesConfigView(discord.ui.View):
+    def __init__(self, bot):
+        super().__init__(timeout=180)
+        self.selected_target = None
+        self.selected_room = None
+        self.add_item(TargetRoleSelect())
+        self.add_item(RoomTypeSelect())
+        
+        is_free = get_setting(bot, "ENABLE_FREE_INN_MAIN_SUB") or False
+        self.add_item(FreeInnToggleBtn(is_free))
+        self.add_item(BackToAdminPanelButton(row=3))
+
+    @discord.ui.button(label="価格を入力する", style=discord.ButtonStyle.primary, row=2)
     async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.selected_item:
-            return await interaction.response.send_message("部屋種別を選択してください。", ephemeral=True)
+        if not getattr(self, "selected_target", None) or not getattr(self, "selected_room", None):
+            return await interaction.response.send_message("対象と部屋種別の両方を選択してください。", ephemeral=True)
         await interaction.response.send_modal(PriceInputModal(self))
 
 async def update_room_prices_config_view(interaction: discord.Interaction):
     bot = interaction.client
     prices = await database.get_all_room_prices()
-    role_prices = await database.get_all_role_room_prices()
     
     embed = discord.Embed(title="⚙️ 部屋の価格設定", description="宿やカスタムVCのレンタル料金を管理します。", color=discord.Color.blue())
     
@@ -1179,6 +1206,12 @@ async def update_room_prices_config_view(interaction: discord.Interaction):
     text = ""
     for p in prices:
         text += f"・{p['room_type']} ({p['duration']}時間) ➔ **{p['price']:,} {currency_name}**\n"
+        
+    all_role_prices = await database.get_all_role_room_prices()
+    guild_id = interaction.guild.id if interaction.guild else None
+    role_prices = all_role_prices.get(guild_id)
+    if not role_prices:
+        role_prices = all_role_prices.get('default', [])
         
     if role_prices:
         role_key_names = {
@@ -1192,7 +1225,7 @@ async def update_room_prices_config_view(interaction: discord.Interaction):
             text += f" ・{role_label}用 {rp['room_type']} ({rp['duration']}時間) ➔ **{rp['price']:,} {currency_name}**\n"
         
     embed.add_field(name="現在の価格設定一覧", value=text or "設定なし", inline=False)
-    view = RoomPricesConfigView()
+    view = RoomPricesConfigView(bot)
     try:
         await interaction.response.edit_message(embed=embed, view=view)
     except discord.InteractionResponded:
@@ -2291,34 +2324,75 @@ class AdminGroup(app_commands.Group):
         deleted = await interaction.channel.purge(limit=count)
         await interaction.followup.send(f"🧹 メッセージを {len(deleted)} 件削除しました。", ephemeral=True)
 
-    @app_commands.command(name="手動給与", description="【運営専用】指定したユーザーに通貨を直接発行して付与します")
+    @app_commands.command(name="手動給与", description="【運営専用】指定したユーザーまたはロール全員に通貨を直接発行して付与します")
     @is_admin_or_banker()
-    @app_commands.describe(user="付与するユーザー", amount="金額")
-    async def manual_issue(self, interaction: discord.Interaction, user: discord.Member, amount: int):
+    @app_commands.describe(amount="金額", user="付与するユーザー（任意）", role="付与するロール（任意）")
+    async def manual_issue(self, interaction: discord.Interaction, amount: int, user: discord.Member = None, role: discord.Role = None):
         await interaction.response.defer()
         if amount <= 0:
             return await interaction.followup.send("❌ 1以上の金額を指定してください。", ephemeral=True)
-        new_bal = await database.add_balance(interaction.guild.id, user.id, amount)
-        cur_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
-        await interaction.followup.send(f"💵 {user.mention} に **{amount} {cur_name}** を付与しました。")
+            
+        if not user and not role:
+            return await interaction.followup.send("❌ ユーザーまたはロールのいずれかを指定してください。", ephemeral=True)
 
-        # 通貨ログの送信
-        embed = discord.Embed(
-            title="💵 手動給与 (運営)",
-            description="運営による手動給与が行われました。",
-            color=discord.Color.green(),
-            timestamp=discord.utils.utcnow()
-        )
-        embed.add_field(name="実行者", value=f"{interaction.user.mention} ({interaction.user.id})", inline=True)
-        embed.add_field(name="対象者", value=f"{user.mention} ({user.id})", inline=True)
-        embed.add_field(name="付与額", value=f"{amount:,} {cur_name}", inline=True)
-        await send_log(self.bot, interaction.guild, "currency", embed)
+        cur_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
+        minus_target_ids = get_setting(self.bot, "MINUS_TARGET_ROLE_IDS") or []
         
-        if new_bal < 0:
-            minus_target_ids = get_setting(self.bot, "MINUS_TARGET_ROLE_IDS") or []
-            member_roles = [r.id for r in user.roles]
-            if any(rid in minus_target_ids for rid in member_roles):
-                await trigger_evaluation_failure(interaction.guild, user, "通貨マイナスになったため", interaction.user, self.bot)
+        # ユーザー指定がある場合
+        if user:
+            new_bal = await database.add_balance(interaction.guild.id, user.id, amount)
+            await interaction.followup.send(f"💵 {user.mention} に **{amount} {cur_name}** を付与しました。")
+            
+            embed = discord.Embed(
+                title="💵 手動給与 (運営)",
+                description="運営による手動給与が行われました。",
+                color=discord.Color.green(),
+                timestamp=discord.utils.utcnow()
+            )
+            embed.add_field(name="実行者", value=f"{interaction.user.mention} ({interaction.user.id})", inline=True)
+            embed.add_field(name="対象者", value=f"{user.mention} ({user.id})", inline=True)
+            embed.add_field(name="付与額", value=f"{amount:,} {cur_name}", inline=True)
+            await send_log(self.bot, interaction.guild, "currency", embed)
+            
+            if new_bal < 0:
+                member_roles = [r.id for r in user.roles]
+                if any(rid in minus_target_ids for rid in member_roles):
+                    await trigger_evaluation_failure(interaction.guild, user, "通貨マイナスになったため", interaction.user, self.bot)
+
+        # ロール指定がある場合
+        if role:
+            members = role.members
+            if not members:
+                # ユーザー指定がなくてロールの対象者が0の場合のみエラーメッセージを出すなど調整
+                if not user:
+                    await interaction.followup.send(f"❌ {role.name} ロールを持つメンバーが見つかりませんでした。")
+                return
+
+            success_count = 0
+            for member in members:
+                new_bal = await database.add_balance(interaction.guild.id, member.id, amount)
+                success_count += 1
+                if new_bal < 0:
+                    member_roles = [r.id for r in member.roles]
+                    if any(rid in minus_target_ids for rid in member_roles):
+                        await trigger_evaluation_failure(interaction.guild, member, "通貨マイナスになったため", interaction.user, self.bot)
+
+            # ユーザー指定も行われていた場合は追加でメッセージ送信、ロールのみなら単独で送信
+            if user:
+                await interaction.channel.send(f"💵 さらに、{role.mention} を持つ **{success_count}名** にも **{amount} {cur_name}** を一括付与しました。")
+            else:
+                await interaction.followup.send(f"💵 {role.mention} を持つ **{success_count}名** に **{amount} {cur_name}** を一括付与しました。")
+            
+            embed = discord.Embed(
+                title="💵 手動給与 (運営) - ロール一括",
+                description="運営による手動給与（ロール一括）が行われました。",
+                color=discord.Color.green(),
+                timestamp=discord.utils.utcnow()
+            )
+            embed.add_field(name="実行者", value=f"{interaction.user.mention} ({interaction.user.id})", inline=True)
+            embed.add_field(name="対象ロール", value=f"{role.mention} ({success_count}名)", inline=True)
+            embed.add_field(name="付与額", value=f"{amount:,} {cur_name}", inline=True)
+            await send_log(self.bot, interaction.guild, "currency", embed)
 
     @app_commands.command(name="手動没収", description="【運営専用】指定したユーザーから通貨を直接没収（減額）します")
     @is_admin_or_banker()

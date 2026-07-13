@@ -11,7 +11,7 @@ export async function GET(
   const pool = await getPool(guildId);
   try {
     const result = await pool.query(
-      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ROOM_PRICES', 'ENABLE_PRICE_MAIN_SUB', 'ENABLE_PRICE_NEW_MEMBER', 'ENABLE_PRICE_DOWNGRADE', 'ENABLE_PRICE_VIOLATOR')",
+      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ROOM_PRICES', 'ENABLE_PRICE_MAIN_SUB', 'ENABLE_PRICE_NEW_MEMBER', 'ENABLE_PRICE_DOWNGRADE', 'ENABLE_PRICE_VIOLATOR', 'ENABLE_FREE_INN_MAIN_SUB')",
       [guildId]
     );
 
@@ -21,7 +21,8 @@ export async function GET(
       ENABLE_PRICE_MAIN_SUB: false,
       ENABLE_PRICE_NEW_MEMBER: false,
       ENABLE_PRICE_DOWNGRADE: false,
-      ENABLE_PRICE_VIOLATOR: false
+      ENABLE_PRICE_VIOLATOR: false,
+      ENABLE_FREE_INN_MAIN_SUB: false
     };
 
     for (const row of result.rows) {

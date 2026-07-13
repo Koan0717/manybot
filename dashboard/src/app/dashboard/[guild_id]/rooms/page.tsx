@@ -37,7 +37,8 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
     ENABLE_PRICE_MAIN_SUB: false,
     ENABLE_PRICE_NEW_MEMBER: false,
     ENABLE_PRICE_DOWNGRADE: false,
-    ENABLE_PRICE_VIOLATOR: false
+    ENABLE_PRICE_VIOLATOR: false,
+    ENABLE_FREE_INN_MAIN_SUB: false
   });
   
   const defaultRolePrices = {
@@ -272,6 +273,31 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
           特定のロールを持っているユーザーに対して、基本料金とは異なる特別料金を適用できます。
           スイッチをオンにしたロールの料金設定が優先して適用されます。
         </p>
+
+        {/* --- 本メン・準メン宿無料化設定 --- */}
+        <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-lg text-white">本・準メンバーの宿無料化</h3>
+              <p className="text-sm text-zinc-400 mt-1">
+                これを有効にすると、本メンバー・準メンバーが一般宿を作成・延長する際の料金が0になります。（別々価格より優先されます）
+              </p>
+            </div>
+            <label className="flex items-center cursor-pointer ml-4">
+              <div className="relative">
+                <input type="checkbox" className="sr-only" 
+                  checked={toggles.ENABLE_FREE_INN_MAIN_SUB}
+                  onChange={(e) => setToggles({...toggles, ENABLE_FREE_INN_MAIN_SUB: e.target.checked})}
+                />
+                <div className={`block w-14 h-8 rounded-full transition-colors ${toggles.ENABLE_FREE_INN_MAIN_SUB ? 'bg-red-500' : 'bg-zinc-600'}`}></div>
+                <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${toggles.ENABLE_FREE_INN_MAIN_SUB ? 'transform translate-x-6' : ''}`}></div>
+              </div>
+              <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap">
+                {toggles.ENABLE_FREE_INN_MAIN_SUB ? '有効' : '無効'}
+              </div>
+            </label>
+          </div>
+        </div>
 
         <div className="space-y-6">
           {[
