@@ -22,6 +22,8 @@ export default function DashboardLayout({
   const [isSubAccount, setIsSubAccount] = useState(false);
   const router = useRouter();
 
+  const [isActivity, setIsActivity] = useState(false);
+
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
@@ -29,6 +31,9 @@ export default function DashboardLayout({
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.parent !== window) {
+      setIsActivity(true);
+    }
     Promise.all([
       fetch(`/api/guilds/${guildId}/status`).then(res => res.json()),
       fetch('/api/auth/check').then(res => res.json())
@@ -105,7 +110,7 @@ export default function DashboardLayout({
   return (
     <div className="flex flex-col md:flex-row h-screen min-h-screen bg-zinc-950 text-white overflow-hidden">
       {/* Mobile Header */}
-      <header className="md:hidden flex-none flex items-center justify-between bg-zinc-900 border-b border-zinc-800 p-4 z-30">
+      <header className={`md:hidden flex-none flex items-center justify-between bg-zinc-900 border-b border-zinc-800 p-4 z-30 ${isActivity ? 'pt-16' : ''}`}>
         <div>
           <h2 className="font-bold text-red-500 text-lg">
             Many bot <span className="text-sm font-normal text-zinc-300 ml-2">{status?.guild_name || ''}</span>
