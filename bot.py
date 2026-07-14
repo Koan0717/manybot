@@ -336,6 +336,27 @@ async def on_voice_state_update(member, before, after):
     except Exception as global_e:
         print(f"CRITICAL ERROR in on_voice_state_update: {global_e}")
 
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def sync(ctx):
+    """【運営用】スラッシュコマンドをグローバルに即時同期します"""
+    try:
+        synced = await bot.tree.sync()
+        await ctx.send(f"✅ グローバルコマンドを {len(synced)} 個同期しました。\n（※すべてのサーバーに反映されるまで最大1時間かかる場合があります）")
+    except Exception as e:
+        await ctx.send(f"❌ エラーが発生しました: {e}")
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def sync_guild(ctx):
+    """【運営用】スラッシュコマンドを現在のサーバー限定で即時同期します"""
+    try:
+        bot.tree.copy_global_to(guild=ctx.guild)
+        synced = await bot.tree.sync(guild=ctx.guild)
+        await ctx.send(f"✅ このサーバー限定でコマンドを {len(synced)} 個同期しました。\n（※すぐに使えるようになります。念のためCtrl+Rで再読み込みしてください）")
+    except Exception as e:
+        await ctx.send(f"❌ エラーが発生しました: {e}")
+
 if __name__ == "__main__":
     if TOKEN:
         discord.utils.setup_logging()
