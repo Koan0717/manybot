@@ -645,14 +645,14 @@ async def setup_db_schema(p):
         try:
 
             try:
-            await conn.execute('ALTER TABLE rank_settings ADD COLUMN IF NOT EXISTS enable_exclude_rank_role BOOLEAN NOT NULL DEFAULT FALSE')
-        except Exception as e:
-            pass
-        try:
-            await conn.execute('ALTER TABLE rank_settings ADD COLUMN IF NOT EXISTS exclude_rank_role_ids BIGINT[] NOT NULL DEFAULT \'{}\')')
-        except Exception as e:
-            pass
-        await conn.execute('ALTER TABLE rank_settings ADD COLUMN IF NOT EXISTS whitelist_category_ids BIGINT[] NOT NULL DEFAULT \'{}\'')
+                await conn.execute('ALTER TABLE rank_settings ADD COLUMN IF NOT EXISTS enable_exclude_rank_role BOOLEAN NOT NULL DEFAULT FALSE')
+            except Exception as e:
+                pass
+            try:
+                await conn.execute('ALTER TABLE rank_settings ADD COLUMN IF NOT EXISTS exclude_rank_role_ids BIGINT[] NOT NULL DEFAULT \'{}\'')
+            except Exception as e:
+                pass
+            await conn.execute('ALTER TABLE rank_settings ADD COLUMN IF NOT EXISTS whitelist_category_ids BIGINT[] NOT NULL DEFAULT \'{}\'')
 
         except Exception as e:
 
