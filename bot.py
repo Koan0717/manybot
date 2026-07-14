@@ -9,8 +9,9 @@ import database
 from keep_alive import keep_alive
 from helpers import (
     JST,
-    get_setting, is_rank_eligible, is_vc_coins_eligible, check_and_assign_level_roles, send_log
+    get_setting, is_rank_eligible, is_vc_coins_eligible, send_log
 )
+import config
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -215,7 +216,6 @@ class EconomyBot(commands.Bot):
             "cogs.evaluation",
             "cogs.utility",
             "cogs.points",
-            "cogs.dashboard_launcher",
             "cogs.ipc",
             "cogs.logging_cog",
             "cogs.ranking",
@@ -322,7 +322,7 @@ async def on_voice_state_update(member, before, after):
                             lv_channel = bot.get_channel(get_setting(bot, "LEVEL_UP_CHANNEL_ID"))
                             if lv_channel:
                                 await lv_channel.send(f"🎊 {member.mention} が **VCレベルアップ！** (Lv.{new_lv-1} ➔ **{new_lv}**)")
-                            await check_and_assign_level_roles(bot, member, "vc", new_lv)
+                            await config.check_and_assign_level_roles(bot, member, "vc", new_lv)
                             
                     enable_vc_coins = get_setting(bot, "ENABLE_VC_COINS")
                     if enable_vc_coins is None: enable_vc_coins = True

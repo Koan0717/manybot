@@ -308,6 +308,9 @@ async def check_and_assign_level_roles(bot, member: discord.Member, level_type: 
             if r["level"] <= new_level:
                 target_level = max(target_level, r["level"])
 
+        if target_level == -1:
+            return
+
         roles_to_add = []
         roles_to_remove = []
 
@@ -316,23 +319,27 @@ async def check_and_assign_level_roles(bot, member: discord.Member, level_type: 
             if not role: continue
 
             if r["level"] == target_level:
-                if role not in member.roles:
-                    roles_to_add.append(role)
+                roles_to_add.append(role)
             else:
-                if role in member.roles:
-                    roles_to_remove.append(role)
+                roles_to_remove.append(role)
 
-        if roles_to_remove:
-            await member.remove_roles(*roles_to_remove, reason=f"{level_type.upper()}レベル更新 (古いロールの解除)")
-        if roles_to_add:
-            await member.add_roles(*roles_to_add, reason=f"{level_type.upper()}レベル到達報酬 (Lv.{new_level})")
+        new_roles = [r for r in member.roles if r not in roles_to_remove]
+        added_any = False
+        for r in roles_to_add:
+            if r not in new_roles:
+                new_roles.append(r)
+                added_any = True
+
+        if set(new_roles) != set(member.roles):
+            await member.edit(roles=new_roles, reason=f"{level_type.upper()}レベル更新 (Lv.{new_level})")
             
-            role_mentions = ", ".join([role.mention for role in roles_to_add])
-            lv_channel_id = get_setting(bot, "LEVEL_UP_CHANNEL_ID", member.guild.id)
-            if lv_channel_id:
-                lv_channel = member.guild.get_channel(lv_channel_id)
-                if lv_channel:
-                    await lv_channel.send(f"🎁 {member.mention} が {level_type.upper()} レベル {new_level} に到達したため、以下のロールが付与されました！\n{role_mentions}")
+            if added_any and roles_to_add:
+                role_mentions = ", ".join([role.mention for role in roles_to_add])
+                lv_channel_id = get_setting(bot, "LEVEL_UP_CHANNEL_ID", member.guild.id)
+                if lv_channel_id:
+                    lv_channel = member.guild.get_channel(lv_channel_id)
+                    if lv_channel:
+                        await lv_channel.send(f"🎁 {member.mention} が {level_type.upper()} レベル {new_level} に到達したため、以下のロールが付与されました！\n{role_mentions}")
                     
     except Exception as e:
         print(f"[ERROR] check_and_assign_level_roles for {member.display_name}: {e}")

@@ -7,9 +7,9 @@ from discord import app_commands
 import datetime
 import database
 from helpers import (
-    get_setting, send_log, is_rank_eligible,
-    check_and_assign_level_roles, check_and_assign_level_coins
+    get_setting, send_log, is_rank_eligible
 )
+import config
 from config import JST
 import time
 
@@ -52,8 +52,7 @@ class Leveling(commands.Cog):
                         f"🎊 {message.author.mention} が **TCレベルアップ！** "
                         f"(Lv.{new_lv-1} → **{new_lv}**)"
                     )
-            await check_and_assign_level_roles(self.bot, message.author, "tc", new_lv)
-            await check_and_assign_level_coins(self.bot, message.author, "tc", new_lv)
+            await config.check_and_assign_level_roles(self.bot, message.author, "tc", new_lv)
 
     # ============================================================
     # /デイリー コマンド

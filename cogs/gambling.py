@@ -2090,8 +2090,11 @@ class GambleSettingsBackButton(discord.ui.Button):
         if interaction.user != view.user:
             return await interaction.response.send_message("操作権限がありません。", ephemeral=True)
         if self.back_to == "admin":
-            from cogs.admin import update_main_admin_panel
-            await update_main_admin_panel(interaction)
+            await interaction.response.send_message("このパネルは無効になりました。メッセージを削除してください。", ephemeral=True)
+            try:
+                await interaction.message.delete()
+            except:
+                pass
         elif self.back_to == "employee":
             await interaction.response.defer()
             from cogs.gambling import GambleEmployeePanelView
