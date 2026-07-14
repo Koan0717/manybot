@@ -662,9 +662,16 @@ class CustomTicketPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
+        try:
+            await interaction.response.send_message(f"エラーが発生しました: {error}", ephemeral=True)
+        except:
+            pass
+
     @discord.ui.button(style=discord.ButtonStyle.primary, custom_id="persistent_custom_ticket_panel_btn")
     async def request_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        panel = await database.get_custom_ticket_panel(interaction.channel.id)
+        channel_id = interaction.channel_id or interaction.channel.id
+        panel = await database.get_custom_ticket_panel(channel_id)
         if not panel:
             return await interaction.response.send_message("❌ パネルの設定が見つかりません。設定が削除された可能性があります。", ephemeral=True)
             
@@ -757,7 +764,7 @@ class CustomTicketRequestModal(discord.ui.Modal):
     details = discord.ui.TextInput(label="ご用件・相談内容の詳細", style=discord.TextStyle.paragraph, placeholder="内容を詳しく入力してください。", required=True, max_length=1000)
 
     def __init__(self, target_member, panel, extra_member=None):
-        title = panel["panel_title"]
+        title = panel.get("panel_title") or "カスタムチケット"
         if len(title) > 45:
             title = title[:42] + "..."
         super().__init__(title=title)
