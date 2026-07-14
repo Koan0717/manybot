@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import database
-from helpers import get_setting, has_admin_role, has_banker_role, send_log
+from helpers import get_setting, has_admin_role, has_banker_role, has_interviewer_role, send_log
 
 class Economy(commands.Cog):
     def __init__(self, bot):
@@ -53,7 +53,7 @@ class Economy(commands.Cog):
     @app_commands.command(name="初期発行", description="指定したユーザー達、またはロール全員に初期発行額の通貨を付与します。")
     @app_commands.describe(users_mentions="付与するユーザーのメンションを複数指定（任意）", role="付与するロール（全員に付与）（任意）")
     async def initial_issue(self, interaction: discord.Interaction, users_mentions: str = None, role: discord.Role = None):
-        if not (has_admin_role(self.bot, interaction.user) or has_banker_role(self.bot, interaction.user)):
+        if not (has_admin_role(self.bot, interaction.user) or has_banker_role(self.bot, interaction.user) or has_interviewer_role(self.bot, interaction.user)):
             await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
             return
 
