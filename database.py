@@ -3772,6 +3772,8 @@ async def get_all_interviewer_stats(guild_id: int):
 
         return [{"interviewer_id": str(r['interviewer_id']), "total_handled": r['total_handled']} for r in rows]
 
+
+
 async def update_available_commands(commands_to_sync: list):
     p = await get_master_pool()
     async with p.acquire() as conn:
@@ -3782,4 +3784,3 @@ async def update_available_commands(commands_to_sync: list):
                 ON CONFLICT (command_name) DO UPDATE 
                 SET description = EXCLUDED.description, category = EXCLUDED.category
             ''', cmd['name'], cmd['description'], cmd['category'])
-
