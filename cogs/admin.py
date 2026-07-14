@@ -635,8 +635,20 @@ class ClearBlacklistCatButton(discord.ui.Button):
         await bot.fetch_and_cache_rank_config(interaction.guild.id)
         await update_rank_settings_config_view(interaction)
 
+class ToggleEphemeralRankCommandsButton(discord.ui.Button):
+    def __init__(self, current_val: bool):
+        label = "ランクコマンド: 秘匿" if current_val else "ランクコマンド: 公開"
+        style = discord.ButtonStyle.success if current_val else discord.ButtonStyle.secondary
+        super().__init__(label=label, style=style, row=3)
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        bot = interaction.client
+        await database.toggle_ephemeral_rank_commands(interaction.guild.id)
+        await bot.fetch_and_cache_rank_config(interaction.guild.id)
+        await update_rank_settings_config_view(interaction)
+
 class RankSettingsConfigView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, cfg: dict):
         super().__init__(timeout=180)
         self.add_item(WhitelistChannelSelect())
         self.add_item(WhitelistCategorySelect())
@@ -646,6 +658,7 @@ class RankSettingsConfigView(discord.ui.View):
         self.add_item(ClearWhitelistCatButton())
         self.add_item(ClearBlacklistCHButton())
         self.add_item(ClearBlacklistCatButton())
+        self.add_item(ToggleEphemeralRankCommandsButton(cfg.get("ephemeral_rank_commands", False)))
         self.add_item(BackToAdminPanelButton(row=4))
 
 async def update_rank_settings_config_view(interaction: discord.Interaction):
@@ -670,7 +683,10 @@ async def update_rank_settings_config_view(interaction: discord.Interaction):
     embed.add_field(name="BL（除外）チャンネル", value=", ".join(bl_ch) if bl_ch else "なし", inline=False)
     embed.add_field(name="BL（除外）カテゴリー", value=", ".join(bl_cat) if bl_cat else "なし", inline=False)
     
-    view = RankSettingsConfigView()
+    eph_status = "オン（自分にのみ表示）" if cfg.get("ephemeral_rank_commands", False) else "オフ（全員に表示）"
+    embed.add_field(name="ランクコマンドの秘匿設定", value=eph_status, inline=False)
+    
+    view = RankSettingsConfigView(cfg)
     try:
         await interaction.response.edit_message(embed=embed, view=view)
     except discord.InteractionResponded:

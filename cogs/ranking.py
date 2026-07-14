@@ -19,8 +19,11 @@ class Ranking(commands.Cog):
     @rank_group.command(name="info", description="自分または他ユーザーのランク（レベル）を表示します")
     async def rank_info(self, interaction: discord.Interaction, user: discord.Member = None):
         try:
-            await interaction.response.defer()
-        except:
+            settings = await database.get_rank_settings(interaction.guild_id)
+            is_ephemeral = settings.get("ephemeral_rank_commands", False)
+            await interaction.response.defer(ephemeral=is_ephemeral)
+        except Exception as e:
+            print(f"[Ranking Cog] defer error: {e}")
             return
 
         try:
@@ -224,7 +227,9 @@ class Ranking(commands.Cog):
         await self._show_ranking(interaction, "vc")
 
     async def _show_ranking(self, interaction: discord.Interaction, mode: str):
-        await interaction.response.defer()
+        settings = await database.get_rank_settings(interaction.guild_id)
+        is_ephemeral = settings.get("ephemeral_rank_commands", False)
+        await interaction.response.defer(ephemeral=is_ephemeral)
         try:
             top_users = await database.get_top_users(interaction.guild_id, mode, 10)
             
