@@ -50,7 +50,7 @@ class EconomyBot(commands.Bot):
 
     def get_rank_config(self, guild_id: int) -> dict:
         if guild_id not in self.rank_settings_cache:
-            return {"whitelist": set(), "blacklist": set(), "categories": set(), "blacklist_categories": set()}
+            return {"whitelist": set(), "blacklist": set(), "categories": set(), "blacklist_categories": set(), "enable_exclude_rank_role": False, "exclude_rank_role_ids": set()}
         return self.rank_settings_cache[guild_id]
 
     async def fetch_and_cache_rank_config(self, guild_id: int) -> dict:
@@ -59,13 +59,15 @@ class EconomyBot(commands.Bot):
             "whitelist": set(data.get("whitelist", [])),
             "blacklist": set(data.get("blacklist", [])),
             "categories": set(data.get("categories", [])),
-            "blacklist_categories": set(data.get("blacklist_categories", []))
+            "blacklist_categories": set(data.get("blacklist_categories", [])),
+            "enable_exclude_rank_role": data.get("enable_exclude_rank_role", False),
+            "exclude_rank_role_ids": set(data.get("exclude_rank_role_ids", []))
         }
         return self.rank_settings_cache[guild_id]
 
     def get_vc_coins_config(self, guild_id: int) -> dict:
         if guild_id not in self.vc_coins_settings_cache:
-            return {"whitelist": set(), "blacklist": set(), "categories": set(), "blacklist_categories": set()}
+            return {"whitelist": set(), "blacklist": set(), "categories": set(), "blacklist_categories": set(), "enable_exclude_rank_role": False, "exclude_rank_role_ids": set()}
         return self.vc_coins_settings_cache[guild_id]
 
     async def fetch_and_cache_vc_coins_config(self, guild_id: int) -> dict:
@@ -74,7 +76,9 @@ class EconomyBot(commands.Bot):
             "whitelist": set(data.get("whitelist", [])),
             "blacklist": set(data.get("blacklist", [])),
             "categories": set(data.get("categories", [])),
-            "blacklist_categories": set(data.get("blacklist_categories", []))
+            "blacklist_categories": set(data.get("blacklist_categories", [])),
+            "enable_exclude_rank_role": data.get("enable_exclude_rank_role", False),
+            "exclude_rank_role_ids": set(data.get("exclude_rank_role_ids", []))
         }
         return self.vc_coins_settings_cache[guild_id]
 

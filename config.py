@@ -291,9 +291,10 @@ async def check_and_assign_level_roles(bot, member: discord.Member, level_type: 
                             await lv_channel.send(f"🪙 {member.mention} が {level_type.upper()} レベル {new_level} に到達したボーナスとして、**{cr['coins']} {currency}** を獲得しました！")
 
         # --- Role Rewards ---
-        exclude_enabled = get_setting(bot, "ENABLE_EXCLUDE_RANK_ROLE", member.guild.id)
+        cfg = bot.get_rank_config(member.guild.id)
+        exclude_enabled = cfg.get("enable_exclude_rank_role", False)
         if str(exclude_enabled).lower() in ["true", "1", "yes", "on", "True"]:
-            exclude_role_ids = get_setting(bot, "EXCLUDE_RANK_ROLE_IDS", member.guild.id) or []
+            exclude_role_ids = cfg.get("exclude_rank_role_ids", [])
             member_role_ids = [r.id for r in member.roles]
             if any(r_id in exclude_role_ids for r_id in member_role_ids):
                 return

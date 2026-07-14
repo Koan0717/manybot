@@ -10,10 +10,13 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
     whitelist_channel_ids: [],
     blacklist_channel_ids: [],
     whitelist_category_ids: [],
-    blacklist_category_ids: []
+    blacklist_category_ids: [],
+    ENABLE_EXCLUDE_RANK_ROLE: false,
+    EXCLUDE_RANK_ROLE_IDS: []
   });
   
   const [channels, setChannels] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,17 +24,23 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
   useEffect(() => {
     Promise.all([
       fetch(`/api/guilds/${guildId}/rank`).then(res => res.ok ? res.json() : {}),
-      fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : [])
-    ]).then(([settingsData, channelsData]: [any, any]) => {
+      fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : []),
+      fetch(`/api/guilds/${guildId}/roles`).then(res => res.ok ? res.json() : [])
+    ]).then(([settingsData, channelsData, rolesData]: [any, any, any]) => {
       setSettings({
         ENABLE_TC_RANK: settingsData.ENABLE_TC_RANK ?? true,
         whitelist_channel_ids: settingsData.whitelist_channel_ids?.map(String) || [],
         blacklist_channel_ids: settingsData.blacklist_channel_ids?.map(String) || [],
         whitelist_category_ids: settingsData.whitelist_category_ids?.map(String) || [],
-        blacklist_category_ids: settingsData.blacklist_category_ids?.map(String) || []
+        blacklist_category_ids: settingsData.blacklist_category_ids?.map(String) || [],
+        ENABLE_EXCLUDE_RANK_ROLE: settingsData.ENABLE_EXCLUDE_RANK_ROLE ?? false,
+        EXCLUDE_RANK_ROLE_IDS: settingsData.EXCLUDE_RANK_ROLE_IDS?.map(String) || []
       });
       if (!channelsData.error) {
         setChannels(channelsData);
+      }
+      if (!rolesData.error && Array.isArray(rolesData)) {
+        setRoles(rolesData);
       }
     }).catch(err => {
       console.error(err);
@@ -65,6 +74,7 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
 
   const textChannelOptions = textChannels.map(c => ({ value: c.id, label: `${c.type === 0 ? '#' : '🔊'} ${c.name}` }));
   const categoryOptions = categories.map(c => ({ value: c.id, label: `📁 ${c.name}` }));
+  const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}` }));
 
   const customStyles = {
     control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white' }),
@@ -113,6 +123,37 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
               <div className="w-14 h-7 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-red-600"></div>
             </label>
           </div>
+
+          <div className="flex items-center justify-between bg-zinc-900 p-4 rounded border border-zinc-700 mt-4">
+            <div>
+              <p className="font-bold text-white mb-1">特定ロールへのランク付与を除外</p>
+              <p className="text-sm text-zinc-400">オンにすると、下で指定したロールを持つユーザーにはレベルアップ時のロール報酬が付与されません。</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                className="sr-only peer"
+                checked={settings.ENABLE_EXCLUDE_RANK_ROLE}
+                onChange={e => setSettings({...settings, ENABLE_EXCLUDE_RANK_ROLE: e.target.checked})}
+              />
+              <div className="w-14 h-7 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-red-600"></div>
+            </label>
+          </div>
+
+          {settings.ENABLE_EXCLUDE_RANK_ROLE && (
+            <div className="bg-zinc-900/50 p-4 rounded border border-zinc-700 mt-4">
+              <label className="block text-sm font-bold text-zinc-300 mb-2">除外対象ロール</label>
+              <p className="text-xs text-zinc-500 mb-2">ここで選択したロールを持つユーザーは、レベル到達時の新しいロールが付与されません（XPは獲得できます）</p>
+              <Select
+                isMulti
+                options={roleOptions}
+                value={roleOptions.filter(o => settings.EXCLUDE_RANK_ROLE_IDS.includes(o.value))}
+                onChange={(selected: any) => setSettings({...settings, EXCLUDE_RANK_ROLE_IDS: selected.map((s: any) => s.value)})}
+                styles={customStyles}
+                placeholder="除外するロールを選択..."
+              />
+            </div>
+          )}
         </div>
 
         {/* チャンネル設定 */}

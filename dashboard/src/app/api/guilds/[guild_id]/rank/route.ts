@@ -16,18 +16,18 @@ export async function GET(
       [guildId]
     );
 
-    // Fetch bot setting for ENABLE_TC_RANK
-    const tcRankResult = await pool.query(
-      "SELECT setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key = 'ENABLE_TC_RANK'",
+    // Fetch bot setting for ENABLE_TC_RANK and exclusion settings
+    const botSettingsResult = await pool.query(
+      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ENABLE_TC_RANK', 'ENABLE_EXCLUDE_RANK_ROLE', 'EXCLUDE_RANK_ROLE_IDS')",
       [guildId]
     );
 
     let enableTcRank = true; // default
-    if (tcRankResult.rows.length > 0) {
+    if (botSettingsResult.rows.length > 0) {
       try {
-        enableTcRank = JSON.parse(tcRankResult.rows[0].setting_value);
+        enableTcRank = JSON.parse(botSettingsResult.rows[0].setting_value);
       } catch (e) {
-        enableTcRank = tcRankResult.rows[0].setting_value === 'true';
+        enableTcRank = botSettingsResult.rows[0].setting_value === 'true';
       }
     }
 
@@ -35,12 +35,16 @@ export async function GET(
       whitelist_channel_ids: [],
       blacklist_channel_ids: [],
       whitelist_category_ids: [],
-      blacklist_category_ids: []
+      blacklist_category_ids: [],
+      enable_exclude_rank_role: false,
+      exclude_rank_role_ids: []
     };
 
     return NextResponse.json({
       ...rankSettings,
-      ENABLE_TC_RANK: enableTcRank
+      ENABLE_TC_RANK: enableTcRank,
+      ENABLE_EXCLUDE_RANK_ROLE: rankSettings.enable_exclude_rank_role,
+      EXCLUDE_RANK_ROLE_IDS: rankSettings.exclude_rank_role_ids?.map(String) || []
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -57,6 +61,8 @@ export async function POST(
     const body = await request.json();
     const { 
       ENABLE_TC_RANK, 
+      ENABLE_EXCLUDE_RANK_ROLE,
+      EXCLUDE_RANK_ROLE_IDS,
       whitelist_channel_ids, 
       blacklist_channel_ids, 
       whitelist_category_ids, 
@@ -67,28 +73,35 @@ export async function POST(
     try {
       await client.query('BEGIN');
 
-      // Update bot_settings for ENABLE_TC_RANK
-      if (ENABLE_TC_RANK !== undefined) {
-        await client.query(
-          `INSERT INTO bot_settings (guild_id, setting_key, setting_value)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (guild_id, setting_key) DO UPDATE SET setting_value = $3`,
-          [guildId, 'ENABLE_TC_RANK', JSON.stringify(ENABLE_TC_RANK)]
-        );
-      }
+      // Update bot_settings for ENABLE_TC_RANK and exclusion settings
+      const updateSetting = async (key: string, value: any) => {
+        if (value !== undefined) {
+          await client.query(
+            `INSERT INTO bot_settings (guild_id, setting_key, setting_value)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (guild_id, setting_key) DO UPDATE SET setting_value = $3`,
+            [guildId, key, JSON.stringify(value)]
+          );
+        }
+      };
+
+      await updateSetting('ENABLE_TC_RANK', ENABLE_TC_RANK);
+      
 
       // Update rank_settings
       await client.query(
-        `INSERT INTO rank_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO rank_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (guild_id) DO UPDATE SET 
-         whitelist_channel_ids = $2, blacklist_channel_ids = $3, whitelist_category_ids = $4, blacklist_category_ids = $5`,
+         whitelist_channel_ids = $2, blacklist_channel_ids = $3, whitelist_category_ids = $4, blacklist_category_ids = $5, enable_exclude_rank_role = $6, exclude_rank_role_ids = $7`,
         [
           guildId, 
           whitelist_channel_ids || [], 
           blacklist_channel_ids || [], 
           whitelist_category_ids || [], 
-          blacklist_category_ids || []
+          blacklist_category_ids || [],
+          ENABLE_EXCLUDE_RANK_ROLE || false,
+          EXCLUDE_RANK_ROLE_IDS || []
         ]
       );
 
