@@ -214,75 +214,73 @@ class AdminGroup(app_commands.Group):
         deleted = await interaction.channel.purge(limit=count)
         await interaction.followup.send(f"🧹 メッセージを {len(deleted)} 件削除しました。", ephemeral=True)
 
-    @app_commands.command(name="手動給与", description="【運営専用】指定したユーザーまたはロール全員に通貨を直接発行して付与します")
+    @app_commands.command(name="手動給与", description="【運営専用】指定したユーザー複数人またはロール全員に通貨を直接発行して付与します")
     @is_admin_or_banker()
-    @app_commands.describe(amount="金額", user="付与するユーザー（任意）", role="付与するロール（任意）")
-    async def manual_issue(self, interaction: discord.Interaction, amount: int, user: discord.Member = None, role: discord.Role = None):
+    @app_commands.describe(amount="金額", users_mentions="付与するユーザーのメンションを複数指定（任意）", role="付与するロール（全員に付与）（任意）")
+    async def manual_issue(self, interaction: discord.Interaction, amount: int, users_mentions: str = None, role: discord.Role = None):
         await interaction.response.defer()
         if amount <= 0:
             return await interaction.followup.send("❌ 1以上の金額を指定してください。", ephemeral=True)
             
-        if not user and not role:
-            return await interaction.followup.send("❌ ユーザーまたはロールのいずれかを指定してください。", ephemeral=True)
+        if not users_mentions and not role:
+            return await interaction.followup.send("❌ ユーザーのメンションまたはロールのいずれかを指定してください。", ephemeral=True)
 
         cur_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         minus_target_ids = get_setting(self.bot, "MINUS_TARGET_ROLE_IDS") or []
         
+        success_users = []
+        
         # ユーザー指定がある場合
-        if user:
-            new_bal = await database.add_balance(interaction.guild.id, user.id, amount)
-            await interaction.followup.send(f"💵 {user.mention} に **{amount} {cur_name}** を付与しました。")
-            
-            embed = discord.Embed(
-                title="💵 手動給与 (運営)",
-                description="運営による手動給与が行われました。",
-                color=discord.Color.green(),
-                timestamp=discord.utils.utcnow()
-            )
-            embed.add_field(name="実行者", value=f"{interaction.user.mention} ({interaction.user.id})", inline=True)
-            embed.add_field(name="対象者", value=f"{user.mention} ({user.id})", inline=True)
-            embed.add_field(name="付与額", value=f"{amount:,} {cur_name}", inline=True)
-            await send_log(self.bot, interaction.guild, "currency", embed)
-            
-            if new_bal < 0:
-                member_roles = [r.id for r in user.roles]
-                if any(rid in minus_target_ids for rid in member_roles):
-                    await trigger_evaluation_failure(interaction.guild, user, "通貨マイナスになったため", interaction.user, self.bot)
+        if users_mentions:
+            import re
+            user_ids = set(re.findall(r'<@!?(\d+)>', users_mentions))
+            for uid in user_ids:
+                member = interaction.guild.get_member(int(uid))
+                if member:
+                    new_bal = await database.add_balance(interaction.guild.id, member.id, amount)
+                    success_users.append(member)
+                    if new_bal < 0:
+                        member_roles = [r.id for r in member.roles]
+                        if any(rid in minus_target_ids for rid in member_roles):
+                            await trigger_evaluation_failure(interaction.guild, member, "通貨マイナスになったため", interaction.user, self.bot)
 
         # ロール指定がある場合
         if role:
             members = role.members
-            if not members:
-                # ユーザー指定がなくてロールの対象者が0の場合のみエラーメッセージを出すなど調整
-                if not user:
-                    await interaction.followup.send(f"❌ {role.name} ロールを持つメンバーが見つかりませんでした。")
-                return
-
-            success_count = 0
             for member in members:
-                new_bal = await database.add_balance(interaction.guild.id, member.id, amount)
-                success_count += 1
-                if new_bal < 0:
-                    member_roles = [r.id for r in member.roles]
-                    if any(rid in minus_target_ids for rid in member_roles):
-                        await trigger_evaluation_failure(interaction.guild, member, "通貨マイナスになったため", interaction.user, self.bot)
+                if member not in success_users:
+                    new_bal = await database.add_balance(interaction.guild.id, member.id, amount)
+                    success_users.append(member)
+                    if new_bal < 0:
+                        member_roles = [r.id for r in member.roles]
+                        if any(rid in minus_target_ids for rid in member_roles):
+                            await trigger_evaluation_failure(interaction.guild, member, "通貨マイナスになったため", interaction.user, self.bot)
 
-            # ユーザー指定も行われていた場合は追加でメッセージ送信、ロールのみなら単独で送信
-            if user:
-                await interaction.channel.send(f"💵 さらに、{role.mention} を持つ **{success_count}名** にも **{amount} {cur_name}** を一括付与しました。")
-            else:
-                await interaction.followup.send(f"💵 {role.mention} を持つ **{success_count}名** に **{amount} {cur_name}** を一括付与しました。")
+        if not success_users:
+            return await interaction.followup.send("❌ 対象ユーザーが見つかりませんでした。")
+
+        msg = f"💵 合計 **{len(success_users)}名** に手動給与 **{amount:,} {cur_name}** を一括付与しました！"
+        await interaction.followup.send(msg)
+        
+        embed = discord.Embed(
+            title="💵 手動給与 (運営)",
+            description="運営による手動給与が行われました。",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name="実行者", value=f"{interaction.user.mention} ({interaction.user.id})", inline=False)
+        if role:
+            embed.add_field(name="対象ロール", value=f"{role.mention}", inline=False)
             
-            embed = discord.Embed(
-                title="💵 手動給与 (運営) - ロール一括",
-                description="運営による手動給与（ロール一括）が行われました。",
-                color=discord.Color.green(),
-                timestamp=discord.utils.utcnow()
-            )
-            embed.add_field(name="実行者", value=f"{interaction.user.mention} ({interaction.user.id})", inline=True)
-            embed.add_field(name="対象ロール", value=f"{role.mention} ({success_count}名)", inline=True)
-            embed.add_field(name="付与額", value=f"{amount:,} {cur_name}", inline=True)
-            await send_log(self.bot, interaction.guild, "currency", embed)
+        mentions_str = " ".join([m.mention for m in success_users])
+        if len(mentions_str) > 1024:
+            mentions_str = mentions_str[:1021] + "..."
+            
+        embed.add_field(name="対象者一覧", value=mentions_str, inline=False)
+        embed.add_field(name="付与額 (1人あたり)", value=f"{amount:,} {cur_name}", inline=False)
+        embed.add_field(name="合計付与人数", value=f"{len(success_users)}名", inline=False)
+
+        await send_log(self.bot, interaction.guild, "currency", embed)
 
     @app_commands.command(name="手動没収", description="【運営専用】指定したユーザーから通貨を直接没収（減額）します")
     @is_admin_or_banker()
