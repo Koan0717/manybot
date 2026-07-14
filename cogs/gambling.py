@@ -649,14 +649,16 @@ class BlackjackGameView(discord.ui.View):
             # ディーラーはBJ以外にする
             self.dealer_hand = [self.deck.pop(), self.deck.pop()]
             if calculate_blackjack_score(self.dealer_hand) == 21:
-                self.deck.append(self.dealer_hand.pop())
+                returned_card = self.dealer_hand.pop()
                 self.dealer_hand.append(self.deck.pop())
+                self.deck.insert(0, returned_card)
         else:
             self.player_hand = [self.deck.pop(), self.deck.pop()]
             # 初期BJにならないように調整
             while calculate_blackjack_score(self.player_hand) == 21:
-                self.deck.append(self.player_hand.pop())
+                returned_card = self.player_hand.pop()
                 self.player_hand.append(self.deck.pop())
+                self.deck.insert(0, returned_card)
             self.dealer_hand = [self.deck.pop(), self.deck.pop()]
 
     def determine_target_outcome(self):
