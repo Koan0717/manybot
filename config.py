@@ -72,7 +72,9 @@ DEFAULT_SETTINGS = {
     "TC_XP_REWARD": 10,
     "TC_XP_COOLDOWN": 10,
     "VC_XP_PER_MIN": 15,
-    "INITIAL_COINS": 30000
+    "INITIAL_COINS": 30000,
+    "ENABLE_EXCLUDE_RANK_ROLE": False,
+    "EXCLUDE_RANK_ROLE_IDS": []
 }
 
 import inspect
@@ -289,6 +291,13 @@ async def check_and_assign_level_roles(bot, member: discord.Member, level_type: 
                             await lv_channel.send(f"🪙 {member.mention} が {level_type.upper()} レベル {new_level} に到達したボーナスとして、**{cr['coins']} {currency}** を獲得しました！")
 
         # --- Role Rewards ---
+        exclude_enabled = get_setting(bot, "ENABLE_EXCLUDE_RANK_ROLE", member.guild.id)
+        if str(exclude_enabled).lower() in ["true", "1", "yes", "on", "True"]:
+            exclude_role_ids = get_setting(bot, "EXCLUDE_RANK_ROLE_IDS", member.guild.id) or []
+            member_role_ids = [r.id for r in member.roles]
+            if any(r_id in exclude_role_ids for r_id in member_role_ids):
+                return
+
         rewards = await database.get_level_role_rewards(member.guild.id, level_type)
         if not rewards:
             return
