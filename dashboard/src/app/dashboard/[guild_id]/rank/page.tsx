@@ -12,7 +12,8 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
     whitelist_category_ids: [],
     blacklist_category_ids: [],
     ENABLE_EXCLUDE_RANK_ROLE: false,
-    EXCLUDE_RANK_ROLE_IDS: []
+    EXCLUDE_RANK_ROLE_IDS: [],
+    ephemeral_rank_commands: false
   });
   
   const [channels, setChannels] = useState<any[]>([]);
@@ -34,7 +35,8 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
         whitelist_category_ids: settingsData.whitelist_category_ids?.map(String) || [],
         blacklist_category_ids: settingsData.blacklist_category_ids?.map(String) || [],
         ENABLE_EXCLUDE_RANK_ROLE: settingsData.ENABLE_EXCLUDE_RANK_ROLE ?? false,
-        EXCLUDE_RANK_ROLE_IDS: settingsData.EXCLUDE_RANK_ROLE_IDS?.map(String) || []
+        EXCLUDE_RANK_ROLE_IDS: settingsData.EXCLUDE_RANK_ROLE_IDS?.map(String) || [],
+        ephemeral_rank_commands: settingsData.ephemeral_rank_commands ?? false
       });
       if (!channelsData.error) {
         setChannels(channelsData);
@@ -135,6 +137,22 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
                 className="sr-only peer"
                 checked={settings.ENABLE_EXCLUDE_RANK_ROLE}
                 onChange={e => setSettings({...settings, ENABLE_EXCLUDE_RANK_ROLE: e.target.checked})}
+              />
+              <div className="w-14 h-7 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-red-600"></div>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between bg-zinc-900 p-4 rounded border border-zinc-700 mt-4">
+            <div>
+              <p className="font-bold text-white mb-1">ランクコマンドの秘匿設定</p>
+              <p className="text-sm text-zinc-400">オンにすると、ランクやリーダーボードのコマンド結果が実行した本人にのみ表示されます。</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                className="sr-only peer"
+                checked={settings.ephemeral_rank_commands}
+                onChange={e => setSettings({...settings, ephemeral_rank_commands: e.target.checked})}
               />
               <div className="w-14 h-7 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-red-600"></div>
             </label>

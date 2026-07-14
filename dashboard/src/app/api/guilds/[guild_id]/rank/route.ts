@@ -12,7 +12,7 @@ export async function GET(
   try {
     // Fetch rank settings
     const rankResult = await pool.query(
-      'SELECT whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM rank_settings WHERE guild_id = $1',
+      'SELECT whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids, ephemeral_rank_commands FROM rank_settings WHERE guild_id = $1',
       [guildId]
     );
 
@@ -37,14 +37,16 @@ export async function GET(
       whitelist_category_ids: [],
       blacklist_category_ids: [],
       enable_exclude_rank_role: false,
-      exclude_rank_role_ids: []
+      exclude_rank_role_ids: [],
+      ephemeral_rank_commands: false
     };
 
     return NextResponse.json({
       ...rankSettings,
       ENABLE_TC_RANK: enableTcRank,
       ENABLE_EXCLUDE_RANK_ROLE: rankSettings.enable_exclude_rank_role,
-      EXCLUDE_RANK_ROLE_IDS: rankSettings.exclude_rank_role_ids?.map(String) || []
+      EXCLUDE_RANK_ROLE_IDS: rankSettings.exclude_rank_role_ids?.map(String) || [],
+      ephemeral_rank_commands: rankSettings.ephemeral_rank_commands ?? false
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -66,7 +68,8 @@ export async function POST(
       whitelist_channel_ids, 
       blacklist_channel_ids, 
       whitelist_category_ids, 
-      blacklist_category_ids 
+      blacklist_category_ids,
+      ephemeral_rank_commands
     } = body;
 
     const client = await pool.connect();
@@ -90,10 +93,10 @@ export async function POST(
 
       // Update rank_settings
       await client.query(
-        `INSERT INTO rank_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO rank_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids, ephemeral_rank_commands)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (guild_id) DO UPDATE SET 
-         whitelist_channel_ids = $2, blacklist_channel_ids = $3, whitelist_category_ids = $4, blacklist_category_ids = $5, enable_exclude_rank_role = $6, exclude_rank_role_ids = $7`,
+         whitelist_channel_ids = $2, blacklist_channel_ids = $3, whitelist_category_ids = $4, blacklist_category_ids = $5, enable_exclude_rank_role = $6, exclude_rank_role_ids = $7, ephemeral_rank_commands = $8`,
         [
           guildId, 
           whitelist_channel_ids || [], 
@@ -101,7 +104,8 @@ export async function POST(
           whitelist_category_ids || [], 
           blacklist_category_ids || [],
           ENABLE_EXCLUDE_RANK_ROLE || false,
-          EXCLUDE_RANK_ROLE_IDS || []
+          EXCLUDE_RANK_ROLE_IDS || [],
+          ephemeral_rank_commands || false
         ]
       );
 
