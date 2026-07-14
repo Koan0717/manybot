@@ -228,6 +228,8 @@ def get_role_by_id_or_name(guild, role_id, default_name):
     return role
 
 def has_admin_role(bot, user: discord.Member):
+    if isinstance(user, discord.User) or not hasattr(user, 'roles'):
+        return False
     admin_role_ids = get_setting(bot, "ADMIN_ROLE_IDS") or []
     user_role_ids = [role.id for role in user.roles]
     if any(rid in admin_role_ids for rid in user_role_ids) or user.guild_permissions.administrator:

@@ -2000,10 +2000,21 @@ class PanelSelect(discord.ui.Select):
         channel = interaction.channel
         guild = interaction.guild
         
+        user = interaction.user
+        if guild and isinstance(user, discord.User):
+            try:
+                user = guild.get_member(user.id) or await guild.fetch_member(user.id)
+            except:
+                pass
+        
         # 権限チェック
-        if not has_admin_role(bot, interaction.user) and not interaction.user.guild_permissions.administrator:
+        is_admin = has_admin_role(bot, user)
+        if not is_admin and getattr(user, 'guild_permissions', None):
+            is_admin = user.guild_permissions.administrator
+            
+        if not is_admin:
             if val == "interview":
-                user_role_names = [r.name for r in interaction.user.roles]
+                user_role_names = [r.name for r in getattr(user, 'roles', [])]
                 is_interviewer = any(r in INTERVIEWER_ROLE_NAMES for r in user_role_names)
                 if not is_interviewer:
                     return await interaction.response.send_message("この操作を実行する権限がありません。", ephemeral=True)
