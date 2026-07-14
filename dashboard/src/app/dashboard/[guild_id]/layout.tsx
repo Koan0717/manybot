@@ -55,7 +55,7 @@ export default function DashboardLayout({
     { label: 'ショップ設定', path: `/dashboard/${guildId}/shop`, roles: ['admin', 'shop', 'subadmin'] },
     { label: 'チケット設定', path: `/dashboard/${guildId}/tickets`, roles: ['admin', 'subadmin'] },
     { label: 'ランク設定', path: `/dashboard/${guildId}/rank`, roles: ['admin', 'subadmin'] },
-    { label: '評価シート自動生成', path: `/dashboard/${guildId}/eval-sheet`, roles: ['admin', 'subadmin'] },
+    { label: '評価関連設定', path: `/dashboard/${guildId}/eval-sheet`, roles: ['admin', 'subadmin'] },
     { label: '経済・レベリング設定', path: `/dashboard/${guildId}/economy`, roles: ['admin', 'subadmin'] },
     { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'] },
     { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'] },

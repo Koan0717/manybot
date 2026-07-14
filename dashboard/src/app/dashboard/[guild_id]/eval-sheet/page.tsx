@@ -91,7 +91,9 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
     auto_generate_period: true,
     auto_fail_on_deadline: false,
     forum_channel_ids: [],
-    self_intro_channel_ids: []
+    self_intro_channel_ids: [],
+    ENABLE_MINUS_PENALTY: false,
+    MINUS_PUNISHMENT_TYPE: 'evaluation_failure'
   });
   const [channels, setChannels] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,8 +146,8 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-8 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold text-white mb-2">評価シート自動生成</h1>
-        <p className="text-zinc-400">指定した自己紹介チャンネルで投稿があった際、自動的にフォーラムに評価用のスレッドを作成します。</p>
+        <h1 className="text-2xl font-bold text-white mb-2">評価関連設定</h1>
+        <p className="text-zinc-400">自己紹介での評価シートの自動作成や、通貨がマイナスになった際のペナルティなどを設定します。</p>
       </div>
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6 shadow-xl">
@@ -190,6 +192,35 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
             <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.auto_fail_on_deadline ? 'translate-x-6' : 'translate-x-0'}`} />
           </button>
         </div>
+
+        <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+          <div>
+            <h2 className="text-lg font-semibold text-white">通貨マイナス時の自動降格</h2>
+            <p className="text-sm text-zinc-400">この機能をONにすると、所持コインがマイナスになった際に自動的に降格処理を行います。</p>
+          </div>
+          <button 
+            type="button"
+            onClick={() => handleChange('ENABLE_MINUS_PENALTY', !settings.ENABLE_MINUS_PENALTY)}
+            className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.ENABLE_MINUS_PENALTY ? 'bg-blue-600' : 'bg-zinc-700'}`}
+          >
+            <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.ENABLE_MINUS_PENALTY ? 'translate-x-6' : 'translate-x-0'}`} />
+          </button>
+        </div>
+
+        {settings.ENABLE_MINUS_PENALTY && (
+          <div className="flex flex-col p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50 space-y-2">
+            <label className="text-lg font-semibold text-white">通貨マイナス時の降格先</label>
+            <p className="text-sm text-zinc-400 mb-2">マイナスになった際、どのペナルティとして処理するかを選択します。</p>
+            <select
+              value={settings.MINUS_PUNISHMENT_TYPE}
+              onChange={(e) => handleChange('MINUS_PUNISHMENT_TYPE', e.target.value)}
+              className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
+            >
+              <option value="evaluation_failure">評価落ち</option>
+              <option value="violator">違反者</option>
+            </select>
+          </div>
+        )}
 
         <div className={`space-y-6 transition-opacity duration-300 ${settings.is_enabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
           <div className="space-y-2">
