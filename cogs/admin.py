@@ -593,11 +593,15 @@ class Admin(commands.Cog):
     @commands.command(name="sync")
     @commands.has_permissions(administrator=True)
     async def sync_commands(self, ctx):
-        await ctx.send("コマンドを同期しています...")
+        await ctx.send("コマンドを同期しています（重複解消中）...")
         try:
-            self.bot.tree.copy_global_to(guild=ctx.guild)
-            synced = await self.bot.tree.sync(guild=ctx.guild)
-            await ctx.send(f"このサーバーに {len(synced)} 個のコマンドを同期しました！\n※これで即座にDiscordへ反映されるはずです。")
+            # サーバー固有のコマンドをクリアして二重表示を防ぐ
+            self.bot.tree.clear_commands(guild=ctx.guild)
+            await self.bot.tree.sync(guild=ctx.guild)
+            
+            # 全体（グローバル）にコマンドを同期する
+            synced = await self.bot.tree.sync()
+            await ctx.send(f"全サーバー共通で {len(synced)} 個のコマンドを同期しました！\n※これでコマンドの二重表示が解消され、即座に反映されるはずです。")
         except Exception as e:
             await ctx.send(f"同期中にエラーが発生しました: {e}")
 
