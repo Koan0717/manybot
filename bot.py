@@ -231,7 +231,11 @@ class EconomyBot(commands.Bot):
                 print(f"[ERROR] Failed to load Cog {cog}: {e}")
 
         try:
-            await self.tree.sync()
+            # Sync to the specific guild to avoid the 50240 Entry Point global error
+            guild = discord.Object(id=1500185499929804983)
+            self.tree.copy_global_to(guild=guild)
+            await self.tree.sync(guild=guild)
+            print("[OK] Synced commands to guild 1500185499929804983 successfully.")
         except Exception as e:
             print(f"[ERROR] Failed to sync slash commands: {e}")
             
