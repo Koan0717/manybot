@@ -241,7 +241,6 @@ class EconomyBot(commands.Bot):
             
         # Sync commands to database for dashboard toggle feature
         commands_to_sync = []
-        import discord
         for cmd in self.tree.walk_commands():
             if isinstance(cmd, discord.app_commands.Command):
                 cog_name = cmd.binding.__class__.__name__ if cmd.binding else "General"
@@ -352,16 +351,6 @@ async def on_voice_state_update(member, before, after):
                             print(f"[DEBUG] VC Coins Awarding on Leave: {member.display_name} - {coins_reward} coins")
     except Exception as global_e:
         print(f"CRITICAL ERROR in on_voice_state_update: {global_e}")
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def sync(ctx):
-    """【運営用】スラッシュコマンドをグローバルに即時同期します"""
-    try:
-        synced = await bot.tree.sync()
-        await ctx.send(f"✅ グローバルコマンドを {len(synced)} 個同期しました。\n（※すべてのサーバーに反映されるまで最大1時間かかる場合があります）")
-    except Exception as e:
-        await ctx.send(f"❌ エラーが発生しました: {e}")
 
 @bot.command()
 @commands.has_permissions(administrator=True)
