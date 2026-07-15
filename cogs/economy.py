@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import database
-from helpers import get_setting, has_admin_role, has_banker_role, has_interviewer_role, send_log
+from helpers import get_setting, has_admin_role, has_banker_role, send_log
 
 class Economy(commands.Cog):
     def __init__(self, bot):
@@ -51,14 +51,14 @@ class Economy(commands.Cog):
         await send_log(self.bot, interaction.guild, "currency", embed)
 
     @app_commands.command(name="初期発行", description="指定したユーザー達、またはロール全員に初期発行額の通貨を付与します。")
-    @app_commands.describe(users_mentions="付与するユーザーのメンションを複数指定（任意）", role="付与するロール（全員に付与）（任意）")
-    async def initial_issue(self, interaction: discord.Interaction, users_mentions: str = None, role: discord.Role = None):
-        if not (has_admin_role(self.bot, interaction.user) or has_banker_role(self.bot, interaction.user) or has_interviewer_role(self.bot, interaction.user)):
+    @app_commands.describe(users="付与するユーザー達（メンションまたはIDを複数指定）", role="付与するロール（全員に付与）（任意）")
+    async def initial_issue(self, interaction: discord.Interaction, users: str = None, role: discord.Role = None):
+        if not (has_admin_role(self.bot, interaction.user) or has_banker_role(self.bot, interaction.user)):
             await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
             return
 
-        if not users_mentions and not role:
-            await interaction.response.send_message("ユーザーのメンションか、ロールのどちらかを指定してください。", ephemeral=True)
+        if not users and not role:
+            await interaction.response.send_message("ユーザーか、ロールのどちらかを指定してください。", ephemeral=True)
             return
             
         await interaction.response.defer()
@@ -68,12 +68,13 @@ class Economy(commands.Cog):
         
         success_users = []
         
-        # ユーザーメンションからの付与
-        if users_mentions:
+        # ユーザー指定からの付与
+        if users:
             import re
-            user_ids = set(re.findall(r'<@!?(\d+)>', users_mentions))
-            for uid in user_ids:
-                member = interaction.guild.get_member(int(uid))
+            user_ids = set(re.findall(r'\d{17,19}', users))
+            for uid_str in user_ids:
+                uid = int(uid_str)
+                member = interaction.guild.get_member(uid)
                 if member:
                     await database.add_balance(interaction.guild.id, member.id, init_coins)
                     success_users.append(member.mention)
