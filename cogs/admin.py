@@ -294,7 +294,7 @@ class AdminGroup(app_commands.Group):
                             await trigger_evaluation_failure(interaction.guild, member, "通貨マイナスになったため", interaction.user, self.bot)
 
                 # usersも実行されていた場合を考慮しつつメッセージ送信
-                await interaction.channel.send(f"💵 {role.mention} を持つ **{success_count}名** に **{amount} {cur_name}** を一括付与しました。")
+                await interaction.followup.send(f"💵 {role.mention} を持つ **{success_count}名** に **{amount} {cur_name}** を一括付与しました。")
                 
                 embed = discord.Embed(
                     title="💵 手動付与 (ロール一括)",
