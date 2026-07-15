@@ -357,6 +357,17 @@ async def sync_guild(ctx):
     except Exception as e:
         await ctx.send(f"❌ エラーが発生しました: {e}")
 
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def clear_sync(ctx):
+    """【運営用】現在のサーバーに登録されている重複したスラッシュコマンドを削除します"""
+    try:
+        bot.tree.clear_commands(guild=ctx.guild)
+        await bot.tree.sync(guild=ctx.guild)
+        await ctx.send("✅ このサーバーに登録されていた古いコマンドを削除しました。Discordを再読み込み（Ctrl+R）すると重複が解消されます。")
+    except Exception as e:
+        await ctx.send(f"❌ エラーが発生しました: {e}")
+
 if __name__ == "__main__":
     if TOKEN:
         discord.utils.setup_logging()
