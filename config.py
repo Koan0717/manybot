@@ -148,6 +148,8 @@ def has_event_manager_role(bot, user: discord.Member):
 
 def has_admin_role(bot, user: discord.Member):
     admin_role_ids = get_setting(bot, "ADMIN_ROLE_IDS")
+    if not admin_role_ids:
+        admin_role_ids = []
     user_role_ids = [role.id for role in user.roles]
     if any(rid in admin_role_ids for rid in user_role_ids) or user.guild_permissions.administrator:
         return True
