@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import database
 import config
+import re
 
 class Points(commands.Cog):
     def __init__(self, bot):
@@ -26,9 +27,9 @@ class Points(commands.Cog):
         else:
             await interaction.response.send_message(f"{target_user.display_name} のイベントポイント残高は **{points} P** です。", ephemeral=True)
 
-    @PointGroup.command(name="付与", description="指定したユーザーにイベントポイントを付与します")
-    @app_commands.describe(user="ポイントを付与するユーザー", amount="付与するポイント数")
-    async def add(self, interaction: discord.Interaction, user: discord.Member, amount: int):
+    @PointGroup.command(name="付与", description="指定したユーザーにイベントポイントを付与します（複数指定可）")
+    @app_commands.describe(users="ポイントを付与するユーザー（メンションまたはIDを複数指定可）", amount="付与するポイント数")
+    async def add(self, interaction: discord.Interaction, users: str, amount: int):
         if not (config.has_admin_role(self.bot, interaction.user) or config.has_event_manager_role(self.bot, interaction.user)):
             await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
             return
@@ -37,21 +38,39 @@ class Points(commands.Cog):
             await interaction.response.send_message("1以上のポイントを指定してください。", ephemeral=True)
             return
 
-        new_points = await database.add_event_points(interaction.guild.id, user.id, amount)
+        user_ids = set(re.findall(r'\d{17,19}', users))
+        if not user_ids:
+            await interaction.response.send_message("ユーザーを正しく指定してください（メンションまたはID）。", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+
+        results = []
+        for uid_str in user_ids:
+            uid = int(uid_str)
+            new_points = await database.add_event_points(interaction.guild.id, uid, amount)
+            results.append(f"<@{uid}> (残高: **{new_points} P**)")
         
         # ログ送信
+        log_desc = f"{interaction.user.mention} が以下のユーザーに **{amount} P** を付与しました。\n" + "\n".join(results)
+        if len(log_desc) > 4000:
+            log_desc = log_desc[:4000] + "\n... (省略)"
+
         await config.send_economy_log(
             interaction.guild,
             "🎁 イベントポイント付与",
-            f"{interaction.user.mention} が {user.mention} に **{amount} P** を付与しました。\n現在の残高: **{new_points} P**",
+            log_desc,
             user=interaction.user
         )
 
-        await interaction.response.send_message(f"{user.mention} に **{amount} P** のイベントポイントを付与しました！（現在の残高: **{new_points} P**）")
+        msg = f"以下のユーザーに **{amount} P** のイベントポイントを付与しました！\n" + "\n".join(results)
+        if len(msg) > 2000:
+            msg = msg[:1900] + "\n... (省略)"
+        await interaction.followup.send(msg)
 
-    @PointGroup.command(name="没収", description="指定したユーザーからイベントポイントを没収します")
-    @app_commands.describe(user="ポイントを没収するユーザー", amount="没収するポイント数")
-    async def remove(self, interaction: discord.Interaction, user: discord.Member, amount: int):
+    @PointGroup.command(name="没収", description="指定したユーザーからイベントポイントを没収します（複数指定可）")
+    @app_commands.describe(users="ポイントを没収するユーザー（メンションまたはIDを複数指定可）", amount="没収するポイント数")
+    async def remove(self, interaction: discord.Interaction, users: str, amount: int):
         if not (config.has_admin_role(self.bot, interaction.user) or config.has_event_manager_role(self.bot, interaction.user)):
             await interaction.response.send_message("このコマンドを実行する権限がありません。", ephemeral=True)
             return
@@ -60,23 +79,41 @@ class Points(commands.Cog):
             await interaction.response.send_message("1以上のポイントを指定してください。", ephemeral=True)
             return
 
-        current_points = await database.get_event_points(interaction.guild.id, user.id)
-        if current_points == 0:
-            await interaction.response.send_message(f"{user.display_name} のイベントポイントは既に 0 P です。", ephemeral=True)
+        user_ids = set(re.findall(r'\d{17,19}', users))
+        if not user_ids:
+            await interaction.response.send_message("ユーザーを正しく指定してください（メンションまたはID）。", ephemeral=True)
             return
 
-        new_points = await database.remove_event_points(interaction.guild.id, user.id, amount)
+        await interaction.response.defer()
+
+        results = []
+        for uid_str in user_ids:
+            uid = int(uid_str)
+            current_points = await database.get_event_points(interaction.guild.id, uid)
+            if current_points == 0:
+                results.append(f"<@{uid}> (すでに 0 P です)")
+                continue
+
+            new_points = await database.remove_event_points(interaction.guild.id, uid, amount)
+            results.append(f"<@{uid}> (残高: **{new_points} P**)")
         
         # ログ送信
+        log_desc = f"{interaction.user.mention} が以下のユーザーから **{amount} P** を没収しました。\n" + "\n".join(results)
+        if len(log_desc) > 4000:
+            log_desc = log_desc[:4000] + "\n... (省略)"
+
         await config.send_economy_log(
             interaction.guild,
             "🗑️ イベントポイント没収",
-            f"{interaction.user.mention} が {user.mention} から **{amount} P** を没収しました。\n現在の残高: **{new_points} P**",
+            log_desc,
             user=interaction.user,
             color=discord.Color.red()
         )
 
-        await interaction.response.send_message(f"{user.mention} から **{amount} P** のイベントポイントを没収しました！（現在の残高: **{new_points} P**）")
+        msg = f"以下のユーザーから **{amount} P** のイベントポイントを没収しました！\n" + "\n".join(results)
+        if len(msg) > 2000:
+            msg = msg[:1900] + "\n... (省略)"
+        await interaction.followup.send(msg)
 
 async def setup(bot):
     await bot.add_cog(Points(bot))
