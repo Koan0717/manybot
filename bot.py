@@ -231,11 +231,12 @@ class EconomyBot(commands.Bot):
                 print(f"[ERROR] Failed to load Cog {cog}: {e}")
 
         try:
-            # Sync to the specific guild to avoid the 50240 Entry Point global error
+            # Sync to the specific guild to clear duplicated commands, then sync globally
             guild = discord.Object(id=1500185499929804983)
-            self.tree.copy_global_to(guild=guild)
+            self.tree.clear_commands(guild=guild)
             await self.tree.sync(guild=guild)
-            print("[OK] Synced commands to guild 1500185499929804983 successfully.")
+            await self.tree.sync()
+            print("[OK] Cleared guild commands and synced commands globally successfully.")
         except Exception as e:
             print(f"[ERROR] Failed to sync slash commands: {e}")
             
@@ -265,11 +266,18 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     import traceback
     tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     print(f"[AppCommandError] {interaction.command.name if interaction.command else 'Unknown'}: {error}\n{tb}")
+    
+    error_msg = f"❌ エラーが発生しました: `{error}`"
+    if isinstance(error, app_commands.CommandNotFound):
+        guild_cmds = list(interaction.client.tree._guild_commands.get(interaction.guild_id, {}).keys())
+        global_cmds = list(interaction.client.tree._global_commands.keys())
+        error_msg += f"\n\n[DEBUG DATA]\nGuild ID: {interaction.guild_id}\nGuild keys: {guild_cmds}\nGlobal keys: {global_cmds}"
+        
     try:
         if interaction.response.is_done():
-            await interaction.followup.send(f"❌ エラーが発生しました: `{error}`", ephemeral=True)
+            await interaction.followup.send(error_msg, ephemeral=True)
         else:
-            await interaction.response.send_message(f"❌ エラーが発生しました: `{error}`", ephemeral=True)
+            await interaction.response.send_message(error_msg, ephemeral=True)
     except Exception as e:
         print(f"Failed to send error message: {e}")
 
