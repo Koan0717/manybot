@@ -257,6 +257,19 @@ class EconomyBot(commands.Bot):
 
 bot = EconomyBot()
 
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    import traceback
+    tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+    print(f"[AppCommandError] {interaction.command.name if interaction.command else 'Unknown'}: {error}\n{tb}")
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(f"❌ エラーが発生しました: `{error}`", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ エラーが発生しました: `{error}`", ephemeral=True)
+    except Exception as e:
+        print(f"Failed to send error message: {e}")
+
 @bot.tree.interaction_check
 async def check_command_enabled(interaction: discord.Interaction):
     if interaction.guild_id is None:
