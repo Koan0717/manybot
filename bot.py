@@ -291,7 +291,7 @@ async def check_command_enabled(interaction: discord.Interaction):
     cmd_name = interaction.command.qualified_name
     is_enabled = await database.is_command_enabled(interaction.guild_id, cmd_name)
     if not is_enabled:
-        await interaction.response.send_message("❌ このコマンドはこのサーバーでは無効化されています。", ephemeral=True)
+        await interaction.response.send_message("❌ DBよりOFFになっています", ephemeral=True)
         return False
         
     return True

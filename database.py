@@ -3789,3 +3789,23 @@ async def update_available_commands(commands_to_sync: list):
                 ON CONFLICT (command_name) DO UPDATE 
                 SET description = EXCLUDED.description, category = EXCLUDED.category
             ''', cmd['name'], cmd['description'], cmd['category'])
+
+async def is_command_enabled(guild_id: int, command_name: str) -> bool:
+    if guild_id is None:
+        return True
+    
+    pool = await get_pool(guild_id)
+    if not pool:
+        return True
+        
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow('''
+            SELECT is_enabled FROM command_settings 
+            WHERE guild_id = $1 AND (command_name = $2 OR command_name = $3)
+            ORDER BY is_enabled ASC LIMIT 1
+        ''', guild_id, command_name, f'/{command_name}')
+        
+        if row is not None:
+            return row['is_enabled']
+            
+        return True
