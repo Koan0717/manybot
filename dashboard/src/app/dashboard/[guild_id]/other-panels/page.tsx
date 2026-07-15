@@ -1,6 +1,7 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Select from 'react-select';
+import EmojiPicker, { Theme } from 'emoji-picker-react';
 
 export default function OtherPanelsSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -10,6 +11,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [activeEmojiPicker, setActiveEmojiPicker] = useState<number | null>(null);
   
   const [formData, setFormData] = useState({
     channel_id: '',
@@ -186,14 +188,38 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                       placeholder="付与するロール..."
                     />
                   </div>
-                  <div className="w-full md:w-48">
-                    <input
-                      type="text"
-                      value={rr.emoji}
-                      onChange={e => handleChangeReactionRole(index, 'emoji', e.target.value)}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500"
-                      placeholder="絵文字 (例: 🍎, <:name:id>)"
-                    />
+                  <div className="w-full md:w-64 relative">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={rr.emoji}
+                        onChange={e => handleChangeReactionRole(index, 'emoji', e.target.value)}
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500"
+                        placeholder="絵文字 (例: 🍎, <:name:id>)"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setActiveEmojiPicker(activeEmojiPicker === index ? null : index)}
+                        className="bg-zinc-700 hover:bg-zinc-600 text-white px-3 rounded transition-colors text-lg"
+                        title="絵文字を選択"
+                      >
+                        😊
+                      </button>
+                    </div>
+                    {activeEmojiPicker === index && (
+                      <div className="absolute top-12 right-0 z-50">
+                        <div className="fixed inset-0" onClick={() => setActiveEmojiPicker(null)}></div>
+                        <div className="relative shadow-2xl border border-zinc-700 rounded-lg overflow-hidden">
+                          <EmojiPicker 
+                            theme={Theme.DARK} 
+                            onEmojiClick={(emojiData) => {
+                              handleChangeReactionRole(index, 'emoji', emojiData.emoji);
+                              setActiveEmojiPicker(null);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="flex justify-end w-full md:w-auto">
                     <button
