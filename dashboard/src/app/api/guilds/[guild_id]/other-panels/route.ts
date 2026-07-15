@@ -44,19 +44,28 @@ export async function POST(
     for (const rr of reaction_roles) {
       const { role_id, emoji } = rr;
       
-      // Save to database
-      await pool.query(
-        `INSERT INTO reaction_roles (message_id, emoji, role_id) VALUES ($1, $2, $3)`,
-        [messageId, emoji, role_id]
-      );
-
-      // Parse emoji for Discord API
-      // If it's a custom emoji <a:name:id> or <:name:id>, Discord expects "name:id"
+      // Normalize emoji for Database and Discord API
       let apiEmoji = emoji.trim();
+      let dbEmoji = apiEmoji;
+      
       const customMatch = apiEmoji.match(/<a?:([^:]+):(\d+)>/);
       if (customMatch) {
         apiEmoji = `${customMatch[1]}:${customMatch[2]}`;
+        dbEmoji = customMatch[0]; // Store exactly <:name:id> or <a:name:id>
+      } else {
+        // If they input "name:id" without brackets
+        const rawMatch = apiEmoji.match(/^([^:]+):(\d+)$/);
+        if (rawMatch) {
+          dbEmoji = `<:${rawMatch[1]}:${rawMatch[2]}>`;
+        }
       }
+
+      // Save to database with normalized dbEmoji
+      await pool.query(
+        `INSERT INTO reaction_roles (message_id, emoji, role_id) VALUES ($1, $2, $3)
+         ON CONFLICT (message_id, emoji) DO UPDATE SET role_id = EXCLUDED.role_id`,
+        [messageId, dbEmoji, role_id]
+      );
       
       // URL encode the emoji (necessary for both unicode and custom emojis in URLs)
       const encodedEmoji = encodeURIComponent(apiEmoji);
@@ -68,6 +77,7 @@ export async function POST(
           method: 'PUT',
           headers: {
             'Authorization': `Bot ${token}`,
+            'User-Agent': 'DiscordBot (https://manybot.com, 1.0)',
             'Content-Length': '0'
           }
         }
