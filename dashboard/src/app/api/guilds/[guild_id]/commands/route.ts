@@ -27,7 +27,9 @@ export async function GET(
     });
 
     // Combine
-    const commandsWithSettings = availableCommands.map(cmd => ({
+    const commandsWithSettings = availableCommands
+      .filter(cmd => !['運営 手動付与_複数人選択', '運営 手動付与_ロール指定', '/運営 手動付与_複数人選択', '/運営 手動付与_ロール指定'].includes(cmd.command_name))
+      .map(cmd => ({
       ...cmd,
       is_enabled: settingsMap.has(cmd.command_name) ? settingsMap.get(cmd.command_name) : true // Default to true
     }));
