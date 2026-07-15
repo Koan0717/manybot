@@ -36,7 +36,7 @@ class Economy(commands.Cog):
             return
             
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
-        await interaction.response.send_message(f"{target.mention} に **{amount} {currency_name}** を送金しました！")
+        await interaction.response.send_message(f"💵 {target.mention} に **{amount} {currency_name}** を送金しました。")
 
         # 通貨ログ送信
         embed = discord.Embed(
@@ -92,7 +92,14 @@ class Economy(commands.Cog):
             await interaction.followup.send("サーバー内に該当するユーザーが見つかりませんでした。")
             return
             
-        msg = f"合計 **{len(success_users)}名** に初期発行額 **{init_coins:,} {currency_name}** を付与しました！"
+        users_str = " ".join(success_users)
+        if len(success_users) == 1:
+            msg = f"💵 {users_str} に初期発行額 **{init_coins:,} {currency_name}** を付与しました。"
+        else:
+            msg = f"💵 {users_str} の計**{len(success_users)}名**に初期発行額 **{init_coins:,} {currency_name}** を付与しました。"
+        
+        if len(msg) > 2000:
+            msg = msg[:1900] + "\n... (省略)"
         await interaction.followup.send(msg)
 
         # 通貨ログ送信

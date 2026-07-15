@@ -256,7 +256,12 @@ class AdminGroup(app_commands.Group):
                             await trigger_evaluation_failure(interaction.guild, member, "通貨マイナスになったため", interaction.user, self.bot)
 
                 if success_users:
-                    msg = f"💵 合計 **{len(success_users)}名** に **{amount} {cur_name}** を付与しました！\n" + " ".join(success_users)
+                    users_str = " ".join(success_users)
+                    if len(success_users) == 1:
+                        msg = f"💵 {users_str} に **{amount} {cur_name}** を付与しました。"
+                    else:
+                        msg = f"💵 {users_str} の計**{len(success_users)}名**に **{amount} {cur_name}** を付与しました。"
+                        
                     if len(msg) > 2000:
                         msg = msg[:1900] + "\n... (省略)"
                     await interaction.followup.send(msg)
