@@ -106,7 +106,8 @@ class Ranking(commands.Cog):
                     enable_tc=enable_tc,
                     eval_time_str=eval_time_str,
                     vc_xp_per_min=vc_xp_per_min,
-                    tc_xp_reward=tc_xp_reward
+                    tc_xp_reward=tc_xp_reward,
+                    bg_path=f"assets/background_{interaction.guild_id}.png"
                 )
                 file = discord.File(fp=io.BytesIO(card_bytes), filename="rank_card.png")
                 await interaction.followup.send(file=file)

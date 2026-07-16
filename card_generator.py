@@ -124,17 +124,15 @@ async def generate_rank_card(
     tc_next_xp: int = 100,
     tc_role_name: str = None,
     enable_tc: bool = False,
-    eval_time_str: str = "0時間0分",
+    eval_time_str: str = "0時間0分0秒",
     vc_xp_per_min: int = 15,
     tc_xp_reward: int = 10,
-    guild_id: int = None
+    bg_path: str = None
 ) -> bytes:
     font_path = check_font()
     
-    bg_path = "assets/background.png"
-    if guild_id == 1505398772828471357:
-        bg_path = "assets/background_0banku.png"
-        
+    if bg_path is None or not os.path.exists(bg_path):
+        bg_path = "assets/background.png"
     if os.path.exists(bg_path):
         base = Image.open(bg_path).convert("RGBA")
     else:
