@@ -293,8 +293,8 @@ def has_gamble_manager_role(bot, user: discord.Member):
 def has_interviewer_role(bot, user: discord.Member):
     interviewer_role_ids = get_setting(bot, "INTERVIEWER_ROLE_IDS") or []
     admin_role_ids = get_setting(bot, "ADMIN_ROLE_IDS") or []
-    user_role_ids = [r.id for r in user.roles]
-    if any(rid in interviewer_role_ids or rid in admin_role_ids for rid in user_role_ids) or user.guild_permissions.administrator:
+    user_role_ids = [str(r.id) for r in user.roles]
+    if any(str(rid) in user_role_ids for rid in interviewer_role_ids + admin_role_ids) or user.guild_permissions.administrator:
         return True
     user_role_names = [r.name for r in user.roles]
     if any(name in INTERVIEWER_ROLE_NAMES or name in ADMIN_ROLE_NAMES for name in user_role_names):

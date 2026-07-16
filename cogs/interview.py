@@ -76,7 +76,7 @@ class InterviewerGroup(app_commands.Group):
             description="新規メンバーの入界手続きの処理を行うことができます。",
             color=discord.Color.blue()
         )
-        embed.add_field(name="1. /面接官 入界許可 <ユーザー>", value="待機メンバーの入界手続き（仮ロール付与、初期通貨付与、ログ出力など）を完了します。", inline=False)
+        embed.add_field(name="1. /面接官 入界許可実行", value="このチャンネルに名前を書き込んだ待機メンバーの入界手続き（仮ロール付与、初期通貨付与、ログ出力など）を完了します。", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -103,35 +103,42 @@ class InterviewerGroup(app_commands.Group):
             return False
         return app_commands.check(predicate)
 
-    @app_commands.command(name="入界許可", description="【面接官専用】待機メンバーの入界手続き（仮ロール付与、初期通貨付与など）を完了します")
-    @app_commands.describe(user="入界を許可するユーザー")
-    async def execute_interview(self, interaction: discord.Interaction, user: discord.Member):
+    @app_commands.command(name="入界許可実行", description="【面接官専用】このチャンネルで名前を記入した待機メンバーの入界手続きを完了します")
+    async def execute_interview(self, interaction: discord.Interaction):
         bot = self.bot
         if not has_interviewer_role(bot, interaction.user):
             return await interaction.response.send_message("このコマンドを実行する権限がありません（面接官ロールが必要です）。", ephemeral=True)
-            
+
         await interaction.response.defer(ephemeral=True)
         new_role = get_role_by_setting(bot, interaction.guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
         pending_role = get_role_by_setting(bot, interaction.guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
         
         if not new_role:
             return await interaction.followup.send(f"エラー: ロール「{NEW_MEMBER_ROLE_NAME}」が見つかりません。", ephemeral=True)
-            
-        if new_role in user.roles:
-            return await interaction.followup.send(f"{user.display_name} は既に手続きが完了しています。", ephemeral=True)
+        if not pending_role:
+            return await interaction.followup.send(f"エラー: ロール「{PENDING_MEMBER_ROLE_NAME}」が見つかりません。", ephemeral=True)
             
         try:
-            # --- 追加：チャンネル履歴から希望する名前（ニックネーム）を取得 ---
+            # --- チャンネル履歴から入界待機者とその希望する名前を自動取得 ---
+            user = None
             proposed_nick = None
             try:
                 async for message in interaction.channel.history(limit=50):
-                    if message.author.id == user.id:
-                        content = message.content.strip()
-                        if content:
-                            proposed_nick = content
-                            break
+                    if not message.author.bot and isinstance(message.author, discord.Member):
+                        if pending_role in message.author.roles:
+                            content = message.content.strip()
+                            if content:
+                                user = message.author
+                                proposed_nick = content
+                                break
             except Exception as e:
-                print(f"[WARNING] Failed to fetch channel history for nickname: {e}")
+                print(f"[WARNING] Failed to fetch channel history: {e}")
+
+            if not user:
+                return await interaction.followup.send("チャンネル履歴から名前を記入した入界待機者を見つけることができませんでした。", ephemeral=True)
+
+            if new_role in user.roles:
+                return await interaction.followup.send(f"{user.display_name} は既に手続きが完了しています。", ephemeral=True)
 
             nick_change_status = ""
             duplicate_warning = ""
@@ -160,24 +167,22 @@ class InterviewerGroup(app_commands.Group):
                 
                 # 重複が見つかった場合の処理
                 if duplicate_member:
-                    # 面接官にだけ見える警告文
-                    duplicate_warning = f"\n⚠️ **警告**: サーバー内に既に同名（または類似名）のユーザー {duplicate_member.mention} ({duplicate_member.display_name}) が存在します。"
-                    
-                    # 実行した場所に送信する全体向け警告文（使用中のメンバーは書かない）
                     try:
                         await interaction.channel.send(
-                            f"⚠️ **名前重複の警告**:\n新規入界者 {user.mention} が希望した名前「{proposed_nick}」は、既に使用されている名前です。"
+                            f"⚠️ {user.mention} さんの希望した名前「{proposed_nick}」は、すでに鯖内で使用されている名前です。\n別の名前をこのチャンネルに記入してください。\n（※名前が記入されたら、面接官の方は再度コマンドを実行してください）"
                         )
                     except Exception as e:
                         print(f"[WARNING] Failed to send duplicate warning message to channel: {e}")
+                    
+                    return await interaction.followup.send(f"⚠️ 名前が重複しているため、処理を中断しました。対象ユーザーに別の名前を記入してもらってから再実行してください。", ephemeral=True)
                 
                 try:
                     await user.edit(nick=proposed_nick)
-                    nick_change_status = f"\n✅ 名前を「{proposed_nick}」に変更しました。{duplicate_warning}"
+                    nick_change_status = f"\n✅ 名前を「{proposed_nick}」に変更しました。"
                 except discord.Forbidden:
-                    nick_change_status = f"\n⚠️ 権限不足のため名前を変更できませんでした（Botのロール順位や権限を確認してください）。{duplicate_warning}"
+                    nick_change_status = f"\n⚠️ 権限不足のため名前を変更できませんでした（Botのロール順位や権限を確認してください）。"
                 except Exception as e:
-                    nick_change_status = f"\n❌ 名前変更中にエラーが発生しました: {e}{duplicate_warning}"
+                    nick_change_status = f"\n❌ 名前変更中にエラーが発生しました: {e}"
             else:
                 nick_change_status = "\nℹ️ チャンネル履歴に対象ユーザーのメッセージが見つからなかったため、名前変更はスキップされました。"
 

@@ -106,8 +106,7 @@ class Ranking(commands.Cog):
                     enable_tc=True,
                     eval_time_str=eval_time_str,
                     vc_xp_per_min=vc_xp_per_min,
-                    tc_xp_reward=tc_xp_reward,
-                    guild_id=interaction.guild_id
+                    tc_xp_reward=tc_xp_reward
                 )
                 file = discord.File(fp=io.BytesIO(card_bytes), filename="rank_card.png")
                 await interaction.followup.send(file=file)

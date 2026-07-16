@@ -187,9 +187,9 @@ def has_evaluator_role(bot, user: discord.Member) -> bool:
     return get_evaluator_tier(bot, user) > 0
 
 def has_interviewer_role(bot, user: discord.Member):
-    interviewer_role_ids = get_setting(bot, "INTERVIEWER_ROLE_IDS")
-    user_role_ids = [r.id for r in user.roles]
-    if any(rid in interviewer_role_ids for rid in user_role_ids):
+    interviewer_role_ids = get_setting(bot, "INTERVIEWER_ROLE_IDS") or []
+    user_role_ids = [str(r.id) for r in user.roles]
+    if any(str(rid) in user_role_ids for rid in interviewer_role_ids):
         return True
     user_role_names = [r.name for r in user.roles]
     if any(name in INTERVIEWER_ROLE_NAMES for name in user_role_names):
