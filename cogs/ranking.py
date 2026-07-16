@@ -145,7 +145,7 @@ class Ranking(commands.Cog):
                 f"┗ 目安: あと **約{tc_est_msgs}通** のチャット"
                 )
                 if tc_role_name:
-                tc_value += f"\n┗ 現在の役職: **{tc_role_name}**"
+                    tc_value += f"\n┗ 現在の役職: **{tc_role_name}**"
                 embed.add_field(name="💬 テキストチャット", value=tc_value, inline=False)
 
             # VC
