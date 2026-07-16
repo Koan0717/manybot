@@ -84,6 +84,8 @@ class Ranking(commands.Cog):
             # 設定からXP取得量を計算
             vc_xp_per_min = config.get_setting(self.bot, "VC_XP_PER_MIN", interaction.guild_id) or 15
             tc_xp_reward = config.get_setting(self.bot, "TC_XP_REWARD", interaction.guild_id) or 10
+            enable_tc_str = config.get_setting(self.bot, "ENABLE_TC_RANK", interaction.guild_id)
+            enable_tc = str(enable_tc_str).lower() != "false" if enable_tc_str is not None else True
 
             # ランクカード画像の生成
             import io
@@ -135,16 +137,17 @@ class Ranking(commands.Cog):
             embed.set_thumbnail(url=target_user.display_avatar.url)
 
             # TC
-            tc_value = (
+            if enable_tc:
+                tc_value = (
                 f"**Level:** `{tc_lv}`\n"
                 f"**Next:** `{tc_xp}` / `{tc_next}` XP\n"
                 f"{create_progress_bar(tc_xp, tc_next)}\n"
                 f"┗ 次のレベルまであと **{tc_needed}** XP\n"
                 f"┗ 目安: あと **約{tc_est_msgs}通** のチャット"
-            )
-            if tc_role_name:
+                )
+                if tc_role_name:
                 tc_value += f"\n┗ 現在の役職: **{tc_role_name}**"
-            embed.add_field(name="💬 テキストチャット", value=tc_value, inline=False)
+                embed.add_field(name="💬 テキストチャット", value=tc_value, inline=False)
 
             # VC
             current_session_str = ""
@@ -221,6 +224,9 @@ class Ranking(commands.Cog):
 
     @rank_top_group.command(name="tc", description="テキストチャット(TC)のランキング上位10名を表示します")
     async def rank_top_tc(self, interaction: discord.Interaction):
+        enable_tc_str = config.get_setting(self.bot, "ENABLE_TC_RANK", interaction.guild_id)
+        if enable_tc_str is not None and str(enable_tc_str).lower() == "false":
+            return await interaction.response.send_message("現在、テキストチャット(TC)ランク機能はオフになっています。", ephemeral=True)
         await self._show_ranking(interaction, "tc")
 
     @rank_top_group.command(name="vc", description="ボイスチャット(VC)のランキング上位10名を表示します")
@@ -344,6 +350,9 @@ class Ranking(commands.Cog):
         now = datetime.datetime.now(config.JST)
 
         in_correct_category = config.is_xp_enabled(self.bot, message.channel)
+        enable_tc_str = config.get_setting(self.bot, "ENABLE_TC_RANK", message.guild.id)
+        if enable_tc_str is not None and str(enable_tc_str).lower() == "false":
+            return
 
         if in_correct_category:
             last_xp_time = self.bot.tc_xp_cooldowns.get(user_id)

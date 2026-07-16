@@ -294,11 +294,15 @@ class Logging(commands.Cog):
                         if entry.user and not entry.user.bot:
                             interviewer = entry.user
                             
+                            interviewer_member = after.guild.get_member(interviewer.id)
+                            if not interviewer_member or not config.has_interviewer_role(self.bot, interviewer_member):
+                                break
+                            
                             new_total = await database.increment_interviewer_stats(after.guild.id, interviewer.id)
                             
                             embed = discord.Embed(
-                                title="👔 手動入界手続き",
-                                description=f"面接官が手動で入界手続きを行いました。\n\n**対象者:** {after.mention}\n**面接官:** {interviewer.mention}\n\n**今回の対応人数:** 1人\n**面接合計対応人数:** {new_total}人",
+                                title="👔 入界手続き完了",
+                                description=f"面接官 {interviewer.mention} が、入界待機者 {after.mention} に {human_role.name} ロールを付与しました。\n対応人数 {new_total}人目",
                                 color=discord.Color.green(),
                                 timestamp=datetime.datetime.now(config.JST)
                             )
