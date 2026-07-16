@@ -103,7 +103,7 @@ class Ranking(commands.Cog):
                     tc_xp=tc_xp,
                     tc_next_xp=tc_next,
                     tc_role_name=tc_role_name,
-                    enable_tc=True,
+                    enable_tc=enable_tc,
                     eval_time_str=eval_time_str,
                     vc_xp_per_min=vc_xp_per_min,
                     tc_xp_reward=tc_xp_reward
