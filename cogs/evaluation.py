@@ -320,6 +320,12 @@ class Evaluation(commands.Cog):
         # 評価落ちロール付与検知
         eval_failed_role = get_role_by_setting(bot, after.guild, "DOWNGRADE_ROLE_ID", "評価落ち")
         if eval_failed_role and eval_failed_role in after.roles and eval_failed_role not in before.roles:
+            temp_member_role = get_role_by_setting(bot, after.guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
+            if temp_member_role and temp_member_role in after.roles:
+                try:
+                    await after.remove_roles(temp_member_role, reason="評価落ちのため自動剥奪")
+                except Exception as e:
+                    print(f"[Evaluation Failure] Failed to remove temp member role: {e}")
             import asyncio
             await asyncio.sleep(1)
             moderator = None

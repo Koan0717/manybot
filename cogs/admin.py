@@ -71,6 +71,14 @@ async def trigger_evaluation_failure(guild, target, reason, executor, bot):
             except Exception as e:
                 print(f"[Evaluation] Failed to add role: {e}")
                 
+        # 評価落ち時に元の仮メンロールを外す
+        temp_member_role = get_role_by_setting(bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
+        if temp_member_role and temp_member_role in target.roles:
+            try:
+                await target.remove_roles(temp_member_role, reason=reason)
+            except Exception as e:
+                print(f"[Evaluation] Failed to remove temp member role: {e}")
+                
         dm_msg = "審査の結果評価落ちになりました。" if reason != "通貨マイナスになったため" else "通貨がマイナスになった為、評価落ちしました。"
         try:
             await target.send(dm_msg)
