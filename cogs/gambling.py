@@ -25,13 +25,13 @@ class ChinchiroBetModal(discord.ui.Modal, title='チンチロリン：賭け金�
             if bet <= 0 or bet > max_bet:
                 return await interaction.response.send_message(f"1〜{max_bet:,}の範囲で入力してください。", ephemeral=True)
             await interaction.response.defer(ephemeral=True)
-            user_data = await database.get_user(interaction.guild.id, interaction.user.id)
+            user_data = await database.get_user(it.guild.id, interaction.user.id)
             now = datetime.datetime.now(JST)
             today_str = now.strftime("%Y-%m-%d")
             count = user_data.get("chinchiro_count", 0)
             daily_bet = user_data.get("chinchiro_daily_bet", 0)
             if user_data.get("chinchiro_last_date") != today_str:
-                await database.reset_gambling_count(interaction.guild.id, interaction.user.id, today_str)
+                await database.reset_gambling_count(it.guild.id, interaction.user.id, today_str)
                 count = 0
                 daily_bet = 0
             max_plays = get_setting(bot, "GAMBLE_MAX_PLAYS")
@@ -42,10 +42,10 @@ class ChinchiroBetModal(discord.ui.Modal, title='チンチロリン：賭け金�
             daily_limit = get_setting(bot, "GAMBLE_DAILY_LIMIT")
             if daily_limit is not None and int(daily_limit) > 0 and daily_bet + bet > int(daily_limit):
                 return await interaction.followup.send(f"1日の賭け金上限({int(daily_limit):,} {currency_name})を超えるため賭けられません。\n本日既に賭けた額: {daily_bet:,} {currency_name}", ephemeral=True)
-            if await database.get_balance(interaction.guild.id, interaction.user.id) < bet:
+            if await database.get_balance(it.guild.id, interaction.user.id) < bet:
                 return await interaction.followup.send("残高不足です。", ephemeral=True)
-            await database.remove_balance(interaction.guild.id, interaction.user.id, bet)
-            await database.increment_gambling_count(interaction.guild.id, interaction.user.id, bet)
+            await database.remove_balance(it.guild.id, interaction.user.id, bet)
+            await database.increment_gambling_count(it.guild.id, interaction.user.id, bet)
             view = ChinchiroGameView(interaction.user, bet)
             await interaction.followup.send(f"🎲 **チンチロリン開始！** (本日 {count+1}/{max_plays if max_plays > 0 else '無制限'}回目)\n賭け金: **{bet} {currency_name}**", view=view, ephemeral=True)
         except:
@@ -260,7 +260,7 @@ class ChinchiroGameView(discord.ui.View):
         tax_msg = ""
         
         if win_status == "draw":
-            await database.add_balance(interaction.guild.id, self.user.id, self.bet)
+            await database.add_balance(it.guild.id, self.user.id, self.bet)
             res = f"🤝 引き分け！お互い役なし\n賭け金 {self.bet} {currency_name} が戻りました。"
             color = discord.Color.light_grey()
         elif win_status == "player_win":
@@ -276,7 +276,7 @@ class ChinchiroGameView(discord.ui.View):
                 win_amount = win_amount - tax_amount
                 tax_msg = f"\n※ カジノ手数料 ({tax_rate*100:.1f}%) として **{tax_amount:,} {currency_name}** が引かれました。"
                 
-            await database.add_balance(interaction.guild.id, self.user.id, self.bet + win_amount)
+            await database.add_balance(it.guild.id, self.user.id, self.bet + win_amount)
             res = f"🏆 勝ち！ {win_amount} {currency_name} 獲得！{tax_msg}"
             color = discord.Color.gold()
         else:
@@ -286,12 +286,12 @@ class ChinchiroGameView(discord.ui.View):
                 
             extra_loss = self.bet * (loss_mul - 1)
             if extra_loss > 0:
-                current_bal = await database.get_balance(interaction.guild.id, self.user.id)
+                current_bal = await database.get_balance(it.guild.id, self.user.id)
                 if current_bal >= extra_loss:
-                    await database.remove_balance(interaction.guild.id, self.user.id, extra_loss)
+                    await database.remove_balance(it.guild.id, self.user.id, extra_loss)
                     res = f"💀 負け… (合計 {self.bet * loss_mul} {currency_name} 没収)"
                 else:
-                    await database.remove_balance(interaction.guild.id, self.user.id, current_bal)
+                    await database.remove_balance(it.guild.id, self.user.id, current_bal)
                     res = f"💀 負け… (残高不足のため、残高全額没収)"
             else:
                 res = f"💀 負け… {self.bet} {currency_name} 没収"
@@ -356,13 +356,13 @@ class CoinflipBetModal(discord.ui.Modal, title='コイントス：賭け金入�
             if bet <= 0 or bet > max_bet:
                 return await it.response.send_message(f"1〜{max_bet:,}の範囲で入力してください。", ephemeral=True)
             await it.response.defer(ephemeral=True)
-            user_data = await database.get_user(interaction.guild.id, it.user.id)
+            user_data = await database.get_user(it.guild.id, it.user.id)
             now = datetime.datetime.now(JST)
             today_str = now.strftime("%Y-%m-%d")
             count = user_data.get("chinchiro_count", 0)
             daily_bet = user_data.get("chinchiro_daily_bet", 0)
             if user_data.get("chinchiro_last_date") != today_str:
-                await database.reset_gambling_count(interaction.guild.id, it.user.id, today_str)
+                await database.reset_gambling_count(it.guild.id, it.user.id, today_str)
                 count = 0
                 daily_bet = 0
             max_plays = int(max_plays)
@@ -372,7 +372,7 @@ class CoinflipBetModal(discord.ui.Modal, title='コイントス：賭け金入�
             currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
             if daily_limit is not None and int(daily_limit) > 0 and daily_bet + bet > int(daily_limit):
                 return await it.followup.send(f"1日の賭け金上限({int(daily_limit):,} {currency_name})を超えるため賭けられません。\n本日既に賭けた額: {daily_bet:,} {currency_name}", ephemeral=True)
-            if await database.get_balance(interaction.guild.id, it.user.id) < bet:
+            if await database.get_balance(it.guild.id, it.user.id) < bet:
                 return await it.followup.send("残高不足です。", ephemeral=True)
             await it.followup.send(f"🪙 **コイントス！** (本日 {count+1}/{max_plays if max_plays > 0 else '無制限'}回目)\n「表」か「裏」か？", view=CoinflipGameView(it.user, bet, count), ephemeral=True)
         except:
@@ -386,9 +386,9 @@ class CoinflipGameView(discord.ui.View):
     async def process(self, it, choice):
         bot = it.client
         if it.user != self.user: return
-        if not await database.remove_balance(interaction.guild.id, self.user.id, self.bet):
+        if not await database.remove_balance(it.guild.id, self.user.id, self.bet):
             return await it.response.edit_message(content="残高不足", view=None)
-        await database.increment_gambling_count(interaction.guild.id, self.user.id, self.bet)
+        await database.increment_gambling_count(it.guild.id, self.user.id, self.bet)
         
         p_win = get_setting(bot, "GAMBLE_COINFLIP_RATE_WIN")
         p_lose = get_setting(bot, "GAMBLE_COINFLIP_RATE_LOSE")
@@ -417,7 +417,7 @@ class CoinflipGameView(discord.ui.View):
                 tax_amount = int(net_profit * tax_rate)
                 win_amount = self.bet + (net_profit - tax_amount)
                 tax_msg = f"\n※ カジノ手数料 ({tax_rate*100:.1f}%) として **{tax_amount:,} {currency_name}** が引かれました。"
-            await database.add_balance(interaction.guild.id, self.user.id, win_amount)
+            await database.add_balance(it.guild.id, self.user.id, win_amount)
             msg, color = f"🏆 当たり！ {win_amount} {currency_name} 獲得{tax_msg}", discord.Color.gold()
         else:
             msg, color = f"💀 外れ… {self.bet} {currency_name} 没収", discord.Color.red()
@@ -467,13 +467,13 @@ class SlotBetModal(discord.ui.Modal, title='スロット：賭け金入力'):
             if bet <= 0 or bet > max_bet:
                 return await it.response.send_message(f"1〜{max_bet:,}の範囲で入力してください。", ephemeral=True)
             await it.response.defer(ephemeral=True)
-            user_data = await database.get_user(interaction.guild.id, it.user.id)
+            user_data = await database.get_user(it.guild.id, it.user.id)
             now = datetime.datetime.now(JST)
             today_str = now.strftime("%Y-%m-%d")
             count = user_data.get("chinchiro_count", 0)
             daily_bet = user_data.get("chinchiro_daily_bet", 0)
             if user_data.get("chinchiro_last_date") != today_str:
-                await database.reset_gambling_count(interaction.guild.id, it.user.id, today_str)
+                await database.reset_gambling_count(it.guild.id, it.user.id, today_str)
                 count = 0
                 daily_bet = 0
             max_plays = int(max_plays)
@@ -483,9 +483,9 @@ class SlotBetModal(discord.ui.Modal, title='スロット：賭け金入力'):
             currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
             if daily_limit is not None and int(daily_limit) > 0 and daily_bet + bet > int(daily_limit):
                 return await it.followup.send(f"1日の賭け金上限({int(daily_limit):,} {currency_name})を超えるため賭けられません。\n本日既に賭けた額: {daily_bet:,} {currency_name}", ephemeral=True)
-            if not await database.remove_balance(interaction.guild.id, it.user.id, bet):
+            if not await database.remove_balance(it.guild.id, it.user.id, bet):
                 return await it.followup.send("残高不足です。", ephemeral=True)
-            await database.increment_gambling_count(interaction.guild.id, it.user.id, bet)
+            await database.increment_gambling_count(it.guild.id, it.user.id, bet)
             p_7 = get_setting(bot, "GAMBLE_SLOT_RATE_7")
             if p_7 is None: p_7 = 0.002
             p_star = get_setting(bot, "GAMBLE_SLOT_RATE_STAR")
@@ -539,7 +539,7 @@ class SlotBetModal(discord.ui.Modal, title='スロット：賭け金入力'):
                     tax_amount = int(net_profit * tax_rate)
                     win = bet + (net_profit - tax_amount)
                     tax_msg = f"\n※ カジノ手数料 ({tax_rate*100:.1f}%) として **{tax_amount:,} {currency_name}** が引かれました。"
-                await database.add_balance(interaction.guild.id, it.user.id, win)
+                await database.add_balance(it.guild.id, it.user.id, win)
             embed = discord.Embed(title="🎰 スロット結果", description=f"{r}\n{'🏆 当たり！' if win>0 else '💀 ハズレ'} {win} {currency_name} 獲得{tax_msg}", color=discord.Color.gold() if win>0 else discord.Color.red())
             await it.followup.send(embed=embed, ephemeral=True)
 
@@ -562,7 +562,10 @@ class SlotBetModal(discord.ui.Modal, title='スロット：賭け金入力'):
             embed_log.add_field(name="出目", value=" | ".join(r), inline=True)
             await send_log(bot, it.guild, "gambling", embed_log)
         except:
-            await it.response.send_message("エラー", ephemeral=True)
+            if not it.response.is_done():
+                await it.response.send_message('エラー', ephemeral=True)
+            else:
+                await it.followup.send('エラー', ephemeral=True)
 
 class SlotView(discord.ui.View):
     def __init__(self):
@@ -583,13 +586,13 @@ class BlackjackBetModal(discord.ui.Modal, title='ブラックジャック：賭�
             if bet <= 0 or bet > max_bet:
                 return await interaction.response.send_message(f"1〜{max_bet:,}の範囲で入力してください。", ephemeral=True)
             await interaction.response.defer(ephemeral=True)
-            user_data = await database.get_user(interaction.guild.id, interaction.user.id)
+            user_data = await database.get_user(it.guild.id, interaction.user.id)
             now = datetime.datetime.now(JST)
             today_str = now.strftime("%Y-%m-%d")
             count = user_data.get("chinchiro_count", 0)
             daily_bet = user_data.get("chinchiro_daily_bet", 0)
             if user_data.get("chinchiro_last_date") != today_str:
-                await database.reset_gambling_count(interaction.guild.id, interaction.user.id, today_str)
+                await database.reset_gambling_count(it.guild.id, interaction.user.id, today_str)
                 count = 0
                 daily_bet = 0
             max_plays = get_setting(bot, "GAMBLE_MAX_PLAYS")
@@ -600,11 +603,11 @@ class BlackjackBetModal(discord.ui.Modal, title='ブラックジャック：賭�
             daily_limit = get_setting(bot, "GAMBLE_DAILY_LIMIT")
             if daily_limit is not None and int(daily_limit) > 0 and daily_bet + bet > int(daily_limit):
                 return await interaction.followup.send(f"1日の賭け金上限({int(daily_limit):,} {currency_name})を超えるため賭けられません。\n本日既に賭けた額: {daily_bet:,} {currency_name}", ephemeral=True)
-            if await database.get_balance(interaction.guild.id, interaction.user.id) < bet:
+            if await database.get_balance(it.guild.id, interaction.user.id) < bet:
                 return await interaction.followup.send("残高不足です。", ephemeral=True)
             
-            await database.remove_balance(interaction.guild.id, interaction.user.id, bet)
-            await database.increment_gambling_count(interaction.guild.id, interaction.user.id, bet)
+            await database.remove_balance(it.guild.id, interaction.user.id, bet)
+            await database.increment_gambling_count(it.guild.id, interaction.user.id, bet)
             
             view = BlackjackGameView(interaction.user, bet, interaction)
             initial_blackjack_embed = await view.check_initial_blackjack()
@@ -719,7 +722,7 @@ class BlackjackGameView(discord.ui.View):
             dealer_score = calculate_blackjack_score(self.dealer_hand)
             if dealer_score == 21:
                 win_amount = self.bet
-                await database.add_balance(interaction.guild.id, self.user.id, win_amount)
+                await database.add_balance(it.guild.id, self.user.id, win_amount)
                 title = "🤝 引き分け"
                 color = discord.Color.light_grey()
                 description = f"双方ブラックジャック！引き分け（プッシュ）です。\n**{win_amount} {currency_name}** が戻ります。"
@@ -744,7 +747,7 @@ class BlackjackGameView(discord.ui.View):
                     tax_amount = int(net_profit * tax_rate)
                     win_amount = self.bet + (net_profit - tax_amount)
                     tax_msg = f"\n※ カジノ手数料 ({tax_rate*100:.1f}%) として **{tax_amount:,} {currency_name}** が引かれました。"
-                await database.add_balance(interaction.guild.id, self.user.id, win_amount)
+                await database.add_balance(it.guild.id, self.user.id, win_amount)
                 title = "🃏 ブラックジャック！"
                 color = discord.Color.gold()
                 description = f"ブラックジャック達成！\n**{win_amount} {currency_name}** 獲得！{tax_msg}"
@@ -899,7 +902,7 @@ class BlackjackGameView(discord.ui.View):
                 description = f"ディーラーを上回りました！\n**{win_amount} {currency_name}** 獲得！{tax_msg}"
             
         if win_amount > 0:
-            await database.add_balance(interaction.guild.id, self.user.id, win_amount)
+            await database.add_balance(it.guild.id, self.user.id, win_amount)
             
         embed = self.build_embed(title=title, color=color, description=description, is_final=True)
 
@@ -968,14 +971,14 @@ class RouletteBetModal(discord.ui.Modal, title='ルーレット：賭け金入�
                 return await interaction.response.send_message(f"1〜{max_bet:,} the rangeで入力してください。", ephemeral=True)
             await interaction.response.defer(ephemeral=True)
             
-            user_data = await database.get_user(interaction.guild.id, interaction.user.id)
+            user_data = await database.get_user(it.guild.id, interaction.user.id)
             now = datetime.datetime.now(JST)
             today_str = now.strftime("%Y-%m-%d")
             count = user_data.get("chinchiro_count", 0)
             daily_bet = user_data.get("chinchiro_daily_bet", 0)
             
             if user_data.get("chinchiro_last_date") != today_str:
-                await database.reset_gambling_count(interaction.guild.id, interaction.user.id, today_str)
+                await database.reset_gambling_count(it.guild.id, interaction.user.id, today_str)
                 count = 0
                 daily_bet = 0
                 
@@ -989,7 +992,7 @@ class RouletteBetModal(discord.ui.Modal, title='ルーレット：賭け金入�
             if daily_limit is not None and int(daily_limit) > 0 and daily_bet + bet > int(daily_limit):
                 return await interaction.followup.send(f"1日の賭け金上限({int(daily_limit):,} {currency_name})を超えるため賭けられません。\n本日既に賭けた額: {daily_bet:,} {currency_name}", ephemeral=True)
                 
-            if await database.get_balance(interaction.guild.id, interaction.user.id) < bet:
+            if await database.get_balance(it.guild.id, interaction.user.id) < bet:
                 return await interaction.followup.send("残高不足です。", ephemeral=True)
             
             view = RouletteBetTypeView(interaction.user, bet, count)
@@ -1068,14 +1071,14 @@ class RouletteNumberModal(discord.ui.Modal, title='ルーレット：数字1点�
 
 async def run_roulette_game(interaction: discord.Interaction, user, bet, count, bet_type, target_num):
     bot = interaction.client
-    user_data = await database.get_user(interaction.guild.id, user.id)
+    user_data = await database.get_user(it.guild.id, user.id)
     now = datetime.datetime.now(JST)
     today_str = now.strftime("%Y-%m-%d")
     current_count = user_data.get("chinchiro_count", 0)
     daily_bet = user_data.get("chinchiro_daily_bet", 0)
     
     if user_data.get("chinchiro_last_date") != today_str:
-        await database.reset_gambling_count(interaction.guild.id, user.id, today_str)
+        await database.reset_gambling_count(it.guild.id, user.id, today_str)
         current_count = 0
         daily_bet = 0
         
@@ -1098,14 +1101,14 @@ async def run_roulette_game(interaction: discord.Interaction, user, bet, count, 
             await interaction.response.send_message(f"1日の賭け金上限({int(daily_limit):,} {currency_name})を超えるため賭けられません。\n本日既に賭けた額: {daily_bet:,} {currency_name}", ephemeral=True)
         return
         
-    if not await database.remove_balance(interaction.guild.id, user.id, bet):
+    if not await database.remove_balance(it.guild.id, user.id, bet):
         try:
             await interaction.followup.send("残高不足です。", ephemeral=True)
         except Exception:
             await interaction.response.send_message("残高不足です。", ephemeral=True)
         return
         
-    await database.increment_gambling_count(interaction.guild.id, user.id, bet)
+    await database.increment_gambling_count(it.guild.id, user.id, bet)
     
     red_numbers = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
     
@@ -1194,7 +1197,7 @@ async def run_roulette_game(interaction: discord.Interaction, user, bet, count, 
             tax_amount = int(net_profit * tax_rate)
             win_amount = bet + (net_profit - tax_amount)
             tax_msg = f"\n※ カジノ手数料 ({tax_rate*100:.1f}%) として **{tax_amount:,} {currency_name}** が引かれました。"
-        await database.add_balance(interaction.guild.id, user.id, win_amount)
+        await database.add_balance(it.guild.id, user.id, win_amount)
         
     color_emoji = get_color_emoji(final_number)
     if is_win:
@@ -1315,12 +1318,12 @@ async def save_auto_expectation_rates(bot, game_key, E):
         p_hif = 0.11 * k_lose
         p_los = 0.445 * k_lose
         
-        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_PINZORO", p_pin)
-        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_ARASHI", p_ara)
-        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_SHIGORO", p_shig)
-        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_NORMAL_WIN", p_norm)
-        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_HIFUMI", p_hif)
-        await database.save_setting(interaction.guild.id, "GAMBLE_CHINCHIRO_RATE_LOSE", p_los)
+        await database.save_setting(it.guild.id, "GAMBLE_CHINCHIRO_RATE_PINZORO", p_pin)
+        await database.save_setting(it.guild.id, "GAMBLE_CHINCHIRO_RATE_ARASHI", p_ara)
+        await database.save_setting(it.guild.id, "GAMBLE_CHINCHIRO_RATE_SHIGORO", p_shig)
+        await database.save_setting(it.guild.id, "GAMBLE_CHINCHIRO_RATE_NORMAL_WIN", p_norm)
+        await database.save_setting(it.guild.id, "GAMBLE_CHINCHIRO_RATE_HIFUMI", p_hif)
+        await database.save_setting(it.guild.id, "GAMBLE_CHINCHIRO_RATE_LOSE", p_los)
         
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_CHINCHIRO_RATE_PINZORO"] = p_pin
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_CHINCHIRO_RATE_ARASHI"] = p_ara
@@ -1334,8 +1337,8 @@ async def save_auto_expectation_rates(bot, game_key, E):
         p_win_dec = p_win / 100.0
         p_lose_dec = max(0.0, 1.0 - p_win_dec)
         
-        await database.save_setting(interaction.guild.id, "GAMBLE_COINFLIP_RATE_WIN", p_win_dec)
-        await database.save_setting(interaction.guild.id, "GAMBLE_COINFLIP_RATE_LOSE", p_lose_dec)
+        await database.save_setting(it.guild.id, "GAMBLE_COINFLIP_RATE_WIN", p_win_dec)
+        await database.save_setting(it.guild.id, "GAMBLE_COINFLIP_RATE_LOSE", p_lose_dec)
         
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_COINFLIP_RATE_WIN"] = p_win_dec
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_COINFLIP_RATE_LOSE"] = p_lose_dec
@@ -1348,10 +1351,10 @@ async def save_auto_expectation_rates(bot, game_key, E):
         p_triple = (6.0 / 512.0) * k
         p_double = (168.0 / 512.0) * k
         
-        await database.save_setting(interaction.guild.id, "GAMBLE_SLOT_RATE_7", p_7)
-        await database.save_setting(interaction.guild.id, "GAMBLE_SLOT_RATE_STAR", p_star)
-        await database.save_setting(interaction.guild.id, "GAMBLE_SLOT_RATE_THREE", p_triple)
-        await database.save_setting(interaction.guild.id, "GAMBLE_SLOT_RATE_TWO", p_double)
+        await database.save_setting(it.guild.id, "GAMBLE_SLOT_RATE_7", p_7)
+        await database.save_setting(it.guild.id, "GAMBLE_SLOT_RATE_STAR", p_star)
+        await database.save_setting(it.guild.id, "GAMBLE_SLOT_RATE_THREE", p_triple)
+        await database.save_setting(it.guild.id, "GAMBLE_SLOT_RATE_TWO", p_double)
         
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_SLOT_RATE_7"] = p_7
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_SLOT_RATE_STAR"] = p_star
@@ -1368,10 +1371,10 @@ async def save_auto_expectation_rates(bot, game_key, E):
         p_bj = 0.05 * k_win
         p_los = max(0.0, 1.0 - p_win_dec - p_draw_dec)
         
-        await database.save_setting(interaction.guild.id, "GAMBLE_BLACKJACK_RATE_NORMAL_WIN", p_norm)
-        await database.save_setting(interaction.guild.id, "GAMBLE_BLACKJACK_RATE_BJ_WIN", p_bj)
-        await database.save_setting(interaction.guild.id, "GAMBLE_BLACKJACK_RATE_DRAW", p_draw_dec)
-        await database.save_setting(interaction.guild.id, "GAMBLE_BLACKJACK_RATE_LOSE", p_los)
+        await database.save_setting(it.guild.id, "GAMBLE_BLACKJACK_RATE_NORMAL_WIN", p_norm)
+        await database.save_setting(it.guild.id, "GAMBLE_BLACKJACK_RATE_BJ_WIN", p_bj)
+        await database.save_setting(it.guild.id, "GAMBLE_BLACKJACK_RATE_DRAW", p_draw_dec)
+        await database.save_setting(it.guild.id, "GAMBLE_BLACKJACK_RATE_LOSE", p_los)
         
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_BLACKJACK_RATE_NORMAL_WIN"] = p_norm
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_BLACKJACK_RATE_BJ_WIN"] = p_bj
@@ -1383,9 +1386,9 @@ async def save_auto_expectation_rates(bot, game_key, E):
         r_win_3x = min(E / 3.0, 1.0)
         r_win_36x = min(E / 36.0, 1.0)
         
-        await database.save_setting(interaction.guild.id, "GAMBLE_ROULETTE_WIN_RATE_2X", r_win_2x)
-        await database.save_setting(interaction.guild.id, "GAMBLE_ROULETTE_WIN_RATE_3X", r_win_3x)
-        await database.save_setting(interaction.guild.id, "GAMBLE_ROULETTE_WIN_RATE_36X", r_win_36x)
+        await database.save_setting(it.guild.id, "GAMBLE_ROULETTE_WIN_RATE_2X", r_win_2x)
+        await database.save_setting(it.guild.id, "GAMBLE_ROULETTE_WIN_RATE_3X", r_win_3x)
+        await database.save_setting(it.guild.id, "GAMBLE_ROULETTE_WIN_RATE_36X", r_win_36x)
         
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_ROULETTE_WIN_RATE_2X"] = r_win_2x
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_ROULETTE_WIN_RATE_3X"] = r_win_3x
@@ -2050,7 +2053,7 @@ class GambleDetailSettingsModal(discord.ui.Modal):
                     return await interaction.response.send_message("0以上の数値を入力してください。", ephemeral=True)
                     
             # 保存
-            await database.save_setting(interaction.guild.id, self.key, val)
+            await database.save_setting(it.guild.id, self.key, val)
             bot.bot_settings.setdefault(interaction.guild.id, {})[self.key] = val
             
             embed = discord.Embed(
@@ -2140,7 +2143,7 @@ class GambleLimitResetView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         
         today_str = datetime.datetime.now(JST).strftime("%Y-%m-%d")
-        await database.reset_gambling_count(interaction.guild.id, self.selected_user.id, today_str)
+        await database.reset_gambling_count(it.guild.id, self.selected_user.id, today_str)
         
         from cogs.gambling import GambleEmployeePanelView
         back_view = GambleEmployeePanelView(self.user, self.bot)
