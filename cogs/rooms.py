@@ -926,7 +926,7 @@ class Rooms(commands.Cog):
                     if not cfg or not cfg.get("base_name"):
                         channel_name = f"🔊│{member.display_name}の部屋"
                     else:
-                        base_name = cfg["base_name"]
+                        base_name = cfg["base_name"].replace("{user}", member.display_name)
                         include_owner_name = cfg.get("include_owner_name", True)
                         use_numbering = cfg.get("use_numbering", False)
                         
