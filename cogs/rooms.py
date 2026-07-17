@@ -36,7 +36,7 @@ class InvitePanelView(discord.ui.View):
         super().__init__(timeout=None)
         self.bot = bot
 
-    @discord.ui.user_select(placeholder="招待するユーザーを選択", min_values=1, max_values=10, custom_id="vc_invite_select")
+    @discord.ui.select(cls=discord.ui.UserSelect, placeholder="招待するユーザーを選択", min_values=1, max_values=10, custom_id="vc_invite_select")
     async def select_users(self, interaction: discord.Interaction, select: discord.ui.UserSelect):
         room_data = await database.get_room(interaction.channel.id)
         if not room_data or interaction.user.id != room_data["owner_id"]:
