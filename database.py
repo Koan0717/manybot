@@ -394,10 +394,6 @@ async def setup_db_schema(p):
 
             await conn.execute('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS show_panel BOOLEAN DEFAULT TRUE')
 
-            await conn.execute('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS is_invite_only BOOLEAN DEFAULT FALSE')
-
-            await conn.execute('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS invite_visible_role_ids BIGINT[] DEFAULT ARRAY[]::BIGINT[]')
-
         except Exception as e:
 
             print(f"[Migration] auto_vc_config migration warning: {e}")
@@ -600,8 +596,6 @@ async def setup_db_schema(p):
 
         ''')
 
-
-
         await conn.execute('''
 
             CREATE TABLE IF NOT EXISTS evaluation_settings (
@@ -647,8 +641,6 @@ async def setup_db_schema(p):
             )
 
         ''')
-
-
 
         try:
             try:
@@ -1513,41 +1505,23 @@ async def get_auto_vc_triggers() -> list[int]:
 
 # --- VC菴懈・繝医Μ繧ｬ繝ｼ險ｭ螳夂ｮ｡逅・畑髢｢謨ｰ ---
 
-async def save_auto_vc_config(channel_id: int, base_name: str, allow_rename: bool, include_owner_name: bool, use_numbering: bool, allow_limit_change: bool, show_panel: bool, is_invite_only: bool = False, invite_visible_role_ids: list[int] = None):
+async def save_auto_vc_config(channel_id: int, base_name: str, allow_rename: bool, include_owner_name: bool, use_numbering: bool, allow_limit_change: bool, show_panel: bool):
 
     p = await get_pool()
-
-    if invite_visible_role_ids is None:
-
-        invite_visible_role_ids = []
 
     async with p.acquire() as conn:
 
         await conn.execute('''
 
-            INSERT INTO auto_vc_config (channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids)
+            INSERT INTO auto_vc_config (channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel)
 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
 
             ON CONFLICT (channel_id) DO UPDATE SET
 
-                base_name = EXCLUDED.base_name,
+                base_name = $2, allow_rename = $3, include_owner_name = $4, use_numbering = $5, allow_limit_change = $6, show_panel = $7
 
-                allow_rename = EXCLUDED.allow_rename,
-
-                include_owner_name = EXCLUDED.include_owner_name,
-
-                use_numbering = EXCLUDED.use_numbering,
-
-                allow_limit_change = EXCLUDED.allow_limit_change,
-
-                show_panel = EXCLUDED.show_panel,
-
-                is_invite_only = EXCLUDED.is_invite_only,
-
-                invite_visible_role_ids = EXCLUDED.invite_visible_role_ids
-
-        ''', channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids)
+        ''', channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel)
 
 
 
@@ -1557,7 +1531,7 @@ async def get_auto_vc_config(channel_id: int) -> dict | None:
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids FROM auto_vc_config WHERE channel_id = $1', channel_id)
+        row = await conn.fetchrow('SELECT base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel FROM auto_vc_config WHERE channel_id = $1', channel_id)
 
         if row:
 
@@ -1573,11 +1547,7 @@ async def get_auto_vc_config(channel_id: int) -> dict | None:
 
                 "allow_limit_change": row["allow_limit_change"],
 
-                "show_panel": row["show_panel"],
-
-                "is_invite_only": row["is_invite_only"],
-
-                "invite_visible_role_ids": row["invite_visible_role_ids"] or []
+                "show_panel": row["show_panel"]
 
             }
 
@@ -1607,7 +1577,7 @@ async def get_all_auto_vc_configs() -> list[dict]:
 
             async with p.acquire() as conn:
 
-                rows = await conn.fetch('SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids FROM auto_vc_config')
+                rows = await conn.fetch('SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel FROM auto_vc_config')
 
                 all_configs.extend([{
 

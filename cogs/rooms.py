@@ -30,25 +30,6 @@ class LimitModal(discord.ui.Modal, title='人数制限の設定'):
         except:
             await interaction.response.send_message("数字を正しく入力してください。", ephemeral=True)
 
-# --- 招待パネルView ---
-class InvitePanelView(discord.ui.View):
-    def __init__(self, bot):
-        super().__init__(timeout=None)
-        self.bot = bot
-
-    @discord.ui.select(cls=discord.ui.UserSelect, placeholder="招待するユーザーを選択", min_values=1, max_values=10, custom_id="vc_invite_select")
-    async def select_users(self, interaction: discord.Interaction, select: discord.ui.UserSelect):
-        room_data = await database.get_room(interaction.channel.id)
-        if not room_data or interaction.user.id != room_data["owner_id"]:
-            return await interaction.response.send_message("招待は部屋のオーナーのみ可能です。", ephemeral=True)
-            
-        invited = []
-        for user in select.values:
-            await interaction.channel.set_permissions(user, connect=True, view_channel=True)
-            invited.append(user.mention)
-            
-        await interaction.response.send_message(f"{' '.join(invited)} を招待しました！", ephemeral=False)
-
 # --- 延長選択View ---
 class ExtendInnSelectView(discord.ui.View):
     def __init__(self, bot, is_free: bool, member=None):
@@ -859,7 +840,6 @@ class Rooms(commands.Cog):
         self.bot.add_view(RoomControlView())
         self.bot.add_view(CustomRoomControlView())
         self.bot.add_view(VCRenamePanelView())
-        self.bot.add_view(InvitePanelView(self.bot))
         self.bot.add_view(MainInnPanelView())
         self.bot.add_view(TempInnPanelView())
         self.bot.add_view(LuxuryInnPanelView())
@@ -982,27 +962,11 @@ class Rooms(commands.Cog):
                                     await member.move_to(existing_ch)
                                 return
 
-                    overwrites = None
-                    if cfg and cfg.get("is_invite_only"):
-                        overwrites = {
-                            guild.default_role: discord.PermissionOverwrite(connect=False, view_channel=False),
-                            member: discord.PermissionOverwrite(connect=True, view_channel=True)
-                        }
-                        visible_roles = cfg.get("invite_visible_role_ids") or []
-                        for role_id in visible_roles:
-                            role = guild.get_role(int(role_id))
-                            if role:
-                                overwrites[role] = discord.PermissionOverwrite(connect=False, view_channel=True)
-
-                    create_kwargs = {
-                        "name": channel_name,
-                        "category": category,
-                        "reason": f"Auto-VC for {member.display_name}"
-                    }
-                    if overwrites is not None:
-                        create_kwargs["overwrites"] = overwrites
-
-                    new_channel = await guild.create_voice_channel(**create_kwargs)
+                    new_channel = await guild.create_voice_channel(
+                        name=channel_name,
+                        category=category,
+                        reason=f"Auto-VC for {member.display_name}"
+                    )
                     
                     if member.voice and member.voice.channel and member.voice.channel.id == trigger_id:
                         try:
@@ -1022,14 +986,6 @@ class Rooms(commands.Cog):
                             color=discord.Color.blue()
                         )
                         await new_channel.send(embed=embed, view=VCRenamePanelView())
-
-                    if cfg and cfg.get("is_invite_only"):
-                        invite_embed = discord.Embed(
-                            title="✉️ 招待パネル",
-                            description="この部屋は招待専用です。下のメニューからユーザーを選択して招待してください。",
-                            color=discord.Color.gold()
-                        )
-                        await new_channel.send(embed=invite_embed, view=InvitePanelView(self.bot))
 
                     # Move attempts are now done instantly above. We still keep a fallback just in case.
                     async def delayed_move():
@@ -1055,26 +1011,9 @@ class Rooms(commands.Cog):
                 room_data = await database.get_room(before.channel.id)
                 if room_data:
                     if room_data["room_type"] in ["一時部屋", "宿", "ゲームVC", "賭博VC"]:
-                        should_keep = False
-                        if room_data["expire_at"] and room_data["expire_at"].year < 2100:
-                            if room_data["room_type"] == "賭博VC":
-                                should_keep = True
-                            elif room_data["room_type"] == "宿":
-                                owner = before.channel.guild.get_member(room_data["owner_id"])
-                                if owner:
-                                    if is_main_or_sub_member(self.bot, owner):
-                                        should_keep = False
-                                    elif is_new_member(self.bot, owner):
-                                        should_keep = True
-                                    else:
-                                        should_keep = True
-                                else:
-                                    should_keep = True
-                            elif room_data["room_type"] == "ゲームVC":
-                                should_keep = False
-
-                        if should_keep:
-                            pass # 有料の部屋など、退室しても維持される場合
+                        # 期限が設定されている(有料)部屋は自動削除しない
+                        if room_data["expire_at"] and room_data["expire_at"].year < 2100 and room_data["room_type"] in ["宿", "ゲームVC", "賭博VC"]:
+                            pass # 有料の部屋は退出しても維持される
                         else:
                             try:
                                 print(f"[Auto-VC] Deleting empty room ({room_data['room_type']}): {before.channel.name}")
