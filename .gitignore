@@ -4,3 +4,5 @@ __pycache__/
 node_modules/
 .next/
 .vercel/
+
+__pycache__/

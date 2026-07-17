@@ -42,7 +42,7 @@ export async function GET(
     // トリガーの詳細設定を取得
     const placeholders = guildTriggerIds.map((_, i) => `$${i + 1}`).join(',');
     const configsRes = await pool.query(
-      `SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel 
+      `SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids 
        FROM auto_vc_config 
        WHERE channel_id::text IN (${placeholders})`,
       guildTriggerIds
@@ -63,6 +63,8 @@ export async function GET(
         use_numbering: c?.use_numbering === true,
         allow_limit_change: c?.allow_limit_change !== false,
         show_panel: c?.show_panel !== false,
+        is_invite_only: c?.is_invite_only === true,
+        invite_visible_role_ids: c?.invite_visible_role_ids || [],
       };
     });
 
@@ -119,24 +121,29 @@ export async function POST(
         [cid]
       );
       // configを更新
-      await pool.query(
-        `INSERT INTO auto_vc_config (channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (channel_id) DO UPDATE SET
-         base_name = EXCLUDED.base_name,
-         allow_rename = EXCLUDED.allow_rename,
-         include_owner_name = EXCLUDED.include_owner_name,
-         use_numbering = EXCLUDED.use_numbering,
-         allow_limit_change = EXCLUDED.allow_limit_change,
-         show_panel = EXCLUDED.show_panel`,
-        [
+      const updateQuery = `
+      INSERT INTO auto_vc_config (channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (channel_id) DO UPDATE SET
+        base_name = EXCLUDED.base_name,
+        allow_rename = EXCLUDED.allow_rename,
+        include_owner_name = EXCLUDED.include_owner_name,
+        use_numbering = EXCLUDED.use_numbering,
+        allow_limit_change = EXCLUDED.allow_limit_change,
+        show_panel = EXCLUDED.show_panel,
+        is_invite_only = EXCLUDED.is_invite_only,
+        invite_visible_role_ids = EXCLUDED.invite_visible_role_ids
+    `;
+      await pool.query(updateQuery, [
           cid,
           item.base_name || '',
           item.allow_rename,
           item.include_owner_name,
           item.use_numbering,
           item.allow_limit_change,
-          item.show_panel
+          item.show_panel,
+          item.is_invite_only || false,
+          item.invite_visible_role_ids || []
         ]
       );
     }

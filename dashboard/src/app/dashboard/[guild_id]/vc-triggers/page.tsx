@@ -20,6 +20,14 @@ interface VCTrigger {
   use_numbering: boolean;
   allow_limit_change: boolean;
   show_panel: boolean;
+  is_invite_only: boolean;
+  invite_visible_role_ids: string[];
+}
+
+interface DiscordRole {
+  id: string;
+  name: string;
+  color: number;
 }
 
 export default function VCTriggersPage() {
@@ -28,6 +36,7 @@ export default function VCTriggersPage() {
   
   const [triggers, setTriggers] = useState<VCTrigger[]>([]);
   const [discordChannels, setDiscordChannels] = useState<DiscordChannel[]>([]);
+  const [discordRoles, setDiscordRoles] = useState<DiscordRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,10 +45,12 @@ export default function VCTriggersPage() {
   useEffect(() => {
     Promise.all([
       fetch(`/api/guilds/${guildId}/vc-triggers`).then(res => res.ok ? res.json() : []),
-      fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : [])
-    ]).then(([triggersData, channelsData]: [VCTrigger[], DiscordChannel[]]) => {
+      fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : []),
+      fetch(`/api/guilds/${guildId}/roles`).then(res => res.ok ? res.json() : [])
+    ]).then(([triggersData, channelsData, rolesData]: [VCTrigger[], DiscordChannel[], DiscordRole[]]) => {
       setTriggers(triggersData || []);
       setDiscordChannels(channelsData || []);
+      setDiscordRoles(rolesData || []);
       setLoading(false);
     }).catch(err => {
       console.error(err);
@@ -95,7 +106,9 @@ export default function VCTriggersPage() {
         include_owner_name: true,
         use_numbering: false,
         allow_limit_change: true,
-        show_panel: true
+        show_panel: true,
+        is_invite_only: false,
+        invite_visible_role_ids: []
       }
     ]);
   };
@@ -240,13 +253,32 @@ export default function VCTriggersPage() {
                   <label className="flex items-center gap-3 p-3 bg-zinc-900/50 rounded-lg border border-zinc-700/50 cursor-pointer hover:bg-zinc-800 transition-colors">
                     <input
                       type="checkbox"
-                      checked={trigger.show_panel}
-                      onChange={(e) => updateTrigger(index, 'show_panel', e.target.checked)}
+                      checked={trigger.is_invite_only}
+                      onChange={(e) => updateTrigger(index, 'is_invite_only', e.target.checked)}
                       className="w-5 h-5 rounded border-gray-600 text-indigo-600 focus:ring-indigo-600 bg-zinc-800"
                     />
-                    <span className="text-gray-300">作成された部屋に設定用パネルを表示</span>
+                    <span className="text-gray-300">招待専用にする（招待パネル設置）</span>
                   </label>
                 </div>
+
+                {trigger.is_invite_only && (
+                  <div className="mt-4 p-4 border border-indigo-500/30 bg-indigo-500/5 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      閲覧可能ロール (未設定時は招待者以外非表示になります)
+                    </label>
+                    <Select
+                      isMulti
+                      options={discordRoles.map(r => ({ value: r.id, label: r.name }))}
+                      value={discordRoles
+                        .filter(r => (trigger.invite_visible_role_ids || []).includes(r.id))
+                        .map(r => ({ value: r.id, label: r.name }))}
+                      onChange={(selected: any) => updateTrigger(index, 'invite_visible_role_ids', selected ? selected.map((s: any) => s.value) : [])}
+                      className="text-black"
+                      placeholder="ロールを選択..."
+                      noOptionsMessage={() => "ロールが見つかりません"}
+                    />
+                  </div>
+                )}
               </motion.div>
             ))}
 

@@ -1,0 +1,63 @@
+321:show_panel BOOLEAN DEFAULT TRUE
+329:CREATE TABLE IF NOT EXISTS inquiry_panels (
+375:await conn.execute('ALTER TABLE inquiry_panels ADD COLUMN IF NOT EXISTS mention_role_ids BIGINT[]')
+379:print(f"[Migration] inquiry_panels migration warning: {e}")
+395:await conn.execute('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS show_panel BOOLEAN DEFAULT TRUE')
+507:panel_channel_id BIGINT PRIMARY KEY,
+519:CREATE TABLE IF NOT EXISTS custom_ticket_panels (
+523:panel_title TEXT NOT NULL,
+525:panel_description TEXT NOT NULL,
+537:panel_type TEXT DEFAULT 'custom_ticket'
+545:await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_label TEXT DEFAULT '繝√こ繝・ヨ繧剃ｽ懈・縺吶ｋ'")
+547:await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_emoji TEXT")
+549:await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS target_role_ids BIGINT[] DEFAULT '{}'::BIGINT[]")
+551:await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS ticket_prefix TEXT DEFAULT 'ticket'")
+553:await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS panel_type TEXT DEFAULT 'custom_ticket'")
+557:print(f"[Migration] custom_ticket_panels migration warning: {e}")
+563:CREATE TABLE IF NOT EXISTS panel_requests (
+571:panel_type VARCHAR(50),
+1508:async def save_auto_vc_config(channel_id: int, base_name: str, allow_rename: bool, include_owner_name: bool, use_numbering: bool, allow_limit_change: bool, show_panel: bool):
+1516:INSERT INTO auto_vc_config (channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel)
+1522:base_name = $2, allow_rename = $3, include_owner_name = $4, use_numbering = $5, allow_limit_change = $6, show_panel = $7
+1524:''', channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel)
+1534:row = await conn.fetchrow('SELECT base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel FROM auto_vc_config WHERE channel_id = $1', channel_id)
+1550:"show_panel": row["show_panel"]
+1580:rows = await conn.fetch('SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel FROM auto_vc_config')
+1596:"show_panel": r["show_panel"]
+1610:async def add_inquiry_panel(channel_id: int, mention_role_ids: list[int]):
+1618:INSERT INTO inquiry_panels (channel_id, mention_role_ids)
+1630:async def get_inquiry_panel_roles(channel_id: int) -> list[int]:
+1636:row = await conn.fetchrow('SELECT mention_role_ids, mention_role_id FROM inquiry_panels WHERE channel_id = $1', channel_id)
+1652:async def remove_inquiry_panel(channel_id: int):
+1658:await conn.execute('DELETE FROM inquiry_panels WHERE channel_id = $1', channel_id)
+1942:async def add_anonymous_chat(panel_channel_id: int, dest_channel_id: int):
+1950:INSERT INTO anonymous_chats (panel_channel_id, dest_channel_id)
+1954:ON CONFLICT (panel_channel_id)
+1958:''', panel_channel_id, dest_channel_id)
+1962:async def get_anonymous_chat(panel_channel_id: int) -> int:
+1968:row = await conn.fetchrow('SELECT dest_channel_id FROM anonymous_chats WHERE panel_channel_id = $1', panel_channel_id)
+1980:await conn.execute('DELETE FROM anonymous_chats WHERE panel_channel_id = $1 OR dest_channel_id = $1', channel_id)
+1984:async def get_panel_channel_by_dest(dest_channel_id: int) -> list[int]:
+1990:rows = await conn.fetch('SELECT panel_channel_id FROM anonymous_chats WHERE dest_channel_id = $1', dest_channel_id)
+1992:return [r['panel_channel_id'] for r in rows]
+1998:async def save_custom_ticket_panel(channel_id: int, panel_title: str, panel_description: str, button_label: str = "繝√こ繝・ヨ繧剃ｽ懈・縺吶ｋ", button_emoji: str = None, mention_role_ids: list[int] = None, target_role_ids: list[int] = None, ticket_prefix: str = "ticket", panel_type: str = "custom_ticket"):
+2010:INSERT INTO custom_ticket_panels (
+2012:channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+2022:panel_title = $2,
+2024:panel_description = $3,
+2036:panel_type = $9
+2038:''', channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type)
+2042:async def get_custom_ticket_panel(channel_id: int) -> dict:
+2050:SELECT panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+2052:FROM custom_ticket_panels
+2062:"panel_title": row["panel_title"],
+2064:"panel_description": row["panel_description"],
+2076:"panel_type": row.get("panel_type") or "custom_ticket"
+2084:async def remove_custom_ticket_panel(channel_id: int):
+2090:await conn.execute('DELETE FROM custom_ticket_panels WHERE channel_id = $1', channel_id)
+2094:async def get_panel_requests(guild_ids: list[int] = None) -> list[dict]:
+2108:rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type FROM panel_requests WHERE guild_id = ANY($1::bigint[]) ORDER BY created_at ASC LIMIT 10', guild_ids)
+2112:rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type FROM panel_requests ORDER BY created_at ASC LIMIT 10')
+2124:async def delete_panel_request(request_id: int, guild_id: int):
+2134:await conn.execute('DELETE FROM panel_requests WHERE id = $1', request_id)
+2832:"level_role_rewards", "panel_requests", "log_settings", "evaluation_settings",

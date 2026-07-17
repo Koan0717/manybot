@@ -394,6 +394,10 @@ async def setup_db_schema(p):
 
             await conn.execute('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS show_panel BOOLEAN DEFAULT TRUE')
 
+            await conn.execute('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS is_invite_only BOOLEAN DEFAULT FALSE')
+
+            await conn.execute('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS invite_visible_role_ids BIGINT[] DEFAULT ARRAY[]::BIGINT[]')
+
         except Exception as e:
 
             print(f"[Migration] auto_vc_config migration warning: {e}")
@@ -596,6 +600,8 @@ async def setup_db_schema(p):
 
         ''')
 
+
+
         await conn.execute('''
 
             CREATE TABLE IF NOT EXISTS evaluation_settings (
@@ -641,6 +647,8 @@ async def setup_db_schema(p):
             )
 
         ''')
+
+
 
         try:
             try:
@@ -1441,31 +1449,7 @@ async def extend_evaluation_period(guild_id: int, user_id: int, extra_days: int)
 
     async with p.acquire() as conn:
 
-        try:
-
-            row = await conn.fetchrow('SELECT end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
-
-        except Exception as e:
-
-            if 'column "guild_id" does not exist' in str(e) or "UndefinedColumnError" in str(type(e)):
-
-                try:
-
-                    await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN guild_id BIGINT')
-
-                    await conn.execute('UPDATE evaluation_periods SET guild_id = $1 WHERE guild_id IS NULL', guild_id)
-
-                except Exception:
-
-                    pass
-
-                row = await conn.fetchrow('SELECT end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
-
-            else:
-
-                raise e
-
-            
+        row = await conn.fetchrow('SELECT end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
 
         if not row:
 
@@ -1473,17 +1457,7 @@ async def extend_evaluation_period(guild_id: int, user_id: int, extra_days: int)
 
             
 
-        import datetime
-
-        current_end_time = row['end_time']
-
-        if current_end_time is None:
-
-            current_end_time = datetime.datetime.now(datetime.timezone.utc)
-
-            
-
-        new_end_time = current_end_time + datetime.timedelta(days=extra_days)
+        new_end_time = row['end_time'] + datetime.timedelta(days=extra_days)
 
         await conn.execute('UPDATE evaluation_periods SET end_time = $1 WHERE guild_id = $2 AND user_id = $3', new_end_time, guild_id, user_id)
 
@@ -1539,23 +1513,41 @@ async def get_auto_vc_triggers() -> list[int]:
 
 # --- VC菴懈・繝医Μ繧ｬ繝ｼ險ｭ螳夂ｮ｡逅・畑髢｢謨ｰ ---
 
-async def save_auto_vc_config(channel_id: int, base_name: str, allow_rename: bool, include_owner_name: bool, use_numbering: bool, allow_limit_change: bool, show_panel: bool):
+async def save_auto_vc_config(channel_id: int, base_name: str, allow_rename: bool, include_owner_name: bool, use_numbering: bool, allow_limit_change: bool, show_panel: bool, is_invite_only: bool = False, invite_visible_role_ids: list[int] = None):
 
     p = await get_pool()
+
+    if invite_visible_role_ids is None:
+
+        invite_visible_role_ids = []
 
     async with p.acquire() as conn:
 
         await conn.execute('''
 
-            INSERT INTO auto_vc_config (channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel)
+            INSERT INTO auto_vc_config (channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids)
 
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 
             ON CONFLICT (channel_id) DO UPDATE SET
 
-                base_name = $2, allow_rename = $3, include_owner_name = $4, use_numbering = $5, allow_limit_change = $6, show_panel = $7
+                base_name = EXCLUDED.base_name,
 
-        ''', channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel)
+                allow_rename = EXCLUDED.allow_rename,
+
+                include_owner_name = EXCLUDED.include_owner_name,
+
+                use_numbering = EXCLUDED.use_numbering,
+
+                allow_limit_change = EXCLUDED.allow_limit_change,
+
+                show_panel = EXCLUDED.show_panel,
+
+                is_invite_only = EXCLUDED.is_invite_only,
+
+                invite_visible_role_ids = EXCLUDED.invite_visible_role_ids
+
+        ''', channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids)
 
 
 
@@ -1565,7 +1557,7 @@ async def get_auto_vc_config(channel_id: int) -> dict | None:
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel FROM auto_vc_config WHERE channel_id = $1', channel_id)
+        row = await conn.fetchrow('SELECT base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids FROM auto_vc_config WHERE channel_id = $1', channel_id)
 
         if row:
 
@@ -1581,7 +1573,11 @@ async def get_auto_vc_config(channel_id: int) -> dict | None:
 
                 "allow_limit_change": row["allow_limit_change"],
 
-                "show_panel": row["show_panel"]
+                "show_panel": row["show_panel"],
+
+                "is_invite_only": row["is_invite_only"],
+
+                "invite_visible_role_ids": row["invite_visible_role_ids"] or []
 
             }
 
@@ -1611,7 +1607,7 @@ async def get_all_auto_vc_configs() -> list[dict]:
 
             async with p.acquire() as conn:
 
-                rows = await conn.fetch('SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel FROM auto_vc_config')
+                rows = await conn.fetch('SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids FROM auto_vc_config')
 
                 all_configs.extend([{
 
@@ -3537,41 +3533,13 @@ async def add_user_item(user_id: int, item_id: int, expire_at: datetime.datetime
 
     async with p.acquire() as conn:
 
-        try:
+        await conn.execute('''
 
-            await conn.execute('''
+            INSERT INTO user_items (user_id, item_id, expire_at, role_removed) 
 
-                INSERT INTO user_items (user_id, item_id, expire_at, role_removed) 
+            VALUES ($1, $2, $3, FALSE)
 
-                VALUES ($1, $2, $3, FALSE)
-
-            ''', user_id, item_id, expire_at)
-
-        except Exception as e:
-
-            if 'column "expire_at" of relation "user_items" does not exist' in str(e) or 'column "role_removed" of relation "user_items" does not exist' in str(e) or "UndefinedColumnError" in str(type(e)):
-
-                try:
-
-                    await conn.execute('ALTER TABLE user_items ADD COLUMN expire_at TIMESTAMP DEFAULT NULL')
-
-                    await conn.execute('ALTER TABLE user_items ADD COLUMN role_removed BOOLEAN DEFAULT FALSE')
-
-                except Exception:
-
-                    pass
-
-                await conn.execute('''
-
-                    INSERT INTO user_items (user_id, item_id, expire_at, role_removed) 
-
-                    VALUES ($1, $2, $3, FALSE)
-
-                ''', user_id, item_id, expire_at)
-
-            else:
-
-                raise e
+        ''', user_id, item_id, expire_at)
 
 
 

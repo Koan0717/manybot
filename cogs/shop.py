@@ -303,7 +303,7 @@ class ShopItemSelect(discord.ui.Select):
                 description=f"価格: {item['price']:,} {currency_name}"[:100],
                 value=str(item["item_id"])
             ))
-        super().__init__(placeholder="購入したい商品を選択してください。", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="商品を選択してください...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         item_id = int(self.values[0])
@@ -332,173 +332,127 @@ class ShopItemSelect(discord.ui.Select):
                 await send_log(self.bot, interaction.guild, "shop", embed)
                 
             elif self.action == "buy":
-                try:
-                    # 対象ロールチェック
-                    target_role_ids = item.get("target_role_ids") or []
-                    if target_role_ids:
-                        user_role_ids = [r.id for r in interaction.user.roles]
-                        if not any(rid in user_role_ids for rid in target_role_ids):
-                            return await interaction.followup.send("この商品は対象のロールを持っていないため購入できません。", ephemeral=True)
+                # 対象ロールチェック
+                target_role_ids = item.get("target_role_ids") or []
+                if target_role_ids:
+                    user_role_ids = [r.id for r in interaction.user.roles]
+                    if not any(rid in user_role_ids for rid in target_role_ids):
+                        return await interaction.followup.send("この商品は対象のロールを持っていないため購入できません。", ephemeral=True)
 
-                    is_eval_extend = item.get("is_eval_extend", False)
+                is_eval_extend = item.get("is_eval_extend", False)
+                if is_eval_extend:
+                    # 評価期間中であるかをチェック
+                    period = await database.get_evaluation_period(interaction.guild.id, interaction.user.id)
+                    if not period:
+                        return await interaction.followup.send("あなたは現在、評価期間中ではないため、この商品を購入できません。", ephemeral=True)
 
-                    # 購入処理
-                    # 引き落とし
-                    if not await database.remove_balance(interaction.guild.id, interaction.user.id, item["price"]):
-                        return await interaction.followup.send("所持金が足りません。", ephemeral=True)
+                # 購入処理
+                # 引き落とし
+                if not await database.remove_balance(interaction.guild.id, interaction.user.id, item["price"]):
+                    return await interaction.followup.send("所持金が足りません。", ephemeral=True)
 
-                    if is_eval_extend:
-                        extend_days = item.get("extend_days") or 0
-                        # 評価期間延長処理
-                        success = await database.extend_evaluation_period(interaction.guild.id, interaction.user.id, extend_days)
-                        await database.add_user_item(interaction.user.id, item["item_id"], None)
+                if is_eval_extend:
+                    # 評価期間延長処理
+                    extend_days = item.get("extend_days")
+                    await database.extend_evaluation_period(interaction.guild.id, interaction.user.id, extend_days)
+                    await database.add_user_item(interaction.user.id, item["item_id"], None)
                     
-                        msg_text = f"🎉 商品「{item['name']}」を購入しました！\n"
-                        if success:
-                            # 新しい終了予定の取得
-                            new_period = await database.get_evaluation_period(interaction.guild.id, interaction.user.id)
-                            if new_period and new_period['end_time']:
-                                end_str = format_evaluation_datetime(new_period['end_time'])
-                                end_t = int(new_period['end_time'].timestamp())
-                                msg_text += f"評価期間が **{extend_days}日間** 延長されました。\n新しい終了予定: {end_str} (<t:{end_t}:R>)"
-                            else:
-                                msg_text += f"評価期間延長（{extend_days}日）を購入しました。"
-                        else:
-                            msg_text += f"評価期間延長（{extend_days}日）を購入しました。"
-
-                        await interaction.followup.send(msg_text, ephemeral=True)
-                        try:
-                            await interaction.user.send(msg_text)
-                        except Exception:
-                            pass
+                    # 新しい終了予定の取得
+                    new_period = await database.get_evaluation_period(interaction.guild.id, interaction.user.id)
+                    end_str = format_evaluation_datetime(new_period['end_time'])
+                    end_t = int(new_period['end_time'].timestamp())
                     
-                        # 評価員ロールの取得
-                        def _to_list(val):
-                            if not val: return []
-                            if isinstance(val, list): return val
-                            return [val]
-                        
-                        evaluator_mention_ids = _to_list(get_setting(self.bot, "EVALUATOR_MENTION_ROLE_IDS", interaction.guild.id))
-                        mentions = " ".join([f"<@&{rid}>" for rid in evaluator_mention_ids])
-
-                        # 商品購入ログの送信（shop_extendログ）
-                        log_msg = f"{interaction.user.mention} が評価期間延長（{extend_days}日）を購入しました！\n{mentions}"
+                    await interaction.followup.send(
+                        f"🎉 商品「{item['name']}」を購入しました！\n"
+                        f"評価期間が **{extend_days}日間** 延長されました。\n"
+                        f"新しい終了予定: {end_str} (<t:{end_t}:R>)", 
+                        ephemeral=True
+                    )
                     
-                        embed = discord.Embed(title="🛒 商品購入 (評価期間延長)", color=discord.Color.gold())
-                        embed.add_field(name="購入者", value=f"{interaction.user.mention} (ID: {interaction.user.id})", inline=False)
-                        embed.add_field(name="商品ID", value=str(item_id), inline=True)
-                        embed.add_field(name="商品名", value=item["name"], inline=True)
-                        embed.add_field(name="支払額", value=f"{item['price']:,} {currency_name}", inline=True)
-                        embed.add_field(name="延長日数", value=f"{extend_days}日間", inline=True)
+                    # 商品購入ログの送信
+                    embed = discord.Embed(title="🛒 商品購入 (評価期間延長)", color=discord.Color.gold())
+                    embed.add_field(name="購入者", value=f"{interaction.user.mention} (ID: {interaction.user.id})", inline=False)
+                    embed.add_field(name="商品ID", value=str(item_id), inline=True)
+                    embed.add_field(name="商品名", value=item["name"], inline=True)
+                    embed.add_field(name="支払額", value=f"{item['price']:,} {currency_name}", inline=True)
+                    embed.add_field(name="延長日数", value=f"{extend_days}日間", inline=True)
+                    embed.add_field(name="新しい終了予定", value=f"{end_str} (<t:{end_t}:R>)", inline=False)
+                    await send_log(self.bot, interaction.guild, "shop", embed)
                     
-                        # 従来のshopログに送信（必須）
-                        await send_log(self.bot, interaction.guild, "shop", embed)
-                    
-                        # DBからshop_extendのチャンネルを取得して送信（追加）
-                        channel_id = await database.get_log_channel(interaction.guild.id, "shop_extend")
-                        if channel_id:
-                            log_channel = interaction.guild.get_channel(channel_id)
-                            if log_channel:
-                                try:
-                                    await log_channel.send(content=log_msg, embed=embed)
-                                except Exception:
-                                    pass
-                    
-                        # 評価スレッドへの通知（アクティブなスレッドのみ対象）
-                        eval_settings = await database.get_evaluation_settings(interaction.guild.id)
-                        if eval_settings:
-                            forum_ids = eval_settings.get("forum_channel_ids", [])
-                            notified = False
-                            for forum_id in forum_ids:
-                                if notified: break
-                                forum = interaction.guild.get_channel(forum_id)
-                                if isinstance(forum, discord.ForumChannel):
-                                    for thread in forum.threads:
-                                        if thread.owner_id == self.bot.user.id and (str(interaction.user.id) in thread.name or interaction.user.name.lower() in thread.name.lower()):
-                                            try:
-                                                await thread.send(f"🎉 {interaction.user.mention} 評価期間延長（**{extend_days}日間**）を購入しました！")
+                    # 評価スレッドへの通知（アクティブなスレッドのみ対象）
+                    eval_settings = await database.get_evaluation_settings(interaction.guild.id)
+                    if eval_settings:
+                        forum_ids = eval_settings.get("forum_channel_ids", [])
+                        notified = False
+                        for forum_id in forum_ids:
+                            if notified: break
+                            forum = interaction.guild.get_channel(forum_id)
+                            if isinstance(forum, discord.ForumChannel):
+                                for thread in forum.threads:
+                                    if thread.owner_id == self.bot.user.id and (str(interaction.user.id) in thread.name or interaction.user.name.lower() in thread.name.lower()):
+                                        try:
+                                            await thread.send(f"🎉 {interaction.user.mention} 評価期間を **{extend_days}日間** 延長するアイテムを購入しました！\n新しい終了予定: {end_str} (<t:{end_t}:R>)")
+                                            notified = True
+                                            break
+                                        except Exception:
+                                            pass
+                                    else:
+                                        # スレッド名で判別できない場合は最初のメッセージを確認
+                                        try:
+                                            starter = await thread.fetch_message(thread.id)
+                                            if str(interaction.user.id) in starter.content:
+                                                await thread.send(f"🎉 {interaction.user.mention} 評価期間を **{extend_days}日間** 延長するアイテムを購入しました！\n新しい終了予定: {end_str} (<t:{end_t}:R>)")
                                                 notified = True
                                                 break
-                                            except Exception:
-                                                pass
-                                        else:
-                                            # スレッド名で判別できない場合は最初のメッセージを確認
-                                            try:
-                                                starter = await thread.fetch_message(thread.id)
-                                                if str(interaction.user.id) in starter.content:
-                                                    await thread.send(f"🎉 {interaction.user.mention} 評価期間延長（**{extend_days}日間**）を購入しました！")
-                                                    notified = True
-                                                    break
-                                            except Exception:
-                                                pass
-                    else:
-                        # 有効期限の計算
-                        import datetime as dt
-                        duration_days = item.get("duration_days")
-                        expire_at = None
-                        if duration_days and duration_days > 0:
-                            expire_at = database.get_now_naive() + dt.timedelta(days=duration_days)
+                                        except Exception:
+                                            pass
+                else:
+                    # 有効期限の計算
+                    import datetime as dt
+                    duration_days = item.get("duration_days")
+                    expire_at = None
+                    if duration_days and duration_days > 0:
+                        expire_at = database.get_now_naive() + dt.timedelta(days=duration_days)
 
-                        await database.add_user_item(interaction.user.id, item["item_id"], expire_at)
+                    await database.add_user_item(interaction.user.id, item["item_id"], expire_at)
                     
-                        # ロール付与
-                        reward_role_ids = item.get("reward_role_ids") or []
-                        added_role_msg = ""
-                        succeeded_roles = []
-                        failed_roles = []
-                        if reward_role_ids:
-                            for rid in reward_role_ids:
-                                reward_role = interaction.guild.get_role(rid)
-                                if reward_role:
-                                    try:
-                                        await interaction.user.add_roles(reward_role)
-                                        succeeded_roles.append(reward_role.name)
-                                    except discord.Forbidden:
-                                        failed_roles.append(reward_role.name)
+                    # ロール付与
+                    reward_role_ids = item.get("reward_role_ids") or []
+                    added_role_msg = ""
+                    succeeded_roles = []
+                    failed_roles = []
+                    if reward_role_ids:
+                        for rid in reward_role_ids:
+                            reward_role = interaction.guild.get_role(rid)
+                            if reward_role:
+                                try:
+                                    await interaction.user.add_roles(reward_role)
+                                    succeeded_roles.append(reward_role.name)
+                                except discord.Forbidden:
+                                    failed_roles.append(reward_role.name)
                         
-                            if succeeded_roles:
-                                added_role_msg += f"\n特典ロール「{'、'.join(succeeded_roles)}」が付与されました！"
-                                if duration_days:
-                                    added_role_msg += f" (有効期限: {duration_days}日間)"
-                            if failed_roles:
-                                added_role_msg += f"\n特典ロール「{'、'.join(failed_roles)}」の付与に失敗しました（Botの権限が不足しています）。"
-                    
-                        msg_text = f"🎉 商品「{item['name']}」を購入しました！{added_role_msg}"
-                        await interaction.followup.send(msg_text, ephemeral=True)
-                        try:
-                            await interaction.user.send(msg_text)
-                        except Exception:
-                            pass
-                    
-                        # 商品購入ログの送信
-                        embed = discord.Embed(title="🛒 商品購入", color=discord.Color.gold())
-                        embed.add_field(name="購入者", value=f"{interaction.user.mention} (ID: {interaction.user.id})", inline=False)
-                        embed.add_field(name="商品ID", value=str(item_id), inline=True)
-                        embed.add_field(name="商品名", value=item["name"], inline=True)
-                        embed.add_field(name="支払額", value=f"{item['price']:,} {currency_name}", inline=True)
                         if succeeded_roles:
-                            embed.add_field(name="付与ロール", value="、".join(succeeded_roles), inline=False)
+                            added_role_msg += f"\n特典ロール「{'、'.join(succeeded_roles)}」が付与されました！"
                             if duration_days:
-                                embed.add_field(name="有効期限", value=f"{duration_days}日間", inline=True)
+                                added_role_msg += f" (有効期限: {duration_days}日間)"
                         if failed_roles:
-                            embed.add_field(name="付与失敗ロール (権限不足等)", value="、".join(failed_roles), inline=False)
-                        await send_log(self.bot, interaction.guild, "shop", embed)
-                except Exception as e:
-                    import traceback
-                    print(f"Shop error: {e}")
-                    print(traceback.format_exc())
-                    try:
-                        with open("crash_log.txt", "w", encoding="utf-8") as f:
-                            f.write(traceback.format_exc())
-                    except Exception as fe:
-                        print(f"File write error: {fe}")
-                    try:
-                        tb = traceback.format_exc()
-                        # Discord limits messages to 2000 chars
-                        if len(tb) > 1900: tb = tb[-1900:]
-                        await interaction.followup.send(f"処理中にエラーが発生しました。\n```python\n{tb}\n```", ephemeral=True)
-                    except:
-                        pass
+                            added_role_msg += f"\n特典ロール「{'、'.join(failed_roles)}」の付与に失敗しました（Botの権限が不足しています）。"
+                    
+                    await interaction.followup.send(f"🎉 商品「{item['name']}」を購入しました！{added_role_msg}", ephemeral=True)
+                    
+                    # 商品購入ログの送信
+                    embed = discord.Embed(title="🛒 商品購入", color=discord.Color.gold())
+                    embed.add_field(name="購入者", value=f"{interaction.user.mention} (ID: {interaction.user.id})", inline=False)
+                    embed.add_field(name="商品ID", value=str(item_id), inline=True)
+                    embed.add_field(name="商品名", value=item["name"], inline=True)
+                    embed.add_field(name="支払額", value=f"{item['price']:,} {currency_name}", inline=True)
+                    if succeeded_roles:
+                        embed.add_field(name="付与ロール", value="、".join(succeeded_roles), inline=False)
+                        if duration_days:
+                            embed.add_field(name="有効期限", value=f"{duration_days}日間", inline=True)
+                    if failed_roles:
+                        embed.add_field(name="付与失敗ロール (権限不足等)", value="、".join(failed_roles), inline=False)
+                    await send_log(self.bot, interaction.guild, "shop", embed)
 
 class ShopItemSelectView(discord.ui.View):
     def __init__(self, items, action, bot):

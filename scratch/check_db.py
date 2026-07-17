@@ -1,14 +1,20 @@
+import sys
+sys.path.append('.')
 import asyncio
-import asyncpg
+import database
 import json
 
 async def main():
-    conn = await asyncpg.connect(user='postgres', password='password', database='manybot', host='127.0.0.1')
-    try:
-        rows = await conn.fetch("SELECT guild_id, setting_value FROM bot_settings WHERE setting_key = 'ROOM_PANEL_CONFIGS'")
-        for row in rows:
-            print(f"Guild {row['guild_id']}: {row['setting_value']}")
-    finally:
-        await conn.close()
+    pools = await database.get_all_configured_pools()
+    if not pools: return
+    async with pools[0].acquire() as conn:
+        rows = await conn.fetch("SELECT setting_value FROM bot_settings WHERE setting_key = 'ENABLE_TC_RANK' AND guild_id = 1505398772828471357")
+        print("Pool 0:", [r['setting_value'] for r in rows])
+                
+    if len(pools) > 1:
+        async with pools[1].acquire() as conn:
+            rows = await conn.fetch("SELECT setting_value FROM bot_settings WHERE setting_key = 'ENABLE_TC_RANK' AND guild_id = 1505398772828471357")
+            print("Pool 1:", [r['setting_value'] for r in rows])
 
-asyncio.run(main())
+if __name__ == '__main__':
+    asyncio.run(main())
