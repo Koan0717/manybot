@@ -1441,7 +1441,31 @@ async def extend_evaluation_period(guild_id: int, user_id: int, extra_days: int)
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+        try:
+
+            row = await conn.fetchrow('SELECT end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+
+        except Exception as e:
+
+            if 'column "guild_id" does not exist' in str(e) or "UndefinedColumnError" in str(type(e)):
+
+                try:
+
+                    await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN guild_id BIGINT')
+
+                    await conn.execute('UPDATE evaluation_periods SET guild_id = $1 WHERE guild_id IS NULL', guild_id)
+
+                except Exception:
+
+                    pass
+
+                row = await conn.fetchrow('SELECT end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+
+            else:
+
+                raise e
+
+            
 
         if not row:
 
@@ -3513,13 +3537,41 @@ async def add_user_item(user_id: int, item_id: int, expire_at: datetime.datetime
 
     async with p.acquire() as conn:
 
-        await conn.execute('''
+        try:
 
-            INSERT INTO user_items (user_id, item_id, expire_at, role_removed) 
+            await conn.execute('''
 
-            VALUES ($1, $2, $3, FALSE)
+                INSERT INTO user_items (user_id, item_id, expire_at, role_removed) 
 
-        ''', user_id, item_id, expire_at)
+                VALUES ($1, $2, $3, FALSE)
+
+            ''', user_id, item_id, expire_at)
+
+        except Exception as e:
+
+            if 'column "expire_at" of relation "user_items" does not exist' in str(e) or 'column "role_removed" of relation "user_items" does not exist' in str(e) or "UndefinedColumnError" in str(type(e)):
+
+                try:
+
+                    await conn.execute('ALTER TABLE user_items ADD COLUMN expire_at TIMESTAMP DEFAULT NULL')
+
+                    await conn.execute('ALTER TABLE user_items ADD COLUMN role_removed BOOLEAN DEFAULT FALSE')
+
+                except Exception:
+
+                    pass
+
+                await conn.execute('''
+
+                    INSERT INTO user_items (user_id, item_id, expire_at, role_removed) 
+
+                    VALUES ($1, $2, $3, FALSE)
+
+                ''', user_id, item_id, expire_at)
+
+            else:
+
+                raise e
 
 
 
