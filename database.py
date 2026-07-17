@@ -1449,7 +1449,17 @@ async def extend_evaluation_period(guild_id: int, user_id: int, extra_days: int)
 
             
 
-        new_end_time = row['end_time'] + datetime.timedelta(days=extra_days)
+        import datetime
+
+        current_end_time = row['end_time']
+
+        if current_end_time is None:
+
+            current_end_time = datetime.datetime.now(datetime.timezone.utc)
+
+            
+
+        new_end_time = current_end_time + datetime.timedelta(days=extra_days)
 
         await conn.execute('UPDATE evaluation_periods SET end_time = $1 WHERE guild_id = $2 AND user_id = $3', new_end_time, guild_id, user_id)
 
