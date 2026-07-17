@@ -366,6 +366,10 @@ class ShopItemSelect(discord.ui.Select):
                         msg_text += f"評価期間延長（{extend_days}日）を購入しました。"
 
                     await interaction.followup.send(msg_text, ephemeral=True)
+                    try:
+                        await interaction.user.send(msg_text)
+                    except Exception:
+                        pass
                     
                     # 評価員ロールの取得
                     def _to_list(val):
@@ -373,13 +377,8 @@ class ShopItemSelect(discord.ui.Select):
                         if isinstance(val, list): return val
                         return [val]
                         
-                    admin_ids = _to_list(get_setting(self.bot, "ADMIN_ROLE_IDS", interaction.guild.id))
-                    tier3_ids = _to_list(get_setting(self.bot, "EVALUATOR_TIER3_ROLE_IDS", interaction.guild.id))
-                    tier2_ids = _to_list(get_setting(self.bot, "EVALUATOR_TIER2_ROLE_IDS", interaction.guild.id))
-                    tier1_ids = _to_list(get_setting(self.bot, "EVALUATOR_TIER1_ROLE_IDS", interaction.guild.id))
-                    old_eval_ids = _to_list(get_setting(self.bot, "EVALUATOR_ROLE_IDS", interaction.guild.id))
-                    all_eval_role_ids = list(set(admin_ids + tier3_ids + tier2_ids + tier1_ids + old_eval_ids))
-                    mentions = " ".join([f"<@&{rid}>" for rid in all_eval_role_ids])
+                    evaluator_mention_ids = _to_list(get_setting(self.bot, "EVALUATOR_MENTION_ROLE_IDS", interaction.guild.id))
+                    mentions = " ".join([f"<@&{rid}>" for rid in evaluator_mention_ids])
 
                     # 商品購入ログの送信（shop_extendログ）
                     log_msg = f"{interaction.user.mention} が評価期間延長（{extend_days}日）を購入しました！\n{mentions}"
@@ -463,7 +462,12 @@ class ShopItemSelect(discord.ui.Select):
                         if failed_roles:
                             added_role_msg += f"\n特典ロール「{'、'.join(failed_roles)}」の付与に失敗しました（Botの権限が不足しています）。"
                     
-                    await interaction.followup.send(f"🎉 商品「{item['name']}」を購入しました！{added_role_msg}", ephemeral=True)
+                    msg_text = f"🎉 商品「{item['name']}」を購入しました！{added_role_msg}"
+                    await interaction.followup.send(msg_text, ephemeral=True)
+                    try:
+                        await interaction.user.send(msg_text)
+                    except Exception:
+                        pass
                     
                     # 商品購入ログの送信
                     embed = discord.Embed(title="🛒 商品購入", color=discord.Color.gold())

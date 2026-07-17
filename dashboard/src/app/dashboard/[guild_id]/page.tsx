@@ -91,6 +91,7 @@ const ROLE_SETTINGS = [
   { key: 'EVALUATOR_ROLE_IDS', label: '初級評価員ロール', multiple: true },
   { key: 'EVALUATOR_TIER2_ROLE_IDS', label: '中級評価員ロール', multiple: true },
   { key: 'EVALUATOR_TIER3_ROLE_IDS', label: '上級評価員ロール', multiple: true },
+  { key: 'EVALUATOR_MENTION_ROLE_IDS', label: '評価員メンション用ロール', multiple: true },
   { key: 'FREE_INN_ROLE_IDS', label: '無料宿ロール', multiple: true },
   { key: 'MAIN_SUB_MEMBER_ROLE_IDS', label: '本・準メンバーロール', multiple: true },
   { key: 'EVENT_MANAGER_ROLE_IDS', label: 'イベンター統括ロール', multiple: true },
