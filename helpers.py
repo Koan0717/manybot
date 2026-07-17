@@ -240,6 +240,8 @@ def has_admin_role(bot, user: discord.Member):
     return False
 
 def has_banker_role(bot, user: discord.Member) -> bool:
+    if isinstance(user, discord.User) or not hasattr(user, 'roles'):
+        return False
     banker_role_ids = get_setting(bot, "BANKER_ROLE_IDS") or []
     user_role_ids = [r.id for r in user.roles]
     if any(rid in banker_role_ids for rid in user_role_ids):

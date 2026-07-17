@@ -354,9 +354,9 @@ class AdminGroup(app_commands.Group):
             if any(rid in minus_target_ids for rid in member_roles):
                 await trigger_evaluation_failure(interaction.guild, user, "通貨マイナスになったため", interaction.user, self.bot)
 
-    @app_commands.command(name="一括初期給与", description="【運営専用】全員（サーバー全体）に一括で初期給与（30000コイン）を受け取っていない人を含めて一律で発行します")
+    @app_commands.command(name="一括初期給与", description="【運営・銀行員専用】全員（サーバー全体）に一括で初期給与（30000コイン）を受け取っていない人を含めて一律で発行します")
     @app_commands.describe(preview="Trueの場合、実際には付与せずに対象者の一覧を表示します（デフォルト: True）")
-    @is_admin()
+    @is_admin_or_banker()
     async def batch_initial_issue(self, interaction: discord.Interaction, preview: bool = True):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild

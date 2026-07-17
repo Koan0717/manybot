@@ -1055,9 +1055,26 @@ class Rooms(commands.Cog):
                 room_data = await database.get_room(before.channel.id)
                 if room_data:
                     if room_data["room_type"] in ["一時部屋", "宿", "ゲームVC", "賭博VC"]:
-                        # 期限が設定されている(有料)部屋は自動削除しない
-                        if room_data["expire_at"] and room_data["expire_at"].year < 2100 and room_data["room_type"] in ["宿", "ゲームVC", "賭博VC"]:
-                            pass # 有料の部屋は退出しても維持される
+                        should_keep = False
+                        if room_data["expire_at"] and room_data["expire_at"].year < 2100:
+                            if room_data["room_type"] == "賭博VC":
+                                should_keep = True
+                            elif room_data["room_type"] == "宿":
+                                owner = before.channel.guild.get_member(room_data["owner_id"])
+                                if owner:
+                                    if is_main_or_sub_member(self.bot, owner):
+                                        should_keep = False
+                                    elif is_new_member(self.bot, owner):
+                                        should_keep = True
+                                    else:
+                                        should_keep = True
+                                else:
+                                    should_keep = True
+                            elif room_data["room_type"] == "ゲームVC":
+                                should_keep = False
+
+                        if should_keep:
+                            pass # 有料の部屋など、退室しても維持される場合
                         else:
                             try:
                                 print(f"[Auto-VC] Deleting empty room ({room_data['room_type']}): {before.channel.name}")
