@@ -340,11 +340,6 @@ class ShopItemSelect(discord.ui.Select):
                         return await interaction.followup.send("この商品は対象のロールを持っていないため購入できません。", ephemeral=True)
 
                 is_eval_extend = item.get("is_eval_extend", False)
-                if is_eval_extend:
-                    # 評価期間中であるかをチェック
-                    period = await database.get_evaluation_period(interaction.guild.id, interaction.user.id)
-                    if not period:
-                        return await interaction.followup.send("あなたは現在、評価期間中ではないため、この商品を購入できません。", ephemeral=True)
 
                 # 購入処理
                 # 引き落とし
@@ -352,32 +347,57 @@ class ShopItemSelect(discord.ui.Select):
                     return await interaction.followup.send("所持金が足りません。", ephemeral=True)
 
                 if is_eval_extend:
-                    # 評価期間延長処理
                     extend_days = item.get("extend_days")
-                    await database.extend_evaluation_period(interaction.guild.id, interaction.user.id, extend_days)
+                    # 評価期間延長処理
+                    success = await database.extend_evaluation_period(interaction.guild.id, interaction.user.id, extend_days)
                     await database.add_user_item(interaction.user.id, item["item_id"], None)
                     
-                    # 新しい終了予定の取得
-                    new_period = await database.get_evaluation_period(interaction.guild.id, interaction.user.id)
-                    end_str = format_evaluation_datetime(new_period['end_time'])
-                    end_t = int(new_period['end_time'].timestamp())
+                    msg_text = f"🎉 商品「{item['name']}」を購入しました！\n"
+                    if success:
+                        # 新しい終了予定の取得
+                        new_period = await database.get_evaluation_period(interaction.guild.id, interaction.user.id)
+                        if new_period:
+                            end_str = format_evaluation_datetime(new_period['end_time'])
+                            end_t = int(new_period['end_time'].timestamp())
+                            msg_text += f"評価期間が **{extend_days}日間** 延長されました。\n新しい終了予定: {end_str} (<t:{end_t}:R>)"
+                        else:
+                            msg_text += f"評価期間延長（{extend_days}日）を購入しました。"
+                    else:
+                        msg_text += f"評価期間延長（{extend_days}日）を購入しました。"
+
+                    await interaction.followup.send(msg_text, ephemeral=True)
                     
-                    await interaction.followup.send(
-                        f"🎉 商品「{item['name']}」を購入しました！\n"
-                        f"評価期間が **{extend_days}日間** 延長されました。\n"
-                        f"新しい終了予定: {end_str} (<t:{end_t}:R>)", 
-                        ephemeral=True
-                    )
+                    # 評価員ロールの取得
+                    admin_ids = get_setting(self.bot, "ADMIN_ROLE_IDS", interaction.guild.id) or []
+                    tier3_ids = get_setting(self.bot, "EVALUATOR_TIER3_ROLE_IDS", interaction.guild.id) or []
+                    tier2_ids = get_setting(self.bot, "EVALUATOR_TIER2_ROLE_IDS", interaction.guild.id) or []
+                    tier1_ids = get_setting(self.bot, "EVALUATOR_TIER1_ROLE_IDS", interaction.guild.id) or []
+                    old_eval_ids = get_setting(self.bot, "EVALUATOR_ROLE_IDS", interaction.guild.id) or []
+                    all_eval_role_ids = list(set(admin_ids + tier3_ids + tier2_ids + tier1_ids + old_eval_ids))
+                    mentions = " ".join([f"<@&{rid}>" for rid in all_eval_role_ids])
+
+                    # 商品購入ログの送信（shop_extendログ）
+                    log_msg = f"{interaction.user.mention} が評価期間延長（{extend_days}日）を購入しました！\n{mentions}"
                     
-                    # 商品購入ログの送信
                     embed = discord.Embed(title="🛒 商品購入 (評価期間延長)", color=discord.Color.gold())
                     embed.add_field(name="購入者", value=f"{interaction.user.mention} (ID: {interaction.user.id})", inline=False)
                     embed.add_field(name="商品ID", value=str(item_id), inline=True)
                     embed.add_field(name="商品名", value=item["name"], inline=True)
                     embed.add_field(name="支払額", value=f"{item['price']:,} {currency_name}", inline=True)
                     embed.add_field(name="延長日数", value=f"{extend_days}日間", inline=True)
-                    embed.add_field(name="新しい終了予定", value=f"{end_str} (<t:{end_t}:R>)", inline=False)
+                    
+                    # 従来のshopログに送信（必須）
                     await send_log(self.bot, interaction.guild, "shop", embed)
+                    
+                    # DBからshop_extendのチャンネルを取得して送信（追加）
+                    channel_id = await database.get_log_channel(interaction.guild.id, "shop_extend")
+                    if channel_id:
+                        log_channel = interaction.guild.get_channel(channel_id)
+                        if log_channel:
+                            try:
+                                await log_channel.send(content=log_msg, embed=embed)
+                            except Exception:
+                                pass
                     
                     # 評価スレッドへの通知（アクティブなスレッドのみ対象）
                     eval_settings = await database.get_evaluation_settings(interaction.guild.id)
@@ -391,7 +411,7 @@ class ShopItemSelect(discord.ui.Select):
                                 for thread in forum.threads:
                                     if thread.owner_id == self.bot.user.id and (str(interaction.user.id) in thread.name or interaction.user.name.lower() in thread.name.lower()):
                                         try:
-                                            await thread.send(f"🎉 {interaction.user.mention} 評価期間を **{extend_days}日間** 延長するアイテムを購入しました！\n新しい終了予定: {end_str} (<t:{end_t}:R>)")
+                                            await thread.send(f"🎉 {interaction.user.mention} 評価期間延長（**{extend_days}日間**）を購入しました！")
                                             notified = True
                                             break
                                         except Exception:
@@ -401,7 +421,7 @@ class ShopItemSelect(discord.ui.Select):
                                         try:
                                             starter = await thread.fetch_message(thread.id)
                                             if str(interaction.user.id) in starter.content:
-                                                await thread.send(f"🎉 {interaction.user.mention} 評価期間を **{extend_days}日間** 延長するアイテムを購入しました！\n新しい終了予定: {end_str} (<t:{end_t}:R>)")
+                                                await thread.send(f"🎉 {interaction.user.mention} 評価期間延長（**{extend_days}日間**）を購入しました！")
                                                 notified = True
                                                 break
                                         except Exception:
