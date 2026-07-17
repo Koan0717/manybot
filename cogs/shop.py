@@ -303,7 +303,7 @@ class ShopItemSelect(discord.ui.Select):
                 description=f"価格: {item['price']:,} {currency_name}"[:100],
                 value=str(item["item_id"])
             ))
-        super().__init__(placeholder="商品を選択してください...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="購入したい商品を選択してください。", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         item_id = int(self.values[0])
@@ -479,9 +479,14 @@ class ShopItemSelect(discord.ui.Select):
                         embed.add_field(name="付与ロール", value="、".join(succeeded_roles), inline=False)
                         if duration_days:
                             embed.add_field(name="有効期限", value=f"{duration_days}日間", inline=True)
-                    if failed_roles:
-                        embed.add_field(name="付与失敗ロール (権限不足等)", value="、".join(failed_roles), inline=False)
-                    await send_log(self.bot, interaction.guild, "shop", embed)
+                        if failed_roles:
+                            embed.add_field(name="付与失敗ロール (権限不足等)", value="、".join(failed_roles), inline=False)
+                        await send_log(self.bot, interaction.guild, "shop", embed)
+                except Exception as e:
+                    import traceback
+                    with open("crash_log.txt", "w", encoding="utf-8") as f:
+                        f.write(traceback.format_exc())
+                    await interaction.followup.send(f"エラーが発生しました: {e}", ephemeral=True)
 
 class ShopItemSelectView(discord.ui.View):
     def __init__(self, items, action, bot):
