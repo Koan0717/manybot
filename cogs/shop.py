@@ -488,6 +488,11 @@ class ShopItemSelect(discord.ui.Select):
                     print(f"Shop error: {e}")
                     print(traceback.format_exc())
                     try:
+                        with open("crash_log.txt", "w", encoding="utf-8") as f:
+                            f.write(traceback.format_exc())
+                    except Exception as fe:
+                        print(f"File write error: {fe}")
+                    try:
                         await interaction.followup.send(f"処理中にエラーが発生しました。\n```\n{e}\n```", ephemeral=True)
                     except:
                         pass
