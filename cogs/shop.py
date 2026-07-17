@@ -347,7 +347,7 @@ class ShopItemSelect(discord.ui.Select):
                     return await interaction.followup.send("所持金が足りません。", ephemeral=True)
 
                 if is_eval_extend:
-                    extend_days = item.get("extend_days")
+                    extend_days = item.get("extend_days") or 0
                     # 評価期間延長処理
                     success = await database.extend_evaluation_period(interaction.guild.id, interaction.user.id, extend_days)
                     await database.add_user_item(interaction.user.id, item["item_id"], None)
@@ -368,11 +368,16 @@ class ShopItemSelect(discord.ui.Select):
                     await interaction.followup.send(msg_text, ephemeral=True)
                     
                     # 評価員ロールの取得
-                    admin_ids = get_setting(self.bot, "ADMIN_ROLE_IDS", interaction.guild.id) or []
-                    tier3_ids = get_setting(self.bot, "EVALUATOR_TIER3_ROLE_IDS", interaction.guild.id) or []
-                    tier2_ids = get_setting(self.bot, "EVALUATOR_TIER2_ROLE_IDS", interaction.guild.id) or []
-                    tier1_ids = get_setting(self.bot, "EVALUATOR_TIER1_ROLE_IDS", interaction.guild.id) or []
-                    old_eval_ids = get_setting(self.bot, "EVALUATOR_ROLE_IDS", interaction.guild.id) or []
+                    def _to_list(val):
+                        if not val: return []
+                        if isinstance(val, list): return val
+                        return [val]
+                        
+                    admin_ids = _to_list(get_setting(self.bot, "ADMIN_ROLE_IDS", interaction.guild.id))
+                    tier3_ids = _to_list(get_setting(self.bot, "EVALUATOR_TIER3_ROLE_IDS", interaction.guild.id))
+                    tier2_ids = _to_list(get_setting(self.bot, "EVALUATOR_TIER2_ROLE_IDS", interaction.guild.id))
+                    tier1_ids = _to_list(get_setting(self.bot, "EVALUATOR_TIER1_ROLE_IDS", interaction.guild.id))
+                    old_eval_ids = _to_list(get_setting(self.bot, "EVALUATOR_ROLE_IDS", interaction.guild.id))
                     all_eval_role_ids = list(set(admin_ids + tier3_ids + tier2_ids + tier1_ids + old_eval_ids))
                     mentions = " ".join([f"<@&{rid}>" for rid in all_eval_role_ids])
 
