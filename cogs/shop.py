@@ -493,7 +493,10 @@ class ShopItemSelect(discord.ui.Select):
                     except Exception as fe:
                         print(f"File write error: {fe}")
                     try:
-                        await interaction.followup.send(f"処理中にエラーが発生しました。\n```\n{e}\n```", ephemeral=True)
+                        tb = traceback.format_exc()
+                        # Discord limits messages to 2000 chars
+                        if len(tb) > 1900: tb = tb[-1900:]
+                        await interaction.followup.send(f"処理中にエラーが発生しました。\n```python\n{tb}\n```", ephemeral=True)
                     except:
                         pass
 
