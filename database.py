@@ -2075,7 +2075,7 @@ async def get_custom_ticket_panel(channel_id: int) -> dict:
 
                 "ticket_prefix": row["ticket_prefix"] or "ticket",
 
-                "panel_type": row.get("panel_type") or "custom_ticket"
+                "panel_type": (row["panel_type"] if "panel_type" in row.keys() else None) or "custom_ticket"
 
             }
 
