@@ -150,18 +150,15 @@ export async function setupDbSchema(client: any) {
             guild_id BIGINT
         );
         CREATE TABLE IF NOT EXISTS custom_ticket_panels (
-            panel_id SERIAL PRIMARY KEY,
-            guild_id BIGINT,
-            channel_id BIGINT,
-            message_id BIGINT,
-            title TEXT,
-            description TEXT,
-            color INT,
-            emoji TEXT,
-            mention_role_ids TEXT,
-            target_role_ids TEXT,
-            ticket_prefix TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            channel_id BIGINT PRIMARY KEY,
+            panel_title TEXT NOT NULL,
+            panel_description TEXT NOT NULL,
+            button_label TEXT NOT NULL,
+            button_emoji TEXT,
+            mention_role_ids BIGINT[] NOT NULL,
+            target_role_ids BIGINT[] NOT NULL,
+            ticket_prefix TEXT NOT NULL,
+            panel_type TEXT DEFAULT 'custom_ticket'
         );
         CREATE TABLE IF NOT EXISTS panel_requests (
             request_id SERIAL PRIMARY KEY,
