@@ -416,49 +416,10 @@ class CustomTicketPanelView(discord.ui.View):
 
     @discord.ui.button(style=discord.ButtonStyle.primary, custom_id="persistent_custom_ticket_panel_btn")
     async def request_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # まずDBを引かずにモーダルを開いて3秒タイムアウトを回避
-        # DBクエリはon_submit側で行う
-        panel = None
-        try:
-            import asyncio
-            panel = await asyncio.wait_for(
-                database.get_custom_ticket_panel(interaction.channel.id),
-                timeout=2.5
-            )
-        except asyncio.TimeoutError:
-            pass
-        
-        if panel is not None:
-            target_role_ids = panel.get("target_role_ids", [])
-        else:
-            target_role_ids = []
-        
-        if panel is not None and target_role_ids:
-            await interaction.response.defer(ephemeral=True)
-            guild = interaction.guild
-            member_set = set()
-            for rid in target_role_ids:
-                role = guild.get_role(rid)
-                if role:
-                    member_set.update(role.members)
-            
-            options = []
-            for member in sorted(member_set, key=lambda m: m.display_name):
-                options.append(discord.SelectOption(
-                    label=member.display_name,
-                    value=str(member.id),
-                    description=f"{member.name}"
-                ))
-                
-            if not options:
-                return await interaction.followup.send("❌ 現在、対応可能な担当者がいません（指定されたロールを持つメンバーがいません）。", ephemeral=True)
-            
-            view = CustomTicketSelectView(options, panel)
-            await interaction.followup.send("担当者を選択してください：", view=view, ephemeral=True)
-        else:
-            # target_role_idsが空 or DBタイムアウト → モーダルを直接開く（channel_idを渡してon_submitでDB取得）
-            modal = CustomTicketRequestModal(target_member=None, panel=panel, channel_id=interaction.channel.id)
-            await interaction.response.send_modal(modal)
+        # DBクエリは一切行わず即座にモーダルを開く（3秒タイムアウト回避）
+        # パネル設定はon_submit時に取得する
+        modal = CustomTicketRequestModal(target_member=None, panel=None, channel_id=interaction.channel.id)
+        await interaction.response.send_modal(modal)
 
 class CustomTicketSelectView(discord.ui.View):
     def __init__(self, options, panel):
