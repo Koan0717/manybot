@@ -1,0 +1,82 @@
+[
+  {
+    "file": ".\\bot.py",
+    "line": 242,
+    "content": "# Sync commands to database for dashboard toggle feature"
+  },
+  {
+    "file": ".\\make_gambling_page.py",
+    "line": 406,
+    "content": "os.makedirs(r\"C:\\Users\\kakij\\OneDrive\\ドキュメント\\多様化bot\\dashboard\\src\\app\\dashboard\\[guild_id]\\gambling\", exist_ok=True)"
+  },
+  {
+    "file": ".\\make_gambling_page.py",
+    "line": 407,
+    "content": "with open(r\"C:\\Users\\kakij\\OneDrive\\ドキュメント\\多様化bot\\dashboard\\src\\app\\dashboard\\[guild_id]\\gambling\\page.tsx\", 'w', encoding='utf-8') as f:"
+  },
+  {
+    "file": ".\\update_api.py",
+    "line": 13,
+    "content": "route_path = os.path.join(base, \"dashboard\", \"src\", \"app\", \"api\", \"guilds\", \"[guild_id]\", \"rank\", \"route.ts\")"
+  },
+  {
+    "file": ".\\scratch\\patch_overflow.py",
+    "line": 2,
+    "content": "with open('dashboard/src/app/dashboard/[guild_id]/rooms/page.tsx', 'r', encoding='utf-8') as f:"
+  },
+  {
+    "file": ".\\scratch\\patch_overflow.py",
+    "line": 10,
+    "content": "with open('dashboard/src/app/dashboard/[guild_id]/rooms/page.tsx', 'w', encoding='utf-8') as f:"
+  },
+  {
+    "file": ".\\scratch\\patch_page_rooms.py",
+    "line": 2,
+    "content": "with open('dashboard/src/app/dashboard/[guild_id]/rooms/page.tsx', 'r', encoding='utf-8') as f:"
+  },
+  {
+    "file": ".\\scratch\\patch_page_rooms.py",
+    "line": 141,
+    "content": "with open('dashboard/src/app/dashboard/[guild_id]/rooms/page.tsx', 'w', encoding='utf-8') as f:"
+  },
+  {
+    "file": ".\\scratch\\patch_rooms_careful.py",
+    "line": 62,
+    "content": "# LuxuryRoomView luxury (we use 'luxury_inn_single'? wait, RoomView/LuxuryRoomView are separate? Yes, the dashboard sends them separately. We'll use 'luxury_inn_single' for LuxuryRoomView too? Wait, dashboard has `luxury_inn_single` which uses LuxuryInnPanelView! What uses LuxuryRoomView? No, dashboard sends `luxury_inn_single` which is `LuxuryInnPanelView`! Wait, if the user doesn't care about `LuxuryRoomView`, I can still patch it as \"luxury_inn_single\".)"
+  },
+  {
+    "file": ".\\scratch\\patch_rooms_route.py",
+    "line": 2,
+    "content": "with open('dashboard/src/app/api/guilds/[guild_id]/rooms/route.ts', 'r', encoding='utf-8') as f:"
+  },
+  {
+    "file": ".\\scratch\\patch_rooms_route.py",
+    "line": 75,
+    "content": "with open('dashboard/src/app/api/guilds/[guild_id]/rooms/route.ts', 'w', encoding='utf-8') as f:"
+  },
+  {
+    "file": ".\\scripts\\init_dashboard.py",
+    "line": 11,
+    "content": "base = \"dashboard\""
+  },
+  {
+    "file": ".\\scripts\\init_dashboard.py",
+    "line": 15,
+    "content": "\"name\": \"eval-bot-dashboard\","
+  },
+  {
+    "file": ".\\scripts\\init_dashboard.py",
+    "line": 128,
+    "content": "title: \"Evalia Dashboard\","
+  },
+  {
+    "file": ".\\scripts\\init_dashboard.py",
+    "line": 129,
+    "content": "description: \"Dashboard for Discord Bot\","
+  },
+  {
+    "file": ".\\scripts\\init_dashboard.py",
+    "line": 171,
+    "content": "<h1 className=\"text-4xl font-bold mb-8 text-center text-red-500\">Evalia BOT Dashboard</h1>"
+  }
+]

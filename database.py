@@ -614,6 +614,8 @@ async def setup_db_schema(p):
 
             await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT TRUE')
 
+            await conn.execute('ALTER TABLE log_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT TRUE')
+
             await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_generate_period BOOLEAN DEFAULT TRUE')
 
             await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_fail_on_deadline BOOLEAN DEFAULT FALSE')
