@@ -416,14 +416,26 @@ class CustomTicketPanelView(discord.ui.View):
 
     @discord.ui.button(style=discord.ButtonStyle.primary, custom_id="persistent_custom_ticket_panel_btn")
     async def request_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        panel = await database.get_custom_ticket_panel(interaction.channel.id)
-        if not panel:
-            return await interaction.response.send_message("❌ パネルの設定が見つかりません。設定が削除された可能性があります。", ephemeral=True)
-            
-        guild = interaction.guild
-        target_role_ids = panel.get("target_role_ids", [])
+        # まずDBを引かずにモーダルを開いて3秒タイムアウトを回避
+        # DBクエリはon_submit側で行う
+        panel = None
+        try:
+            import asyncio
+            panel = await asyncio.wait_for(
+                database.get_custom_ticket_panel(interaction.channel.id),
+                timeout=2.5
+            )
+        except asyncio.TimeoutError:
+            pass
         
-        if target_role_ids:
+        if panel is not None:
+            target_role_ids = panel.get("target_role_ids", [])
+        else:
+            target_role_ids = []
+        
+        if panel is not None and target_role_ids:
+            await interaction.response.defer(ephemeral=True)
+            guild = interaction.guild
             member_set = set()
             for rid in target_role_ids:
                 role = guild.get_role(rid)
@@ -439,12 +451,13 @@ class CustomTicketPanelView(discord.ui.View):
                 ))
                 
             if not options:
-                return await interaction.response.send_message("❌ 現在、対応可能な担当者がいません（指定されたロールを持つメンバーがいません）。", ephemeral=True)
+                return await interaction.followup.send("❌ 現在、対応可能な担当者がいません（指定されたロールを持つメンバーがいません）。", ephemeral=True)
             
             view = CustomTicketSelectView(options, panel)
-            await interaction.response.send_message("担当者を選択してください：", view=view, ephemeral=True)
+            await interaction.followup.send("担当者を選択してください：", view=view, ephemeral=True)
         else:
-            modal = CustomTicketRequestModal(target_member=None, panel=panel)
+            # target_role_idsが空 or DBタイムアウト → モーダルを直接開く（channel_idを渡してon_submitでDB取得）
+            modal = CustomTicketRequestModal(target_member=None, panel=panel, channel_id=interaction.channel.id)
             await interaction.response.send_modal(modal)
 
 class CustomTicketSelectView(discord.ui.View):
@@ -477,17 +490,24 @@ class CustomTicketRequestModal(discord.ui.Modal):
         max_length=1000
     )
 
-    def __init__(self, target_member, panel):
-        title = panel["panel_title"]
+    def __init__(self, target_member, panel, channel_id=None):
+        self.target_member = target_member
+        self.panel = panel
+        self.channel_id = channel_id
+        title = (panel["panel_title"] if panel else "お問い合わせ")
         if len(title) > 45:
             title = title[:42] + "..."
         super().__init__(title=title)
-        self.target_member = target_member
-        self.panel = panel
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
+        
+        # ボタン押下時にDBタイムアウトした場合、ここで再取得
+        if self.panel is None and self.channel_id:
+            self.panel = await database.get_custom_ticket_panel(self.channel_id)
+        if not self.panel:
+            return await interaction.followup.send("❌ パネルの設定が見つかりません。設定が削除された可能性があります。", ephemeral=True)
         
         prefix = self.panel.get("ticket_prefix") or "ticket"
         
