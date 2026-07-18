@@ -664,36 +664,11 @@ class CustomTicketPanelView(discord.ui.View):
 
     @discord.ui.button(style=discord.ButtonStyle.primary, custom_id="persistent_custom_ticket_panel_btn")
     async def request_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        panel = await database.get_custom_ticket_panel(interaction.channel.id)
-        if not panel:
-            return await interaction.response.send_message("❌ パネルの設定が見つかりません。設定が削除された可能性があります。", ephemeral=True)
-            
-        guild = interaction.guild
-        target_role_ids = panel.get("target_role_ids", [])
-        
-        if target_role_ids:
-            member_set = set()
-            for rid in target_role_ids:
-                role = guild.get_role(rid)
-                if role:
-                    member_set.update(role.members)
-            
-            options = []
-            for member in sorted(member_set, key=lambda m: m.display_name):
-                options.append(discord.SelectOption(
-                    label=member.display_name,
-                    value=str(member.id),
-                    description=f"{member.name}"
-                ))
-                
-            if not options:
-                return await interaction.response.send_message("❌ 現在、対応可能な担当者がいません（指定されたロールを持つメンバーがいません）。", ephemeral=True)
-            
-            view = CustomTicketSelectView(options, panel)
-            await interaction.response.send_message("担当者を選択してください：", view=view, ephemeral=True)
-        else:
-            modal = CustomTicketRequestModal(target_member=None, panel=panel)
-            await interaction.response.send_modal(modal)
+        # DBクエリは一切行わず即座にモーダルを開く（3秒タイムアウト回避）
+        # パネル設定はon_submit時に取得する
+        from cogs.tickets import CustomTicketRequestModal
+        modal = CustomTicketRequestModal(target_member=None, panel=None, channel_id=interaction.channel.id)
+        await interaction.response.send_modal(modal)
 
 class CustomTicketSelectView(discord.ui.View):
     def __init__(self, options, panel):
