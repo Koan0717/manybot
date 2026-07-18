@@ -81,24 +81,27 @@ class Logging(commands.Cog):
             # 適用対象および免除ロールの確認
             guild = message.guild
             if guild:
-                cfg = self.bot.get_antigrief_config(guild.id)
-                
-                # 免除ロールチェック
-                exempt_roles = cfg.get("exempt_roles", set())
-                author_role_ids = {role.id for role in message.author.roles}
-                
-                # 対象カテゴリー/チャンネルチェック
-                target_categories = cfg.get("categories", set())
-                target_channels = cfg.get("channels", set())
-                
-                is_grief_monitored = True
-                if exempt_roles & author_role_ids:
-                    is_grief_monitored = False
-                elif target_categories or target_channels:
-                    in_target_channel = message.channel.id in target_channels
-                    in_target_category = message.channel.category and message.channel.category.id in target_categories
-                    if not in_target_channel and not in_target_category:
+                enable_antigrief = config.get_setting(self.bot, "ENABLE_ANTIGRIEF", guild.id)
+                is_grief_monitored = str(enable_antigrief).lower() != "false"
+
+                if is_grief_monitored:
+                    cfg = self.bot.get_antigrief_config(guild.id)
+                    
+                    # 免除ロールチェック
+                    exempt_roles = cfg.get("exempt_roles", set())
+                    author_role_ids = {role.id for role in message.author.roles}
+                    
+                    # 対象カテゴリー/チャンネルチェック
+                    target_categories = cfg.get("categories", set())
+                    target_channels = cfg.get("channels", set())
+                    
+                    if exempt_roles & author_role_ids:
                         is_grief_monitored = False
+                    elif target_categories or target_channels:
+                        in_target_channel = message.channel.id in target_channels
+                        in_target_category = message.channel.category and message.channel.category.id in target_categories
+                        if not in_target_channel and not in_target_category:
+                            is_grief_monitored = False
                 
                 if is_grief_monitored:
                     user_tracker = self.bot.spam_tracker.setdefault(user_id, {

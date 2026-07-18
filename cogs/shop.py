@@ -357,49 +357,55 @@ class ShopItemSelect(discord.ui.Select):
                     await database.extend_evaluation_period(interaction.guild.id, interaction.user.id, extend_days)
                     await database.add_user_item(interaction.user.id, item["item_id"], None)
                     
-                    msg_text = f"🎉 商品「{item['name']}」を購入しました！\n評価期間が **{extend_days}日間** 延長されました。"
+                    # 新しい終了予定の取得
+                    new_period = await database.get_evaluation_period(interaction.guild.id, interaction.user.id)
+                    end_str = format_evaluation_datetime(new_period['end_time'])
+                    end_t = int(new_period['end_time'].timestamp())
                     
-                    await interaction.followup.send(msg_text, ephemeral=True)
-                    try:
-                        await interaction.user.send(msg_text)
-                    except Exception:
-                        pass
+                    await interaction.followup.send(
+                        f"🎉 商品「{item['name']}」を購入しました！\n"
+                        f"評価期間が **{extend_days}日間** 延長されました。\n"
+                        f"新しい終了予定: {end_str} (<t:{end_t}:R>)", 
+                        ephemeral=True
+                    )
                     
-                    # 評価員ロールの取得
-                    def _to_list(val):
-                        if not val: return []
-                        if isinstance(val, list): return val
-                        if isinstance(val, str):
-                            return [int(x.strip()) for x in val.split(',') if x.strip().isdigit()]
-                        return []
-                    
-                    evaluator_mention_ids = _to_list(get_setting(self.bot, "EVALUATOR_MENTION_ROLE_IDS", interaction.guild.id))
-                    mentions = " ".join([f"<@&{r}>" for r in evaluator_mention_ids]) if evaluator_mention_ids else ""
-                    log_msg = f"{interaction.user.mention} が評価期間延長（{extend_days}日）を購入しました！\n{mentions}"
-                    
-                    # DBからshop_extendのチャンネルを取得して送信
-                    channel_id = await database.get_log_channel(interaction.guild.id, "shop_extend")
-                    if channel_id:
-                        log_channel = interaction.guild.get_channel(channel_id)
-                        if not log_channel:
-                            try:
-                                log_channel = await interaction.guild.fetch_channel(channel_id)
-                            except:
-                                pass
-                        if log_channel:
-                            try:
-                                await log_channel.send(log_msg)
-                            except:
-                                pass
-
-                    # 商品購入ログの送信 (shop log)
+                    # 商品購入ログの送信
                     embed = discord.Embed(title="🛒 商品購入 (評価期間延長)", color=discord.Color.gold())
                     embed.add_field(name="購入者", value=f"{interaction.user.mention} (ID: {interaction.user.id})", inline=False)
                     embed.add_field(name="商品ID", value=str(item_id), inline=True)
                     embed.add_field(name="商品名", value=item["name"], inline=True)
                     embed.add_field(name="支払額", value=f"{item['price']:,} {currency_name}", inline=True)
                     embed.add_field(name="延長日数", value=f"{extend_days}日間", inline=True)
+                    embed.add_field(name="新しい終了予定", value=f"{end_str} (<t:{end_t}:R>)", inline=False)
                     await send_log(self.bot, interaction.guild, "shop", embed)
+                    
+                    # 評価スレッドへの通知（アクティブなスレッドのみ対象）
+                    eval_settings = await database.get_evaluation_settings(interaction.guild.id)
+                    if eval_settings:
+                        forum_ids = eval_settings.get("forum_channel_ids", [])
+                        notified = False
+                        for forum_id in forum_ids:
+                            if notified: break
+                            forum = interaction.guild.get_channel(forum_id)
+                            if isinstance(forum, discord.ForumChannel):
+                                for thread in forum.threads:
+                                    if thread.owner_id == self.bot.user.id and (str(interaction.user.id) in thread.name or interaction.user.name.lower() in thread.name.lower()):
+                                        try:
+                                            await thread.send(f"🎉 {interaction.user.mention} 評価期間を **{extend_days}日間** 延長するアイテムを購入しました！\n新しい終了予定: {end_str} (<t:{end_t}:R>)")
+                                            notified = True
+                                            break
+                                        except Exception:
+                                            pass
+                                    else:
+                                        # スレッド名で判別できない場合は最初のメッセージを確認
+                                        try:
+                                            starter = await thread.fetch_message(thread.id)
+                                            if str(interaction.user.id) in starter.content:
+                                                await thread.send(f"🎉 {interaction.user.mention} 評価期間を **{extend_days}日間** 延長するアイテムを購入しました！\n新しい終了予定: {end_str} (<t:{end_t}:R>)")
+                                                notified = True
+                                                break
+                                        except Exception:
+                                            pass
                 else:
                     # 有効期限の計算
                     import datetime as dt
