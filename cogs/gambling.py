@@ -776,6 +776,17 @@ class BlackjackGameView(discord.ui.View):
     async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
             return await interaction.response.send_message("これはあなたのゲームではありません。", ephemeral=True)
+        if getattr(self, 'processing', False):
+            try:
+                await interaction.response.defer()
+            except:
+                pass
+            return
+        self.processing = True
+        try:
+            await interaction.response.defer()
+        except:
+            pass
         
         self.player_hand.append(self.deck.pop())
         score = calculate_blackjack_score(self.player_hand)
@@ -787,12 +798,27 @@ class BlackjackGameView(discord.ui.View):
             await self.resolve_stand(interaction)
         else:
             embed = self.build_embed(description="どうしますか？")
-            await interaction.response.edit_message(embed=embed, view=self)
+            try:
+                await interaction.edit_original_response(embed=embed, view=self)
+            except Exception:
+                pass
+            self.processing = False
 
     @discord.ui.button(label="勝負する (Stand)", style=discord.ButtonStyle.danger, emoji="🛑")
     async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user:
             return await interaction.response.send_message("これはあなたのゲームではありません。", ephemeral=True)
+        if getattr(self, 'processing', False):
+            try:
+                await interaction.response.defer()
+            except:
+                pass
+            return
+        self.processing = True
+        try:
+            await interaction.response.defer()
+        except:
+            pass
         
         await self.resolve_stand(interaction)
 
@@ -807,7 +833,13 @@ class BlackjackGameView(discord.ui.View):
             description=f"手札の合計が21を超えました！\n**{self.bet} {currency_name}** 没収...",
             is_final=True
         )
-        await interaction.response.edit_message(embed=embed, view=self)
+        try:
+            await interaction.edit_original_response(embed=embed, view=self)
+        except Exception:
+            try:
+                await interaction.response.edit_message(embed=embed, view=self)
+            except Exception:
+                pass
 
         # ギャンブルログ送信
         player_score = calculate_blackjack_score(self.player_hand)
@@ -829,35 +861,11 @@ class BlackjackGameView(discord.ui.View):
             
         outcome = self.target_outcome
         if outcome == "bj_win":
-            outcome = "win"
+            pass # bj_win is handled during initial check
             
-        if outcome == "win":
-            while calculate_blackjack_score(self.dealer_hand) < 17:
-                self.dealer_hand.append(self.deck.pop())
-            ds = calculate_blackjack_score(self.dealer_hand)
-            while ds >= player_score and ds <= 21:
-                self.dealer_hand.append({"suit": "🃏", "value": "10"})
-                ds = calculate_blackjack_score(self.dealer_hand)
-        elif outcome == "lose":
-            while calculate_blackjack_score(self.dealer_hand) < 17:
-                self.dealer_hand.append(self.deck.pop())
-            ds = calculate_blackjack_score(self.dealer_hand)
-            if ds > 21 or ds < player_score:
-                self.dealer_hand = [self.dealer_hand[0], {"suit": "🃏", "value": "10"}, {"suit": "🃏", "value": "A"}]
-                if calculate_blackjack_score(self.dealer_hand) > 21:
-                    self.dealer_hand = [{"suit": "🃏", "value": "10"}, {"suit": "🃏", "value": "9"}]
-        else:
-            while calculate_blackjack_score(self.dealer_hand) < 17:
-                self.dealer_hand.append(self.deck.pop())
-            ds = calculate_blackjack_score(self.dealer_hand)
-            if ds != player_score:
-                target = player_score
-                if target == 21:
-                    self.dealer_hand = [{"suit": "🃏", "value": "10"}, {"suit": "🃏", "value": "A"}]
-                elif target >= 17:
-                    self.dealer_hand = [{"suit": "🃏", "value": "10"}, {"suit": "🃏", "value": f"{target-10}"}]
-                else:
-                    self.dealer_hand = [{"suit": "🃏", "value": "10"}, {"suit": "🃏", "value": "7"}]
+        # ディーラーは17以上になるまでヒットし続ける
+        while calculate_blackjack_score(self.dealer_hand) < 17:
+            self.dealer_hand.append(self.deck.pop())
             
         dealer_score = calculate_blackjack_score(self.dealer_hand)
         
@@ -901,10 +909,34 @@ class BlackjackGameView(discord.ui.View):
             else:
                 description = f"ディーラーを上回りました！\n**{win_amount} {currency_name}** 獲得！{tax_msg}"
             
-        if win_amount > 0:
-            await database.add_balance(interaction.guild.id, self.user.id, win_amount)
-            
         embed = self.build_embed(title=title, color=color, description=description, is_final=True)
+
+        # UIを先に更新する (遅延を防ぐため)
+        if interaction:
+            try:
+                await interaction.edit_original_response(embed=embed, view=self)
+            except Exception:
+                try:
+                    await interaction.response.edit_message(embed=embed, view=self)
+                except Exception:
+                    pass
+        else:
+            if self.interaction:
+                try:
+                    await self.interaction.edit_original_response(embed=embed, view=self)
+                except Exception:
+                    try:
+                        await self.message.edit(embed=embed, view=self)
+                    except Exception:
+                        pass
+            else:
+                try:
+                    await self.message.edit(embed=embed, view=self)
+                except Exception:
+                    pass
+
+        if win_amount > 0:
+            await database.add_balance(interaction.guild.id if interaction else self.user.guild.id, self.user.id, win_amount)
 
         # ギャンブルログ送信
         embed_log = discord.Embed(title="🃏 ギャンブルログ: ブラックジャック", color=color, timestamp=discord.utils.utcnow())
@@ -926,30 +958,7 @@ class BlackjackGameView(discord.ui.View):
             
         embed_log.add_field(name="プレイヤー手札", value=f"Score: {player_score}", inline=True)
         embed_log.add_field(name="ディーラー手札", value=f"Score: {dealer_score}", inline=True)
-        await send_log(bot, self.user.guild, "gambling", embed_log)
-        
-        if interaction:
-            try:
-                await interaction.response.edit_message(embed=embed, view=self)
-            except Exception:
-                try:
-                    await interaction.edit_original_response(embed=embed, view=self)
-                except Exception:
-                    pass
-        else:
-            if self.interaction:
-                try:
-                    await self.interaction.edit_original_response(embed=embed, view=self)
-                except Exception:
-                    try:
-                        await self.message.edit(embed=embed, view=self)
-                    except Exception:
-                        pass
-            else:
-                try:
-                    await self.message.edit(embed=embed, view=self)
-                except Exception:
-                    pass
+        await send_log(bot, interaction.guild if interaction else self.user.guild, "gambling", embed_log)
 
 class BlackjackView(discord.ui.View):
     def __init__(self):
