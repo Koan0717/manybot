@@ -125,10 +125,11 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         });
         setIsModalOpen(false);
       } else {
-        alert('保存に失敗しました');
+        const errorData = await res.json().catch(() => null);
+        alert('保存に失敗しました: ' + (errorData?.error || '不明なエラー'));
       }
-    } catch (e) {
-      alert('エラーが発生しました');
+    } catch (e: any) {
+      alert('エラーが発生しました: ' + e.message);
     } finally {
       setSaving(false);
     }
