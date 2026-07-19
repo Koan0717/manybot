@@ -22,6 +22,7 @@ interface VCTrigger {
   show_panel: boolean;
   is_invite_only: boolean;
   invite_visible_role_ids: string[];
+  allowed_role_ids?: string[];
 }
 
 interface DiscordRole {
@@ -108,7 +109,8 @@ export default function VCTriggersPage() {
         allow_limit_change: true,
         show_panel: true,
         is_invite_only: false,
-        invite_visible_role_ids: []
+        invite_visible_role_ids: [],
+        allowed_role_ids: []
       }
     ]);
   };
@@ -279,6 +281,26 @@ export default function VCTriggersPage() {
                     />
                   </div>
                 )}
+
+                <div className="mt-4 p-4 border border-zinc-700/50 bg-zinc-900/50 rounded-lg">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    閲覧・接続許可ロール (未設定時は全員がアクセス可能)
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    ※特定のロールのみに部屋を利用させたい場合に設定します。「招待専用」設定とは独立して機能します。
+                  </p>
+                  <Select
+                    isMulti
+                    options={discordRoles.map(r => ({ value: r.id, label: r.name }))}
+                    value={discordRoles
+                      .filter(r => (trigger.allowed_role_ids || []).includes(r.id))
+                      .map(r => ({ value: r.id, label: r.name }))}
+                    onChange={(selected: any) => updateTrigger(index, 'allowed_role_ids', selected ? selected.map((s: any) => s.value) : [])}
+                    className="text-black"
+                    placeholder="許可するロールを選択..."
+                    noOptionsMessage={() => "ロールが見つかりません"}
+                  />
+                </div>
               </motion.div>
             ))}
 

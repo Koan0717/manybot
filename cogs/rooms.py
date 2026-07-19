@@ -968,17 +968,32 @@ class Rooms(commands.Cog):
                         reason=f"Auto-VC for {member.display_name}"
                     )
                     
-                    # allowed_role_idsが設定されていれば権限を適用
+                    # 権限の適用
+                    is_invite_only = cfg.get("is_invite_only", False) if cfg else False
+                    invite_visible_role_ids = cfg.get("invite_visible_role_ids", []) if cfg else []
                     allowed_role_ids = cfg.get("allowed_role_ids", []) if cfg else []
-                    if allowed_role_ids:
+
+                    # デフォルトで全員許可の前提で、制限がある場合のみ上書きする
+                    if is_invite_only or allowed_role_ids:
                         overwrites = {
                             guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False),
                             member: discord.PermissionOverwrite(view_channel=True, connect=True, speak=True)
                         }
-                        for rid in allowed_role_ids:
-                            role = guild.get_role(rid)
-                            if role:
-                                overwrites[role] = discord.PermissionOverwrite(view_channel=True, connect=True)
+
+                        if allowed_role_ids:
+                            # 閲覧・接続を許可するロール
+                            for rid in allowed_role_ids:
+                                role = guild.get_role(rid)
+                                if role:
+                                    overwrites[role] = discord.PermissionOverwrite(view_channel=True, connect=True)
+                        elif is_invite_only:
+                            # 招待専用の場合、閲覧のみ許可するロール
+                            for rid in invite_visible_role_ids:
+                                role = guild.get_role(rid)
+                                if role:
+                                    # 元々の仕様（閲覧のみ許可）に合わせる（connect=True にするかは用途次第だが、ここでは以前の実装を踏襲）
+                                    overwrites[role] = discord.PermissionOverwrite(view_channel=True, connect=True)
+                        
                         await new_channel.edit(overwrites=overwrites)
                     
                     if member.voice and member.voice.channel and member.voice.channel.id == trigger_id:
