@@ -666,7 +666,6 @@ class CustomTicketPanelView(discord.ui.View):
     async def request_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         # DBクエリは一切行わず即座にモーダルを開く（3秒タイムアウト回避）
         # パネル設定はon_submit時に取得する
-        from cogs.tickets import CustomTicketRequestModal
         modal = CustomTicketRequestModal(target_member=None, panel=None, channel_id=interaction.channel.id)
         await interaction.response.send_modal(modal)
 
@@ -731,19 +730,25 @@ class CustomTicketSelectView(discord.ui.View):
 class CustomTicketRequestModal(discord.ui.Modal):
     details = discord.ui.TextInput(label="ご用件・相談内容の詳細", style=discord.TextStyle.paragraph, placeholder="内容を詳しく入力してください。", required=True, max_length=1000)
 
-    def __init__(self, target_member, panel, extra_member=None):
-        title = panel["panel_title"]
-        if len(title) > 45:
-            title = title[:42] + "..."
-        super().__init__(title=title)
+    def __init__(self, target_member, panel, extra_member=None, channel_id=None):
         self.target_member = target_member
         self.panel = panel
         self.extra_member = extra_member
+        self.channel_id = channel_id
+        title = (panel["panel_title"] if panel else "お問い合わせ")
+        if len(title) > 45:
+            title = title[:42] + "..."
+        super().__init__(title=title)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         bot = interaction.client
+        # ボタン押下時にpanelを渡さなかった場合、ここでDB取得
+        if self.panel is None and self.channel_id:
+            self.panel = await database.get_custom_ticket_panel(self.channel_id)
+        if not self.panel:
+            return await interaction.followup.send("❌ パネルの設定が見つかりません。設定が削除された可能性があります。", ephemeral=True)
         prefix = self.panel.get("ticket_prefix") or "ticket"
         
         current_ticket_nums = []
