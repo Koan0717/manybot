@@ -968,6 +968,19 @@ class Rooms(commands.Cog):
                         reason=f"Auto-VC for {member.display_name}"
                     )
                     
+                    # allowed_role_idsが設定されていれば権限を適用
+                    allowed_role_ids = cfg.get("allowed_role_ids", []) if cfg else []
+                    if allowed_role_ids:
+                        overwrites = {
+                            guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False),
+                            member: discord.PermissionOverwrite(view_channel=True, connect=True, speak=True)
+                        }
+                        for rid in allowed_role_ids:
+                            role = guild.get_role(rid)
+                            if role:
+                                overwrites[role] = discord.PermissionOverwrite(view_channel=True, connect=True)
+                        await new_channel.edit(overwrites=overwrites)
+                    
                     if member.voice and member.voice.channel and member.voice.channel.id == trigger_id:
                         try:
                             await member.move_to(new_channel)

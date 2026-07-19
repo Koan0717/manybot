@@ -318,7 +318,9 @@ async def setup_db_schema(p):
 
                 allow_limit_change BOOLEAN DEFAULT TRUE,
 
-                show_panel BOOLEAN DEFAULT TRUE
+                show_panel BOOLEAN DEFAULT TRUE,
+
+                allowed_role_ids BIGINT[] DEFAULT '{}'
 
             )
 
@@ -619,6 +621,8 @@ async def setup_db_schema(p):
             await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_generate_period BOOLEAN DEFAULT TRUE')
 
             await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_fail_on_deadline BOOLEAN DEFAULT FALSE')
+
+            await conn.execute("ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS allowed_role_ids BIGINT[] DEFAULT '{}'")
 
         except Exception as e:
 
@@ -1507,23 +1511,26 @@ async def get_auto_vc_triggers() -> list[int]:
 
 # --- VC菴懈・繝医Μ繧ｬ繝ｼ險ｭ螳夂ｮ｡逅・畑髢｢謨ｰ ---
 
-async def save_auto_vc_config(channel_id: int, base_name: str, allow_rename: bool, include_owner_name: bool, use_numbering: bool, allow_limit_change: bool, show_panel: bool):
+async def save_auto_vc_config(channel_id: int, base_name: str, allow_rename: bool, include_owner_name: bool, use_numbering: bool, allow_limit_change: bool, show_panel: bool, allowed_role_ids: list = None):
 
     p = await get_pool()
+
+    if allowed_role_ids is None:
+        allowed_role_ids = []
 
     async with p.acquire() as conn:
 
         await conn.execute('''
 
-            INSERT INTO auto_vc_config (channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel)
+            INSERT INTO auto_vc_config (channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, allowed_role_ids)
 
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 
             ON CONFLICT (channel_id) DO UPDATE SET
 
-                base_name = $2, allow_rename = $3, include_owner_name = $4, use_numbering = $5, allow_limit_change = $6, show_panel = $7
+                base_name = $2, allow_rename = $3, include_owner_name = $4, use_numbering = $5, allow_limit_change = $6, show_panel = $7, allowed_role_ids = $8
 
-        ''', channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel)
+        ''', channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, allowed_role_ids)
 
 
 
@@ -1533,7 +1540,7 @@ async def get_auto_vc_config(channel_id: int) -> dict | None:
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel FROM auto_vc_config WHERE channel_id = $1', channel_id)
+        row = await conn.fetchrow('SELECT base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, allowed_role_ids FROM auto_vc_config WHERE channel_id = $1', channel_id)
 
         if row:
 
@@ -1549,7 +1556,9 @@ async def get_auto_vc_config(channel_id: int) -> dict | None:
 
                 "allow_limit_change": row["allow_limit_change"],
 
-                "show_panel": row["show_panel"]
+                "show_panel": row["show_panel"],
+
+                "allowed_role_ids": list(row["allowed_role_ids"]) if row["allowed_role_ids"] else []
 
             }
 
@@ -1579,7 +1588,7 @@ async def get_all_auto_vc_configs() -> list[dict]:
 
             async with p.acquire() as conn:
 
-                rows = await conn.fetch('SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel FROM auto_vc_config')
+                rows = await conn.fetch('SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, allowed_role_ids FROM auto_vc_config')
 
                 all_configs.extend([{
 
@@ -1595,7 +1604,9 @@ async def get_all_auto_vc_configs() -> list[dict]:
 
                     "allow_limit_change": r["allow_limit_change"],
 
-                    "show_panel": r["show_panel"]
+                    "show_panel": r["show_panel"],
+
+                    "allowed_role_ids": list(r["allowed_role_ids"]) if r["allowed_role_ids"] else []
 
                 } for r in rows])
 
