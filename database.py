@@ -1364,9 +1364,15 @@ async def get_expired_rooms():
 
     for p in await get_all_configured_pools():
 
-        rows = await p.fetch("SELECT channel_id FROM rooms WHERE expire_at < $1", get_now_naive())
+        try:
 
-        all_expired.extend([row['channel_id'] for row in rows])
+            rows = await p.fetch("SELECT channel_id FROM rooms WHERE expire_at < $1", get_now_naive())
+
+            all_expired.extend([row['channel_id'] for row in rows])
+
+        except Exception:
+
+            pass
 
     return all_expired
 

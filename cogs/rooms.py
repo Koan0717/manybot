@@ -855,9 +855,12 @@ class Rooms(commands.Cog):
             if channel:
                 try:
                     await channel.delete()
-                except discord.NotFound:
+                except Exception:
                     pass
-            await database.remove_room(channel_id)
+            try:
+                await database.remove_room(channel_id)
+            except Exception:
+                pass
             self.bot.empty_custom_vcs.pop(channel_id, None)
         
         # 2. 無人のカスタムVCをチェックして削除 (10分経過)
@@ -872,9 +875,12 @@ class Rooms(commands.Cog):
             if channel:
                 try:
                     await channel.delete()
-                except discord.NotFound:
+                except Exception:
                     pass
-            await database.remove_room(channel_id)
+            try:
+                await database.remove_room(channel_id)
+            except Exception:
+                pass
             self.bot.empty_custom_vcs.pop(channel_id, None)
 
     @check_expired_rooms.before_loop
@@ -1039,9 +1045,9 @@ class Rooms(commands.Cog):
                 room_data = await database.get_room(before.channel.id)
                 if room_data:
                     if room_data["room_type"] in ["一時部屋", "宿", "ゲームVC", "賭博VC"]:
-                        # 期限が設定されている(有料)部屋は自動削除しない
-                        if room_data["expire_at"] and room_data["expire_at"].year < 2100 and room_data["room_type"] in ["宿", "ゲームVC", "賭博VC"]:
-                            pass # 有料の部屋は退出しても維持される
+                        # 期限設定あり(有料/無期限)は退出しても削除しない
+                        if room_data["expire_at"] and room_data["room_type"] in ["宿", "ゲームVC", "賭博VC"]:
+                            pass # 有料の部屋は退出しても保持される
                         else:
                             try:
                                 print(f"[Auto-VC] Deleting empty room ({room_data['room_type']}): {before.channel.name}")
