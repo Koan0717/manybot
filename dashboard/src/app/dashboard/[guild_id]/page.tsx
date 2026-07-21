@@ -83,7 +83,7 @@ const ROLE_SETTINGS = [
   { key: 'DOWNGRADE_ROLE_ID', label: '評価落ちロール', multiple: false },
   { key: 'PENDING_MEMBER_ROLE_ID', label: '入界待機者ロール', multiple: false },
   { key: 'EMBLEM_MANAGER_ROLE_ID', label: 'スタンプ統括ロール', multiple: false },
-  { key: 'EMBLEM_MASTER_ROLE_ID', label: 'スタンプ制作ロール', multiple: false },
+  { key: 'EMBLEM_MASTER_ROLE_IDS', label: 'スタンプ従業員ロール', multiple: true },
   { key: 'CONFESSION_PRIEST_ROLE_ID', label: '告解司祭ロール', multiple: false },
   { key: 'PRIEST_ROLE_ID', label: '司祭ロール', multiple: false },
   { key: 'ADMIN_ROLE_IDS', label: '運営管理者ロール', multiple: true },
