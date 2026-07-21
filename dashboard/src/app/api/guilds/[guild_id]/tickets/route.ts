@@ -64,6 +64,12 @@ export async function POST(
           panel_title = $2, panel_description = $3, button_label = $4, button_emoji = $5, mention_role_ids = $6, target_role_ids = $7, ticket_prefix = $8, panel_type = $9`,
         [channel_id, panel_title, panel_description, button_label || 'チケット作成', button_emoji || '', mention_role_ids || [], target_role_ids || [], ticket_prefix || 'ticket', panel_type || 'custom_ticket']
       );
+      
+      // Also request the bot to spawn the panel
+      await pool.query(
+        `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, $2, $3)`,
+        [guildId, channel_id, panel_type || 'custom_ticket']
+      );
       return NextResponse.json({ success: true });
     }
     else if (action === 'delete') {

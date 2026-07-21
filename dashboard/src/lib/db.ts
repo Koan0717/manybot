@@ -170,7 +170,7 @@ export async function setupDbSchema(client: any) {
             PRIMARY KEY (guild_id, channel_id)
         );
         CREATE TABLE IF NOT EXISTS panel_requests (
-            request_id SERIAL PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             guild_id BIGINT,
             channel_id BIGINT,
             panel_type TEXT,
