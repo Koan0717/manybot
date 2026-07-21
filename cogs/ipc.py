@@ -116,7 +116,7 @@ class IPC(commands.Cog):
                         embed = discord.Embed(title="🛒 ショップ", description="ポイントを使ってアイテムを購入できます。", color=discord.Color.gold())
                         view = ShopPanelView()
                     elif panel_type == "custom_ticket":
-                        panel = await database.get_custom_ticket_panel(channel_id)
+                        panel = await database.get_custom_ticket_panel(guild_id, channel_id)
                         if panel:
                             embed = discord.Embed(
                                 title=panel.get("panel_title", "🎫 カスタムチケット"),

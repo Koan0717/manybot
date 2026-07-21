@@ -2049,13 +2049,13 @@ async def get_panel_channel_by_dest(dest_channel_id: int) -> list[int]:
 
 # --- 繧ｫ繧ｹ繧ｿ繝繝√こ繝・ヨ繝代ロ繝ｫ邂｡逅・畑髢｢謨ｰ ---
 
-async def save_custom_ticket_panel(channel_id: int, panel_title: str, panel_description: str, button_label: str = "繝√こ繝・ヨ繧剃ｽ懈・縺吶ｋ", button_emoji: str = None, mention_role_ids: list[int] = None, target_role_ids: list[int] = None, ticket_prefix: str = "ticket", panel_type: str = "custom_ticket"):
+async def save_custom_ticket_panel(guild_id: int, channel_id: int, panel_title: str, panel_description: str, button_label: str = "繝√こ繝・ヨ繧剃ｽ懈・縺吶ｋ", button_emoji: str = None, mention_role_ids: list[int] = None, target_role_ids: list[int] = None, ticket_prefix: str = "ticket", panel_type: str = "custom_ticket"):
 
     mention_role_ids = mention_role_ids or []
 
     target_role_ids = target_role_ids or []
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
@@ -2093,9 +2093,9 @@ async def save_custom_ticket_panel(channel_id: int, panel_title: str, panel_desc
 
 
 
-async def get_custom_ticket_panel(channel_id: int) -> dict:
+async def get_custom_ticket_panel(guild_id: int, channel_id: int) -> dict:
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
@@ -2135,9 +2135,9 @@ async def get_custom_ticket_panel(channel_id: int) -> dict:
 
 
 
-async def remove_custom_ticket_panel(channel_id: int):
+async def remove_custom_ticket_panel(guild_id: int, channel_id: int):
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 

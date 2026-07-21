@@ -632,6 +632,7 @@ class CustomTicketTargetRoleSelectView(discord.ui.View):
         channel = interaction.channel
         
         await database.save_custom_ticket_panel(
+            guild_id=channel.guild.id,
             channel_id=channel.id,
             panel_title=self.panel_title,
             panel_description=self.panel_description,
@@ -754,7 +755,7 @@ class CustomTicketRequestModal(discord.ui.Modal):
         bot = interaction.client
         # ボタン押下時にpanelを渡さなかった場合、ここでDB取得
         if self.panel is None and self.channel_id:
-            self.panel = await database.get_custom_ticket_panel(self.channel_id)
+            self.panel = await database.get_custom_ticket_panel(interaction.guild.id, self.channel_id)
         if not self.panel:
             return await interaction.followup.send("❌ パネルの設定が見つかりません。設定が削除された可能性があります。", ephemeral=True)
         prefix = self.panel.get("ticket_prefix") or "ticket"
