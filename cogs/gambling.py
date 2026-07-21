@@ -1,4 +1,4 @@
-import discord
+﻿import discord
 from discord.ext import commands
 from discord import app_commands
 import datetime
@@ -19,7 +19,7 @@ class ChinchiroBetModal(discord.ui.Modal, title='チンチロリン：賭け金�
     async def on_submit(self, interaction: discord.Interaction):
         try:
             bot = interaction.client
-            max_bet = get_setting(bot, "GAMBLE_MAX_BET") or 100000
+            max_bet = int(get_setting(bot, "GAMBLE_MAX_BET") or 100000)
             bet = int(self.bet_input.value)
             currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
             if bet <= 0 or bet > max_bet:
@@ -350,7 +350,7 @@ class CoinflipBetModal(discord.ui.Modal, title='コイントス：賭け金入�
     async def on_submit(self, it: discord.Interaction):
         try:
             bot = it.client
-            max_bet = get_setting(bot, "GAMBLE_MAX_BET") or 100000
+            max_bet = int(get_setting(bot, "GAMBLE_MAX_BET") or 100000)
             max_plays = get_setting(bot, "GAMBLE_MAX_PLAYS") or 10
             bet = int(self.bet_input.value)
             if bet <= 0 or bet > max_bet:
@@ -461,7 +461,7 @@ class SlotBetModal(discord.ui.Modal, title='スロット：賭け金入力'):
     async def on_submit(self, it: discord.Interaction):
         try:
             bot = it.client
-            max_bet = get_setting(bot, "GAMBLE_MAX_BET") or 100000
+            max_bet = int(get_setting(bot, "GAMBLE_MAX_BET") or 100000)
             max_plays = get_setting(bot, "GAMBLE_MAX_PLAYS") or 10
             bet = int(self.bet_input.value)
             if bet <= 0 or bet > max_bet:
@@ -580,7 +580,7 @@ class BlackjackBetModal(discord.ui.Modal, title='ブラックジャック：賭�
     async def on_submit(self, interaction: discord.Interaction):
         try:
             bot = interaction.client
-            max_bet = get_setting(bot, "GAMBLE_MAX_BET") or 100000
+            max_bet = int(get_setting(bot, "GAMBLE_MAX_BET") or 100000)
             bet = int(self.bet_input.value)
             currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
             if bet <= 0 or bet > max_bet:
@@ -973,7 +973,7 @@ class RouletteBetModal(discord.ui.Modal, title='ルーレット：賭け金入�
     async def on_submit(self, interaction: discord.Interaction):
         try:
             bot = interaction.client
-            max_bet = get_setting(bot, "GAMBLE_MAX_BET") or 100000
+            max_bet = int(get_setting(bot, "GAMBLE_MAX_BET") or 100000)
             bet = int(self.bet_input.value)
             currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
             if bet <= 0 or bet > max_bet:
@@ -2244,3 +2244,4 @@ class Gambling(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Gambling(bot))
+
