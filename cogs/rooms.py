@@ -362,6 +362,22 @@ class CustomRoomControlView(discord.ui.View):
         if not await check_room_owner(interaction): return
         await interaction.response.send_message("管理するユーザーを選択し、操作を選んでください。", view=AccessManageView(interaction.channel), ephemeral=True)
 
+class VCInvitePanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+    @discord.ui.button(label="招待・アクセス管理", style=discord.ButtonStyle.success, emoji="📨", custom_id="persistent_vc_invite_panel_btn")
+    async def invite_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            return await interaction.response.send_message("ボイスチャンネルに参加していません。", ephemeral=True)
+        
+        room_data = await database.get_room(interaction.user.voice.channel.id)
+        if not room_data or room_data["owner_id"] != interaction.user.id:
+            if not interaction.user.guild_permissions.administrator:
+                return await interaction.response.send_message("自分が作成した（所有している）部屋ではありません。", ephemeral=True)
+                
+        await interaction.response.send_message("アクセスを許可（またはキック・拒否）するユーザーを選択してください。", view=AccessManageView(interaction.user.voice.channel), ephemeral=True)
+
 class VCRenamePanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -840,6 +856,7 @@ class Rooms(commands.Cog):
         self.bot.add_view(RoomControlView())
         self.bot.add_view(CustomRoomControlView())
         self.bot.add_view(VCRenamePanelView())
+        self.bot.add_view(VCInvitePanelView())
         self.bot.add_view(MainInnPanelView())
         self.bot.add_view(TempInnPanelView())
         self.bot.add_view(LuxuryInnPanelView())
@@ -1020,6 +1037,14 @@ class Rooms(commands.Cog):
                             color=discord.Color.blue()
                         )
                         await new_channel.send(embed=embed, view=VCRenamePanelView())
+                        
+                    if is_invite_only:
+                        embed_invite = discord.Embed(
+                            title="📨 招待パネル",
+                            description="この部屋は「招待専用」です。\n下のボタンから他のユーザーのアクセスを許可・管理できます。",
+                            color=discord.Color.green()
+                        )
+                        await new_channel.send(embed=embed_invite, view=VCInvitePanelView())
 
                     # Move attempts are now done instantly above. We still keep a fallback just in case.
                     async def delayed_move():
