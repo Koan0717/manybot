@@ -631,7 +631,7 @@ class CustomTicketTargetRoleSelectView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         channel = interaction.channel
         
-        await database.add_custom_ticket_panel(
+        await database.save_custom_ticket_panel(
             channel_id=channel.id,
             panel_title=self.panel_title,
             panel_description=self.panel_description,
