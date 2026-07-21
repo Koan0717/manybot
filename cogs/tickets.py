@@ -100,11 +100,17 @@ class EmblemRequestModal(discord.ui.Modal, title='スタンプ制作依頼'):
 class EmblemSelectView(discord.ui.View):
     def __init__(self, bot, guild):
         super().__init__(timeout=60)
-        master_role = config.get_role_by_setting(bot, guild, "EMBLEM_MASTER_ROLE_ID", config.EMBLEM_MASTER_ROLE_NAME)
+        master_role_ids = config.get_setting(bot, "EMBLEM_MASTER_ROLE_IDS") or []
+        master_roles = [guild.get_role(int(rid)) for rid in master_role_ids if guild.get_role(int(rid))]
+        if not master_roles:
+            legacy_role = config.get_role_by_setting(bot, guild, "EMBLEM_MASTER_ROLE_ID", config.EMBLEM_MASTER_ROLE_NAME)
+            if legacy_role:
+                master_roles = [legacy_role]
         manager_role = config.get_role_by_setting(bot, guild, "EMBLEM_MANAGER_ROLE_ID", config.EMBLEM_MANAGER_ROLE_NAME)
         
         member_set = set()
-        if master_role: member_set.update(master_role.members)
+        for role in master_roles:
+            member_set.update(role.members)
         if manager_role: member_set.update(manager_role.members)
         
         options = []
@@ -141,11 +147,17 @@ class EmblemRequestPanelView(discord.ui.View):
     @discord.ui.button(label="スタンプを依頼する", style=discord.ButtonStyle.primary, emoji="🎨", custom_id="persistent_emblem_req_btn")
     async def request_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         # callback内で `interaction.client` から `bot` への参照を取得して `get_role_by_setting` に渡す
-        master_role = config.get_role_by_setting(interaction.client, interaction.guild, "EMBLEM_MASTER_ROLE_ID", config.EMBLEM_MASTER_ROLE_NAME)
+        master_role_ids = config.get_setting(interaction.client, "EMBLEM_MASTER_ROLE_IDS") or []
+        master_roles = [interaction.guild.get_role(int(rid)) for rid in master_role_ids if interaction.guild.get_role(int(rid))]
+        if not master_roles:
+            legacy_role = config.get_role_by_setting(interaction.client, interaction.guild, "EMBLEM_MASTER_ROLE_ID", config.EMBLEM_MASTER_ROLE_NAME)
+            if legacy_role:
+                master_roles = [legacy_role]
         manager_role = config.get_role_by_setting(interaction.client, interaction.guild, "EMBLEM_MANAGER_ROLE_ID", config.EMBLEM_MANAGER_ROLE_NAME)
         
         member_set = set()
-        if master_role: member_set.update(master_role.members)
+        for role in master_roles:
+            member_set.update(role.members)
         if manager_role: member_set.update(manager_role.members)
         
         options = []

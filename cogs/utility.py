@@ -123,11 +123,19 @@ class EmblemRequestModal(discord.ui.Modal, title='スタンプ制作依頼'):
 class EmblemSelectView(discord.ui.View):
     def __init__(self, bot, guild):
         super().__init__(timeout=60)
-        master_role = get_role_by_setting(bot, guild, "EMBLEM_MASTER_ROLE_ID", EMBLEM_MASTER_ROLE_NAME)
+        # EMBLEM_MASTER_ROLE_IDS（複数対応）を優先し、未設定なら旧EMBLEM_MASTER_ROLE_IDにフォールバック
+        master_role_ids = get_setting(bot, "EMBLEM_MASTER_ROLE_IDS") or []
+        master_roles = [guild.get_role(int(rid)) for rid in master_role_ids if guild.get_role(int(rid))]
+        if not master_roles:
+            # 旧設定のフォールバック
+            legacy_role = get_role_by_setting(bot, guild, "EMBLEM_MASTER_ROLE_ID", EMBLEM_MASTER_ROLE_NAME)
+            if legacy_role:
+                master_roles = [legacy_role]
         manager_role = get_role_by_setting(bot, guild, "EMBLEM_MANAGER_ROLE_ID", EMBLEM_MANAGER_ROLE_NAME)
         
         member_set = set()
-        if master_role: member_set.update(master_role.members)
+        for role in master_roles:
+            member_set.update(role.members)
         if manager_role: member_set.update(manager_role.members)
         
         options = []
