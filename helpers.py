@@ -217,7 +217,11 @@ def get_setting(bot, key: str, guild_id: int = None):
     return DEFAULT_SETTINGS.get(key)
 
 def get_role_by_setting(bot, guild, key, default_name):
-    role_id = get_setting(bot, key)
+    role_id = get_setting(bot, key, guild.id)
+    try:
+        role_id = int(role_id)
+    except (TypeError, ValueError):
+        role_id = None
     role = guild.get_role(role_id) if role_id else None
     if not role:
         role = discord.utils.get(guild.roles, name=default_name)
