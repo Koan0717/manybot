@@ -2055,7 +2055,7 @@ async def save_custom_ticket_panel(channel_id: int, panel_title: str, panel_desc
 
     target_role_ids = target_role_ids or []
 
-    p = await get_pool(0)
+    p = await get_pool()
 
     async with p.acquire() as conn:
 

@@ -1,9 +1,13 @@
-import asyncio, asyncpg
+import asyncio
+from database import get_pool
+
 async def main():
-    try:
-        conn = await asyncpg.connect(postgresql://postgres.obmiqcqdddrqjvztxmgl:Kakijun06100717!@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres)
-        print(Success!)
-        await conn.close()
-    except Exception as e:
-        print(Error:, e)
+    pool = await get_pool(1505398772828471357)
+    async with pool.acquire() as client:
+        try:
+            val = await client.fetchval("SELECT setting_value FROM bot_settings WHERE setting_key = 'EMBLEM_MASTER_ROLE_IDS'")
+            print(f"EMBLEM_MASTER_ROLE_IDS is {val}")
+        except Exception as e:
+            print(f"ERROR: {e}")
+
 asyncio.run(main())
