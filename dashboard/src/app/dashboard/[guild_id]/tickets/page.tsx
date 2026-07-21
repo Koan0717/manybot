@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Select from 'react-select';
+import { toast } from 'react-hot-toast';
 
 export default function TicketsSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -59,10 +60,10 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
       if (res.ok) {
         setPanels(prev => prev.filter(p => p.channel_id !== channelId));
       } else {
-        alert('削除に失敗しました');
+        toast.error('削除に失敗しました');
       }
     } catch (e) {
-      alert('エラーが発生しました');
+      toast.error('エラーが発生しました');
     }
   };
 
@@ -99,7 +100,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
 
   const savePanel = async () => {
     if (!formData.channel_id || !formData.panel_title) {
-      alert('設置先チャンネルとタイトルを入力してください');
+      toast('設置先チャンネルとタイトルを入力してください');
       return;
     }
     setSaving(true);
@@ -125,10 +126,10 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         });
         setIsModalOpen(false);
       } else {
-        alert('保存に失敗しました');
+        toast.error('保存に失敗しました');
       }
     } catch (e) {
-      alert('エラーが発生しました');
+      toast.error('エラーが発生しました');
     } finally {
       setSaving(false);
     }
@@ -227,10 +228,10 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ action: 'deploy_panel', channel_id: panel.channel_id, panel_type: 'custom_ticket' }) // Bot側でDBから取得して判定するためこのままでOK
                         });
-                        if (res.ok) alert('パネルの設置をリクエストしました！');
-                        else alert('リクエストに失敗しました。');
+                        if (res.ok) toast('パネルの設置をリクエストしました！');
+                        else toast.error('リクエストに失敗しました。');
                       } catch (e) {
-                        alert('エラーが発生しました。');
+                        toast.error('エラーが発生しました。');
                       }
                     }}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-bold shadow transition-colors"

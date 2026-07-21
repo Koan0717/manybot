@@ -6,6 +6,7 @@ import { Save, AlertCircle, Settings, Dices, Coins, Cherry, Spade, Disc, Percent
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import Select from 'react-select';
+import { toast } from 'react-hot-toast';
 
 const COLORS = ['#8b5cf6', '#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1'];
 
@@ -106,7 +107,7 @@ export default function GamblingSettingsPage() {
         body: JSON.stringify(settings),
       });
       if (!res.ok) throw new Error('保存に失敗しました');
-      alert('設定を保存しました！');
+      toast.success('設定を保存しました！');
     } catch (err) {
       console.error(err);
       setError('設定の保存に失敗しました');
@@ -117,7 +118,7 @@ export default function GamblingSettingsPage() {
 
   const sendGamblingPanel = async () => {
     if (!selectedChannelId) {
-      alert('送信先のチャンネルを選択してください');
+      toast.success('送信先のチャンネルを選択してください');
       return;
     }
     
@@ -136,14 +137,14 @@ export default function GamblingSettingsPage() {
       });
       
       if (res.ok) {
-        alert('ギャンブルパネルを送信しました！');
+        toast.success('ギャンブルパネルを送信しました！');
         setSelectedChannelId('');
       } else {
         const data = await res.json();
-        alert(`送信に失敗しました: ${data.error || '不明なエラー'}`);
+        toast.error(`送信に失敗しました: ${data.error || '不明なエラー'}`);
       }
     } catch (e) {
-      alert('エラーが発生しました');
+      toast.error('エラーが発生しました');
     } finally {
       setSendingPanel(false);
     }

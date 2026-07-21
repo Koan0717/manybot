@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Select from 'react-select';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
+import { toast } from 'react-hot-toast';
 
 export default function OtherPanelsSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -60,17 +61,17 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
 
   const handleSubmit = async () => {
     if (!formData.channel_id) {
-      alert('送信先チャンネルを選択してください。');
+      toast.success('送信先チャンネルを選択してください。');
       return;
     }
     if (!formData.panel_title) {
-      alert('パネルのタイトルを入力してください。');
+      toast('パネルのタイトルを入力してください。');
       return;
     }
     
     const validReactionRoles = formData.reaction_roles.filter(r => r.role_id && r.emoji);
     if (validReactionRoles.length === 0) {
-      alert('最低1つのロールと絵文字のペアを設定してください。');
+      toast.success('最低1つのロールと絵文字のペアを設定してください。');
       return;
     }
 
@@ -91,7 +92,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
       
       const data = await res.json();
       if (res.ok && data.success) {
-        alert('パネルの設置に成功しました！');
+        toast.success('パネルの設置に成功しました！');
         // Reset form to defaults
         setFormData({
           channel_id: '',
@@ -100,10 +101,10 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
           reaction_roles: [{ role_id: '', emoji: '' }]
         });
       } else {
-        alert(`設置に失敗しました: ${data.error || '不明なエラー'}`);
+        toast.error(`設置に失敗しました: ${data.error || '不明なエラー'}`);
       }
     } catch (e) {
-      alert('通信エラーが発生しました。');
+      toast.error('通信エラーが発生しました。');
     } finally {
       setSubmitting(false);
     }

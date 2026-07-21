@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 
 export default function DatabaseSettings({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -31,12 +32,12 @@ export default function DatabaseSettings({ params }: { params: { guild_id: strin
       });
       const data = await res.json();
       if (data.success) {
-        alert('データベース設定を保存しました！新しいデータベースを使用するため、次回のBot操作時から適用されます。');
+        toast.success('データベース設定を保存しました！新しいデータベースを使用するため、次回のBot操作時から適用されます。');
       } else {
-        alert('エラーが発生しました: ' + data.error);
+        toast.error('エラーが発生しました: ' + data.error);
       }
     } catch (e) {
-      alert('保存に失敗しました');
+      toast.error('保存に失敗しました');
     } finally {
       setSaving(false);
     }

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { Save, AlertCircle, Coins, ListFilter, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Select from 'react-select';
+import { toast } from 'react-hot-toast';
 
 interface DiscordChannel {
   id: string;
@@ -68,7 +69,7 @@ export default function VCCoinsSettingsPage() {
         body: JSON.stringify(settings),
       });
       if (!res.ok) throw new Error('保存に失敗しました');
-      alert('設定を保存しました！');
+      toast.success('設定を保存しました！');
     } catch (err) {
       console.error(err);
       setError('設定の保存に失敗しました');

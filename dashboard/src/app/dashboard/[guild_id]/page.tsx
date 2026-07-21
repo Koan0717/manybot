@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 
 function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: boolean, value: any, onChange: (val: any) => void, roles: any[], loading: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -167,12 +168,12 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
       });
       const data = await res.json();
       if (data.success) {
-        alert('設定を保存しました！');
+        toast.success('設定を保存しました！');
       } else {
-        alert('エラーが発生しました: ' + data.error);
+        toast.error('エラーが発生しました: ' + data.error);
       }
     } catch (e) {
-      alert('保存に失敗しました');
+      toast.error('保存に失敗しました');
     } finally {
       setSaving(false);
     }

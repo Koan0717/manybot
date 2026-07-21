@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Select from 'react-select';
+import { toast } from 'react-hot-toast';
 
 export default function AntigriefSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -54,7 +55,7 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
         body: JSON.stringify(settings)
       });
       if (!res.ok) throw new Error('保存に失敗しました');
-      alert('保存しました');
+      toast.success('保存しました');
     } catch (err) {
       console.error(err);
       setError('設定の保存に失敗しました');

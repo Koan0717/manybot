@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Select from 'react-select';
+import { toast } from 'react-hot-toast';
 
 const defaultPrices = {
   "宿": {
@@ -133,7 +134,7 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
         body: JSON.stringify({ action: 'save', ROOM_PRICES: prices, toggles, role_prices: flattenedRolePrices, ROOM_PANEL_CONFIGS: panelConfigs })
       });
       if (!res.ok) throw new Error('保存に失敗しました');
-      alert('価格設定を保存しました');
+      toast.success('価格設定を保存しました');
     } catch (err) {
       console.error(err);
       setError('価格設定の保存に失敗しました');
@@ -145,7 +146,7 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
   const handleDeployPanel = async (panelType: string) => {
     const channelId = selectedChannels[panelType];
     if (!channelId) {
-      alert('設置先のチャンネルを選択してください');
+      toast('設置先のチャンネルを選択してください');
       return;
     }
 
@@ -157,10 +158,10 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
         body: JSON.stringify({ action: 'deploy_panel', channel_id: channelId, panel_type: panelType })
       });
       if (!res.ok) throw new Error('設置に失敗しました');
-      alert('Botにパネル設置をリクエストしました！数秒以内にDiscordにパネルが送信されます。');
+      toast.success('Botにパネル設置をリクエストしました！数秒以内にDiscordにパネルが送信されます。');
     } catch (err) {
       console.error(err);
-      alert('パネルの設置リクエストに失敗しました');
+      toast.error('パネルの設置リクエストに失敗しました');
     } finally {
       setDeploying(prev => ({ ...prev, [panelType]: false }));
     }

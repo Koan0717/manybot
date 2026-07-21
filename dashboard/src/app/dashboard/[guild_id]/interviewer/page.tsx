@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { Save, Loader2, Plus, Trash2 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 export default function InterviewerPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -31,7 +32,7 @@ export default function InterviewerPage({ params }: { params: { guild_id: string
       body: JSON.stringify({ action: 'save_setting', autoDetect })
     });
     setSaving(false);
-    alert('設定を保存しました');
+    toast.success('設定を保存しました');
   };
 
   const handleUpdateStat = async (interviewer_id: string, total: number) => {

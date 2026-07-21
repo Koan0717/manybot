@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Select from 'react-select';
+import { toast } from 'react-hot-toast';
 
 export default function ShopSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -62,10 +63,10 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
       if (res.ok) {
         setItems(prev => prev.filter(i => i.item_id !== itemId));
       } else {
-        alert('削除に失敗しました');
+        toast.error('削除に失敗しました');
       }
     } catch (e) {
-      alert('エラーが発生しました');
+      toast.error('エラーが発生しました');
     }
   };
 
@@ -93,7 +94,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
 
   const saveItem = async () => {
     if (!formData.name || formData.price <= 0) {
-      alert('アイテム名と価格を正しく入力してください');
+      toast('アイテム名と価格を正しく入力してください');
       return;
     }
     setSaving(true);
@@ -124,10 +125,10 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
         }
         setIsModalOpen(false);
       } else {
-        alert('保存に失敗しました');
+        toast.error('保存に失敗しました');
       }
     } catch (e) {
-      alert('エラーが発生しました');
+      toast.error('エラーが発生しました');
     } finally {
       setSaving(false);
     }
@@ -135,7 +136,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
 
   const sendShopPanel = async () => {
     if (!selectedChannelId) {
-      alert('送信先のチャンネルを選択してください');
+      toast.success('送信先のチャンネルを選択してください');
       return;
     }
     
@@ -150,14 +151,14 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
       });
       
       if (res.ok) {
-        alert('ショップパネルを送信しました！');
+        toast.success('ショップパネルを送信しました！');
         setSelectedChannelId('');
       } else {
         const data = await res.json();
-        alert(`送信に失敗しました: ${data.error || '不明なエラー'}`);
+        toast.error(`送信に失敗しました: ${data.error || '不明なエラー'}`);
       }
     } catch (e) {
-      alert('エラーが発生しました');
+      toast.error('エラーが発生しました');
     } finally {
       setSendingPanel(false);
     }

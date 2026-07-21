@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Save, AlertCircle, Coins, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { toast } from 'react-hot-toast';
 
 interface EconomySettings {
   CURRENCY_NAME: string;
@@ -66,7 +67,7 @@ export default function EconomySettingsPage() {
         }),
       });
       if (!res.ok) throw new Error('保存に失敗しました');
-      alert('設定を保存しました！');
+      toast.success('設定を保存しました！');
     } catch (err) {
       console.error(err);
       setError('設定の保存に失敗しました');

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { toast } from 'react-hot-toast';
 
 type CommandSetting = {
   command_name: string;
@@ -56,7 +57,7 @@ export default function CommandsPage({ params }: { params: { guild_id: string } 
           cmd.command_name === commandName ? { ...cmd, is_enabled: currentEnabled } : cmd
         )
       );
-      alert('設定の保存に失敗しました');
+      toast.error('設定の保存に失敗しました');
     }
   };
 

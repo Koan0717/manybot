@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 import TokenProvider from "./TokenProvider";
 
+import { Toaster } from 'react-hot-toast';
+
 export const metadata: Metadata = {
   title: "Many Dashboard",
   description: "Web Dashboard for Many BOT",
@@ -18,6 +20,7 @@ export default function RootLayout({
         <TokenProvider>
           {children}
         </TokenProvider>
+        <Toaster position="bottom-right" />
       </body>
     </html>
   );

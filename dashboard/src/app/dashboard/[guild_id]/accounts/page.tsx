@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'react-hot-toast';
 
 interface Account {
   id: number;
@@ -87,10 +88,10 @@ export default function AccountsPage({ params }: { params: { guild_id: string } 
         setIsFormOpen(false);
         fetchAccounts();
       } else {
-        alert(data.error || 'アカウントの保存に失敗しました');
+        toast.error(data.error || 'アカウントの保存に失敗しました');
       }
     } catch (err) {
-      alert('エラーが発生しました');
+      toast.error('エラーが発生しました');
     }
   };
 
@@ -105,10 +106,10 @@ export default function AccountsPage({ params }: { params: { guild_id: string } 
         fetchAccounts();
       } else {
         const data = await res.json();
-        alert(data.error || '削除に失敗しました');
+        toast.error(data.error || '削除に失敗しました');
       }
     } catch (err) {
-      alert('エラーが発生しました');
+      toast.error('エラーが発生しました');
     }
   };
 
