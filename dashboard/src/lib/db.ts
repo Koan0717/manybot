@@ -83,7 +83,8 @@ export async function setupDbSchema(client: any) {
             guild_id BIGINT,
             owner_id BIGINT,
             room_type TEXT,
-            expire_at TIMESTAMP
+            expire_at TIMESTAMP,
+            trigger_channel_id BIGINT
         );
         CREATE TABLE IF NOT EXISTS evaluation_periods (
             guild_id BIGINT PRIMARY KEY,
@@ -92,13 +93,19 @@ export async function setupDbSchema(client: any) {
             is_active BOOLEAN DEFAULT false
         );
         CREATE TABLE IF NOT EXISTS auto_vc_triggers (
-            trigger_channel_id BIGINT PRIMARY KEY,
-            guild_id BIGINT,
-            base_name TEXT
+            channel_id BIGINT PRIMARY KEY
         );
         CREATE TABLE IF NOT EXISTS auto_vc_config (
-            guild_id BIGINT PRIMARY KEY,
-            category_id BIGINT
+            channel_id BIGINT PRIMARY KEY,
+            base_name TEXT DEFAULT '',
+            allow_rename BOOLEAN DEFAULT TRUE,
+            include_owner_name BOOLEAN DEFAULT TRUE,
+            use_numbering BOOLEAN DEFAULT FALSE,
+            allow_limit_change BOOLEAN DEFAULT TRUE,
+            show_panel BOOLEAN DEFAULT TRUE,
+            is_invite_only BOOLEAN DEFAULT FALSE,
+            invite_visible_role_ids BIGINT[] DEFAULT '{}',
+            allowed_role_ids BIGINT[] DEFAULT '{}'
         );
         CREATE TABLE IF NOT EXISTS inquiry_panels (
             message_id BIGINT PRIMARY KEY,
@@ -150,18 +157,17 @@ export async function setupDbSchema(client: any) {
             guild_id BIGINT
         );
         CREATE TABLE IF NOT EXISTS custom_ticket_panels (
-            panel_id SERIAL PRIMARY KEY,
             guild_id BIGINT,
             channel_id BIGINT,
-            message_id BIGINT,
-            title TEXT,
-            description TEXT,
-            color INT,
-            emoji TEXT,
-            mention_role_ids TEXT,
-            target_role_ids TEXT,
-            ticket_prefix TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            panel_title TEXT,
+            panel_description TEXT,
+            button_label TEXT DEFAULT 'チケットを作成する',
+            button_emoji TEXT,
+            mention_role_ids BIGINT[] DEFAULT '{}'::BIGINT[],
+            target_role_ids BIGINT[] DEFAULT '{}'::BIGINT[],
+            ticket_prefix TEXT DEFAULT 'ticket',
+            panel_type TEXT DEFAULT 'custom_ticket',
+            PRIMARY KEY (guild_id, channel_id)
         );
         CREATE TABLE IF NOT EXISTS panel_requests (
             request_id SERIAL PRIMARY KEY,
