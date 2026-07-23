@@ -419,6 +419,7 @@ async def setup_db_schema(p):
             await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS evaluation_vc_time INTEGER DEFAULT 0')
             await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS initial_issued BOOLEAN DEFAULT FALSE')
             await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS event_points INTEGER DEFAULT 0')
+            await conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS users_guild_user_idx ON users (guild_id, user_id)')
         except Exception as e:
             print(f"[Migration] users migration warning: {e}")
 
@@ -1101,9 +1102,13 @@ async def get_user(guild_id: int, user_id: int):
             }
 
         else:
-
-            await conn.execute('INSERT INTO users (guild_id, user_id, balance, initial_issued) VALUES ($1, $2, 0, FALSE) ON CONFLICT (guild_id, user_id) DO NOTHING', guild_id, user_id)
-
+            try:
+                await conn.execute('INSERT INTO users (guild_id, user_id, balance, initial_issued) VALUES ($1, $2, 0, FALSE) ON CONFLICT (guild_id, user_id) DO NOTHING', guild_id, user_id)
+            except Exception:
+                try:
+                    await conn.execute('INSERT INTO users (guild_id, user_id, balance, initial_issued) VALUES ($1, $2, 0, FALSE) ON CONFLICT DO NOTHING', guild_id, user_id)
+                except Exception:
+                    pass
             return {"balance": 0, "chinchiro_count": 0, "chinchiro_last_date": None, "tc_xp": 0, "tc_level": 1, "vc_xp": 0, "vc_level": 1, "evaluation_vc_time": 0, "initial_issued": False, "chinchiro_daily_bet": 0, "event_points": 0}
 
 
