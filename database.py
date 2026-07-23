@@ -407,12 +407,15 @@ async def setup_db_schema(p):
 
 
         try:
-
+            await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS chinchiro_count INTEGER DEFAULT 0')
+            await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS chinchiro_last_date TEXT')
             await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS chinchiro_daily_bet INTEGER DEFAULT 0')
-
+            await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS tc_xp INTEGER DEFAULT 0')
+            await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS tc_level INTEGER DEFAULT 1')
+            await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS vc_xp INTEGER DEFAULT 0')
+            await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS vc_level INTEGER DEFAULT 1')
         except Exception as e:
-
-            print(f"[Migration] users daily bet migration warning: {e}")
+            print(f"[Migration] users migration warning: {e}")
 
 
 
