@@ -10,16 +10,17 @@ class Economy(commands.Cog):
 
     @app_commands.command(name="balance", description="自分の所持金を確認します（管理者・銀行員は他のユーザーも確認可能）")
     async def balance(self, interaction: discord.Interaction, user: discord.Member = None):
+        await interaction.response.defer(ephemeral=True)
         target_user = user or interaction.user
         if target_user != interaction.user and not (has_admin_role(self.bot, interaction.user) or has_banker_role(self.bot, interaction.user)):
-            await interaction.response.send_message("他人の残高を確認する権限がありません。", ephemeral=True)
+            await interaction.followup.send("他人の残高を確認する権限がありません。", ephemeral=True)
             return
         bal = await database.get_balance(interaction.guild.id, target_user.id)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         if target_user == interaction.user:
-            await interaction.response.send_message(f"あなたの所持金は **{bal} {currency_name}** です。", ephemeral=True)
+            await interaction.followup.send(f"あなたの所持金は **{bal} {currency_name}** です。", ephemeral=True)
         else:
-            await interaction.response.send_message(f"{target_user.display_name} の所持金は **{bal} {currency_name}** です。", ephemeral=True)
+            await interaction.followup.send(f"{target_user.display_name} の所持金は **{bal} {currency_name}** です。", ephemeral=True)
 
     @app_commands.command(name="pay", description="他のユーザーに通貨を送ります")
     async def pay(self, interaction: discord.Interaction, target: discord.Member, amount: int):
