@@ -161,7 +161,7 @@ async def process_room_extension(bot, interaction: discord.Interaction, room_typ
         await database.extend_room(channel_id, new_expire)
         embed = discord.Embed(
             title="⏱️ 部屋の延長",
-            description=f"**{price} {currency_name}** を支払い、部屋の時間を **{duration}時間** 延長しました！\n新しい終了予定時刻: <t:{int(new_expire.timestamp())}:F>",
+            description=f"**{price} {currency_name}** を支払い、部屋の時間を **{duration}時間** 延長しました！\n新しい終了予定時刻: <t:{int(new_expire.replace(tzinfo=JST).timestamp())}:F>",
             color=discord.Color.green()
         )
         await interaction.edit_original_response(content="✅ 延長手続きが完了しました！", view=None)
@@ -523,7 +523,7 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
             
             view = CustomRoomControlView() if room_type=="カスタムVC" else (RoomControlView() if room_type=="高級宿" else InnControlView())
             
-            expire_str = "無制限" if duration == 0 else f"<t:{int(expire_at.timestamp())}:F>"
+            expire_str = "無制限" if duration == 0 else f"<t:{int(expire_at.replace(tzinfo=JST).timestamp())}:F>"
             embed = discord.Embed(title=f"🏠 {room_type}", description=f"作成者: {interaction.user.mention}\n利用期間: {f'{duration}時間' if duration > 0 else '無制限'}\n終了予定: {expire_str}", color=discord.Color.blue())
             await channel.send(content=f"{interaction.user.mention}", embed=embed, view=view)
             
@@ -924,7 +924,7 @@ class Rooms(commands.Cog):
                 try:
                     pool = await database.get_pool()
                     async with pool.acquire() as conn:
-                        existing_room = await conn.fetchrow('SELECT channel_id FROM rooms WHERE owner_id = $1 AND room_type = $2', member.id, "一時部屋")
+                        existing_room = await conn.fetchrow('SELECT channel_id FROM rooms WHERE owner_id = $1 AND room_type = $2 AND trigger_channel_id = $3', member.id, "一時部屋", trigger_id)
                     
                     if existing_room:
                         existing_channel = self.bot.get_channel(existing_room["channel_id"])

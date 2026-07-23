@@ -1,7 +1,8 @@
 import discord
 from discord.ext import commands, tasks
 import database
-from helpers import send_log, get_setting, format_evaluation_datetime
+import datetime
+from helpers import send_log, get_setting, format_evaluation_datetime, JST
 
 class ShopItemDurationModal(discord.ui.Modal, title="有効期限の設定"):
     duration = discord.ui.TextInput(
@@ -360,7 +361,7 @@ class ShopItemSelect(discord.ui.Select):
                     # 新しい終了予定の取得
                     new_period = await database.get_evaluation_period(interaction.guild.id, interaction.user.id)
                     end_str = format_evaluation_datetime(new_period['end_time'])
-                    end_t = int(new_period['end_time'].timestamp())
+                    end_t = int(new_period['end_time'].replace(tzinfo=JST).timestamp())
                     
                     await interaction.followup.send(
                         f"🎉 商品「{item['name']}」を購入しました！\n"
