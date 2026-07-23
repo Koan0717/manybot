@@ -423,6 +423,13 @@ async def setup_db_schema(p):
         except Exception as e:
             print(f"[Migration] users migration warning: {e}")
 
+        try:
+            await conn.execute('ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS target_category_ids BIGINT[] DEFAULT \'{}\'')
+            await conn.execute('ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS target_channel_ids BIGINT[] DEFAULT \'{}\'')
+            await conn.execute('ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS exempt_role_ids BIGINT[] DEFAULT \'{}\'')
+        except Exception as e:
+            print(f"[Migration] antigrief_settings migration warning: {e}")
+
 
 
 
