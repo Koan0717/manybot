@@ -172,7 +172,8 @@ DEFAULT_SETTINGS = {
     "BANKER_ROLE_IDS": [],
     "GAMBLE_VIOLATOR_ROLE_ID": 123456789012345678,
     "MINUS_PUNISHMENT_TYPE": "evaluation_failure",
-    "ENABLE_VC_COINS": True
+    "ENABLE_VC_COINS": True,
+    "ENABLE_ANTIGRIEF": True
 }
 
 import sys

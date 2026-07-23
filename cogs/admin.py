@@ -490,23 +490,32 @@ class Admin(commands.Cog):
             # 適用対象および免除ロールの確認
             guild = message.guild
             if guild:
-                cfg = self.bot.get_antigrief_config(guild.id)
-                
-                # 免除ロールチェック
-                exempt_roles = cfg.get("exempt_roles", set())
-                author_role_ids = {role.id for role in message.author.roles}
-                if exempt_roles & author_role_ids:
+                enable_antigrief = get_setting(self.bot, "ENABLE_ANTIGRIEF", guild.id)
+                if enable_antigrief is None:
+                    enable_antigrief = True
+                elif isinstance(enable_antigrief, str):
+                    enable_antigrief = enable_antigrief.lower() == "true"
+
+                if not enable_antigrief:
                     should_check_spam = False
-                
-                # 対象カテゴリー/チャンネルチェック
-                if should_check_spam:
-                    target_categories = cfg.get("categories", set())
-                    target_channels = cfg.get("channels", set())
-                    if target_categories or target_channels:
-                        in_target_channel = message.channel.id in target_channels
-                        in_target_category = message.channel.category and message.channel.category.id in target_categories
-                        if not in_target_channel and not in_target_category:
-                            should_check_spam = False
+                else:
+                    cfg = self.bot.get_antigrief_config(guild.id)
+                    
+                    # 免除ロールチェック
+                    exempt_roles = cfg.get("exempt_roles", set())
+                    author_role_ids = {role.id for role in message.author.roles}
+                    if exempt_roles & author_role_ids:
+                        should_check_spam = False
+                    
+                    # 対象カテゴリー/チャンネルチェック
+                    if should_check_spam:
+                        target_categories = cfg.get("categories", set())
+                        target_channels = cfg.get("channels", set())
+                        if target_categories or target_channels:
+                            in_target_channel = message.channel.id in target_channels
+                            in_target_category = message.channel.category and message.channel.category.id in target_categories
+                            if not in_target_channel and not in_target_category:
+                                should_check_spam = False
             else:
                 should_check_spam = False
 
