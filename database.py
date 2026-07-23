@@ -407,6 +407,7 @@ async def setup_db_schema(p):
 
 
         try:
+            await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS guild_id BIGINT')
             await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS balance INTEGER DEFAULT 0')
             await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS chinchiro_count INTEGER DEFAULT 0')
             await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS chinchiro_last_date TEXT')
