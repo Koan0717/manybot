@@ -3,6 +3,28 @@ import { getPool } from '@/lib/db';
 
 
 
+async function ensureEvaluationSettingsSchema(pool: any) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS evaluation_settings (
+        guild_id BIGINT PRIMARY KEY,
+        forum_channel_ids BIGINT[] DEFAULT '{}',
+        self_intro_channel_ids BIGINT[] DEFAULT '{}',
+        is_enabled BOOLEAN DEFAULT TRUE,
+        auto_generate_period BOOLEAN DEFAULT TRUE,
+        auto_fail_on_deadline BOOLEAN DEFAULT FALSE
+      )
+    `);
+    await pool.query(`ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS forum_channel_ids BIGINT[] DEFAULT '{}'`);
+    await pool.query(`ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS self_intro_channel_ids BIGINT[] DEFAULT '{}'`);
+    await pool.query(`ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT TRUE`);
+    await pool.query(`ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_generate_period BOOLEAN DEFAULT TRUE`);
+    await pool.query(`ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_fail_on_deadline BOOLEAN DEFAULT FALSE`);
+  } catch (e) {
+    console.error('Failed to ensure evaluation_settings schema:', e);
+  }
+}
+
 export async function GET(
   request: Request,
   { params }: { params: { guild_id: string } }
@@ -10,6 +32,7 @@ export async function GET(
   const guildId = params.guild_id;
   const pool = await getPool(guildId);
   try {
+    await ensureEvaluationSettingsSchema(pool);
     const result = await pool.query(
       'SELECT is_enabled, auto_generate_period, auto_fail_on_deadline, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1',
       [guildId]
@@ -64,6 +87,7 @@ export async function POST(
   const guildId = params.guild_id;
   const pool = await getPool(guildId);
   try {
+    await ensureEvaluationSettingsSchema(pool);
     const body = await request.json();
     const isEnabled = body.is_enabled !== undefined ? body.is_enabled : true;
     const autoGeneratePeriod = body.auto_generate_period !== undefined ? body.auto_generate_period : true;
