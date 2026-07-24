@@ -6,6 +6,7 @@ import database
 import config
 import os
 import hashlib
+from helpers import get_setting
 
 class Logging(commands.Cog):
     def __init__(self, bot):
