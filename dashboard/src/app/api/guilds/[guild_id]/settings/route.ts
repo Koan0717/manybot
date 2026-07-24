@@ -17,7 +17,16 @@ export async function GET(
     const settings: Record<string, any> = {};
     for (const row of result.rows) {
       try {
-        settings[row.setting_key] = JSON.parse(row.setting_value);
+        let raw = row.setting_value;
+        if (typeof raw === 'string' && raw) {
+          const trimmed = raw.trim();
+          if (/^\d{16,}$/.test(trimmed)) {
+            raw = `"${trimmed}"`;
+          } else {
+            raw = raw.replace(/(:\s*|\[\s*|,\s*|^)(\d{16,})(?=\s*[,\]\}]|$)/g, '$1"$2"');
+          }
+        }
+        settings[row.setting_key] = typeof raw === 'string' ? JSON.parse(raw) : raw;
       } catch (e) {
         settings[row.setting_key] = row.setting_value;
       }
@@ -26,8 +35,8 @@ export async function GET(
     try {
       const shopResult = await pool.query('SELECT employee_role_id, manager_role_id FROM shop_settings WHERE guild_id = $1', [guildId]);
       if (shopResult.rows.length > 0) {
-        settings['SHOP_EMPLOYEE_ROLE_ID'] = shopResult.rows[0].employee_role_id;
-        settings['SHOP_MANAGER_ROLE_ID'] = shopResult.rows[0].manager_role_id;
+        settings['SHOP_EMPLOYEE_ROLE_ID'] = shopResult.rows[0].employee_role_id ? String(shopResult.rows[0].employee_role_id) : shopResult.rows[0].employee_role_id;
+        settings['SHOP_MANAGER_ROLE_ID'] = shopResult.rows[0].manager_role_id ? String(shopResult.rows[0].manager_role_id) : shopResult.rows[0].manager_role_id;
       }
     } catch(e) {}
 
