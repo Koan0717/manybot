@@ -1,1 +1,0 @@
-cogs.utility: Extension 'cogs.utility' raised an error: CommandAlreadyRegistered: Command 'イベント' already registered.

@@ -68,7 +68,17 @@ class Economy(commands.Cog):
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         
         success_users = []
-        
+        skipped_users = []
+
+        # 初期発行は1人につき1回のみ（initial_issued フラグで冪等化）
+        async def _issue(member):
+            if await database.check_initial_issued(interaction.guild.id, member.id):
+                skipped_users.append(member.mention)
+                return
+            await database.add_balance(interaction.guild.id, member.id, init_coins)
+            await database.set_initial_issued(interaction.guild.id, member.id)
+            success_users.append(member.mention)
+
         # ユーザー指定からの付与
         if users:
             import re
@@ -77,20 +87,22 @@ class Economy(commands.Cog):
                 uid = int(uid_str)
                 member = interaction.guild.get_member(uid)
                 if member:
-                    await database.add_balance(interaction.guild.id, member.id, init_coins)
-                    success_users.append(member.mention)
-                    
+                    await _issue(member)
+
         # ロールからの付与
         if role:
             for member in role.members:
-                await database.add_balance(interaction.guild.id, member.id, init_coins)
-                success_users.append(member.mention)
-                
+                await _issue(member)
+
         # 重複を排除してユニークなメンションリストにする
         success_users = list(set(success_users))
-                
+        skipped_users = list(set(skipped_users))
+
         if not success_users:
-            await interaction.followup.send("サーバー内に該当するユーザーが見つかりませんでした。")
+            if skipped_users:
+                await interaction.followup.send(f"対象者は全員すでに初期発行済みのため、付与しませんでした。（{len(skipped_users)}名）")
+            else:
+                await interaction.followup.send("サーバー内に該当するユーザーが見つかりませんでした。")
             return
             
         users_str = " ".join(success_users)
@@ -98,7 +110,10 @@ class Economy(commands.Cog):
             msg = f"💵 {users_str} に初期発行額 **{init_coins:,} {currency_name}** を付与しました。"
         else:
             msg = f"💵 {users_str} の計**{len(success_users)}名**に初期発行額 **{init_coins:,} {currency_name}** を付与しました。"
-        
+
+        if skipped_users:
+            msg += f"\n（すでに発行済みのため **{len(skipped_users)}名** はスキップしました）"
+
         if len(msg) > 2000:
             msg = msg[:1900] + "\n... (省略)"
         await interaction.followup.send(msg)

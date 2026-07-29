@@ -232,10 +232,12 @@ class EconomyBot(commands.Bot):
 
         try:
             # Sync to the specific guild to avoid the 50240 Entry Point global error
-            guild = discord.Object(id=1500185499929804983)
+            # 同期先ギルドIDは .env の SYNC_GUILD_ID で指定（未設定時は従来の値をフォールバック）
+            sync_guild_id = int(os.getenv("SYNC_GUILD_ID", "1500185499929804983"))
+            guild = discord.Object(id=sync_guild_id)
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
-            print("[OK] Synced commands to guild 1500185499929804983 successfully.")
+            print(f"[OK] Synced commands to guild {sync_guild_id} successfully.")
         except Exception as e:
             print(f"[ERROR] Failed to sync slash commands: {e}")
             
@@ -342,7 +344,7 @@ async def on_voice_state_update(member, before, after):
                         xp_reward = duration_minutes * (get_setting(bot, "VC_XP_PER_MIN", member.guild.id) or 15)
                         new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
                         if new_lv:
-                            lv_channel = bot.get_channel(get_setting(bot, "LEVEL_UP_CHANNEL_ID"))
+                            lv_channel = bot.get_channel(get_setting(bot, "LEVEL_UP_CHANNEL_ID", member.guild.id))
                             if lv_channel:
                                 await lv_channel.send(f"🎊 {member.mention} が **VCレベルアップ！** (Lv.{new_lv-1} ➔ **{new_lv}**)")
                             await config.check_and_assign_level_roles(bot, member, "vc", new_lv)
@@ -355,7 +357,6 @@ async def on_voice_state_update(member, before, after):
                         coins_reward = duration_minutes * coins_per_min
                         if coins_reward > 0:
                             await database.add_balance(member.guild.id, user_id, coins_reward)
-                            print(f"[DEBUG] VC Coins Awarding on Leave: {member.display_name} - {coins_reward} coins")
     except Exception as global_e:
         print(f"CRITICAL ERROR in on_voice_state_update: {global_e}")
 

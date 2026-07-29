@@ -1,2 +1,0 @@
-84:async def create_admin_panel_embed(bot, guild: discord.Guild) -> discord.Embed:
-357:embed = await create_admin_panel_embed(bot, guild)

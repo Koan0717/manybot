@@ -168,11 +168,9 @@ DEFAULT_SETTINGS = {
     "INITIAL_COINS": 30000,
     "ENABLE_TC_RANK": True,
     "VC_COINS_PER_MIN": 12,
-    "MINUS_TARGET_ROLE_IDS": [],
     "BANKER_ROLE_IDS": [],
     "GAMBLE_VIOLATOR_ROLE_ID": 123456789012345678,
     "MINUS_PUNISHMENT_TYPE": "evaluation_failure",
-    "ENABLE_VC_COINS": True,
     "ENABLE_ANTIGRIEF": True
 }
 
@@ -476,7 +474,7 @@ async def check_and_assign_level_roles(bot, member: discord.Member, level_type: 
         try:
             await member.add_roles(*roles_to_add, reason=f"{level_type.upper()}レベル到達報酬 (Lv.{new_level})")
             role_mentions = ", ".join([role.mention for role in roles_to_add])
-            lv_channel_id = get_setting(bot, "LEVEL_UP_CHANNEL_ID")
+            lv_channel_id = get_setting(bot, "LEVEL_UP_CHANNEL_ID", member.guild.id)
             lv_channel = member.guild.get_channel(lv_channel_id)
             if lv_channel:
                 await lv_channel.send(f"🎁 {member.mention} が {level_type.upper()} レベル {new_level} に達したため、以下のロールが付与されました！\n{role_mentions}")
@@ -493,8 +491,8 @@ async def check_and_assign_level_coins(bot, member: discord.Member, level_type: 
     if coins_to_add > 0:
         try:
             await database.add_balance(member.guild.id, member.id, coins_to_add)
-            currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
-            lv_channel_id = get_setting(bot, "LEVEL_UP_CHANNEL_ID")
+            currency_name = get_setting(bot, "CURRENCY_NAME", member.guild.id) or "コイン"
+            lv_channel_id = get_setting(bot, "LEVEL_UP_CHANNEL_ID", member.guild.id)
             lv_channel = member.guild.get_channel(lv_channel_id)
             if lv_channel:
                 await lv_channel.send(f"🪙 {member.mention} が {level_type.upper()} レベル {new_level} に達したため、報酬として **{coins_to_add:,} {currency_name}** が付与されました！")

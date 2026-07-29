@@ -18,41 +18,8 @@ class Leveling(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        """TCメッセージでXP付与"""
-        if message.author.bot or not message.guild:
-            return
-
-        guild_id = message.guild.id
-        user_id  = message.author.id
-        now_ts   = time.time()
-
-        # XP有効チェック
-        if not get_setting(self.bot, guild_id, "ENABLE_TC_RANK"):
-            return
-        if not is_rank_eligible(self.bot, message.channel):
-            return
-
-        # クールダウンチェック
-        key = (guild_id, user_id)
-        last_xp = self.bot.tc_xp_cooldowns.get(key, 0)
-        if now_ts - last_xp < get_setting(self.bot, "TC_XP_COOLDOWN", message.guild.id):
-            return
-        self.bot.tc_xp_cooldowns[key] = now_ts
-
-        tc_xp_reward = get_setting(self.bot, "TC_XP_REWARD", guild_id)
-        new_lv = await database.add_xp(guild_id, user_id, tc_xp_reward, "tc")
-        if new_lv:
-            lv_ch_id = get_setting(self.bot, guild_id, "LEVEL_UP_CHANNEL_ID")
-            if lv_ch_id:
-                lv_ch = message.guild.get_channel(int(lv_ch_id))
-                if lv_ch:
-                    await lv_ch.send(
-                        f"🎊 {message.author.mention} が **TCレベルアップ！** "
-                        f"(Lv.{new_lv-1} → **{new_lv}**)"
-                    )
-            await config.check_and_assign_level_roles(self.bot, message.author, "tc", new_lv)
+    # TCメッセージでのXP付与は cogs/ranking.py の on_message が担当する。
+    # （以前ここにも on_message リスナーがあったが、TC XP を二重に付与する重複実装だったため削除）
 
     # ============================================================
     # /デイリー コマンド
@@ -81,8 +48,8 @@ class Leveling(commands.Cog):
                     ephemeral=True
                 )
 
-        daily_amount = get_setting(self.bot, guild_id, "DAILY_COINS") or 1000
-        currency_name = get_setting(self.bot, guild_id, "CURRENCY_NAME") or "コイン"
+        daily_amount = get_setting(self.bot, "DAILY_COINS", guild_id) or 1000
+        currency_name = get_setting(self.bot, "CURRENCY_NAME", guild_id) or "コイン"
 
         p = await database.get_pool()
         async with p.acquire() as conn:

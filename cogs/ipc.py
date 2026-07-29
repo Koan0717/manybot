@@ -74,10 +74,10 @@ class IPC(commands.Cog):
                                 for s in db_rank_settings:
                                     if s["guild_id"] == guild_id:
                                         self.bot.rank_settings_cache[guild_id] = {
-                                            "whitelist": set(s["whitelist_channel_ids"]),
-                                            "blacklist": set(s["blacklist_channel_ids"]),
-                                            "categories": set(s["whitelist_category_ids"]),
-                                            "blacklist_categories": set(s["blacklist_category_ids"])
+                                            "whitelist": set(s["whitelist"]),
+                                            "blacklist": set(s["blacklist"]),
+                                            "categories": set(s["categories"]),
+                                            "blacklist_categories": set(s["blacklist_categories"])
                                         }
                                 await apply_bot_nicknames(self.bot)
                                 print(f"[IPC] Reloaded rank and bot_settings for guild {guild_id}")

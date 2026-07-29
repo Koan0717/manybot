@@ -91,7 +91,7 @@ class Ranking(commands.Cog):
             import io
             from card_generator import generate_rank_card
             try:
-                card_bytes = await generate_rank_card(
+                card_bytes = generate_rank_card(
                     user_name=target_user.display_name,
                     avatar_bytes=avatar_bytes,
                     server_logo_bytes=server_logo_bytes,
@@ -300,21 +300,18 @@ class Ranking(commands.Cog):
                 elapsed_minutes = int((now - last_reward_time).total_seconds() / 60)
                 if elapsed_minutes >= 1:
                     xp_reward = elapsed_minutes * (config.get_setting(self.bot, "VC_XP_PER_MIN", member.guild.id) or 15)
-                    category_name = member.voice.channel.category.name if member.voice.channel and member.voice.channel.category else "なし"
-                    print(f"[DEBUG] VC XP Awarding: {member.display_name} in {category_name}")
                     new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
                     
                     self.bot.vc_sessions[user_id] = last_reward_time + datetime.timedelta(minutes=elapsed_minutes)
                     
                     if new_lv:
-                        lv_channel = self.bot.get_channel(config.get_setting(self.bot, "LEVEL_UP_CHANNEL_ID"))
+                        lv_channel = self.bot.get_channel(config.get_setting(self.bot, "LEVEL_UP_CHANNEL_ID", member.guild.id))
                         if lv_channel:
                             await lv_channel.send(f"🎊 {member.mention} が **VCレベルアップ！** (Lv.{new_lv-1} ➔ **{new_lv}**)")
                         await config.check_and_assign_level_roles(self.bot, member, "vc", new_lv)
             else:
                 self.bot.vc_sessions.pop(user_id, None)
 
-        eval_cat_id = config.get_setting(self.bot, "EVAL_TIME_CATEGORY_ID")
         for user_id, last_reward_time in list(self.bot.eval_vc_sessions.items()):
             member = None
             for guild in self.bot.guilds:
@@ -322,8 +319,9 @@ class Ranking(commands.Cog):
                 if m and m.voice and m.voice.channel:
                     member = m
                     break
-            
+
             if member:
+                eval_cat_id = config.get_setting(self.bot, "EVAL_TIME_CATEGORY_ID", member.guild.id)
                 in_correct_category = member.voice.channel.category and member.voice.channel.category.id == eval_cat_id
                 if not in_correct_category:
                     self.bot.eval_vc_sessions.pop(user_id, None)
@@ -357,12 +355,10 @@ class Ranking(commands.Cog):
         if in_correct_category:
             last_xp_time = self.bot.tc_xp_cooldowns.get(user_id)
             if not last_xp_time or (now - last_xp_time).total_seconds() > (config.get_setting(self.bot, "TC_XP_COOLDOWN", message.guild.id) or 10):
-                category_name = message.channel.category.name if message.channel.category else "なし"
-                print(f"[DEBUG] TC XP Awarding: {message.author.display_name} in {category_name}")
                 new_lv = await database.add_xp(message.guild.id, user_id, (config.get_setting(self.bot, "TC_XP_REWARD", message.guild.id) or 10), "tc")
                 self.bot.tc_xp_cooldowns[user_id] = now
                 if new_lv:
-                    lv_channel = self.bot.get_channel(config.get_setting(self.bot, "LEVEL_UP_CHANNEL_ID"))
+                    lv_channel = self.bot.get_channel(config.get_setting(self.bot, "LEVEL_UP_CHANNEL_ID", message.guild.id))
                     if lv_channel:
                         await lv_channel.send(f"🎊 {message.author.mention} が **TCレベルアップ！** (Lv.{new_lv-1} ➔ **{new_lv}**)")
                     if isinstance(message.author, discord.Member):
@@ -375,7 +371,7 @@ class Ranking(commands.Cog):
         now_aware = datetime.datetime.now(config.JST)
 
         # 評価時間対象カテゴリーの滞在時間追跡
-        eval_cat_id = config.get_setting(self.bot, "EVAL_TIME_CATEGORY_ID")
+        eval_cat_id = config.get_setting(self.bot, "EVAL_TIME_CATEGORY_ID", member.guild.id)
         was_in_eval = before.channel and before.channel.category and before.channel.category.id == eval_cat_id
         is_in_eval = after.channel and after.channel.category and after.channel.category.id == eval_cat_id
 
@@ -402,7 +398,7 @@ class Ranking(commands.Cog):
                     xp_reward = duration_minutes * (config.get_setting(self.bot, "VC_XP_PER_MIN", member.guild.id) or 15)
                     new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
                     if new_lv:
-                        lv_channel = self.bot.get_channel(config.get_setting(self.bot, "LEVEL_UP_CHANNEL_ID"))
+                        lv_channel = self.bot.get_channel(config.get_setting(self.bot, "LEVEL_UP_CHANNEL_ID", member.guild.id))
                         if lv_channel:
                             await lv_channel.send(f"🎊 {member.mention} が **VCレベルアップ！** (Lv.{new_lv-1} ➔ **{new_lv}**)")
                         await config.check_and_assign_level_roles(self.bot, member, "vc", new_lv)

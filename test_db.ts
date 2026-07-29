@@ -1,1 +1,0 @@
-import { getPool } from './dashboard/src/lib/db'; async function test() { const pool = await getPool('1502700570396590100'); const r = await pool.query('SELECT * FROM evaluation_settings WHERE guild_id=', ['1502700570396590100']); console.log(r.rows); process.exit(0); } test();

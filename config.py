@@ -378,12 +378,13 @@ async def send_economy_log(guild: discord.Guild, title: str, description: str, u
         embed.set_author(name=f"{user} (ID: {user.id})", icon_url=user.display_avatar.url)
     await send_log(guild, "economy", embed)
 
-async def send_gambling_log(guild: discord.Guild, user: discord.Member, game_name: str, bet: int, count: int):
+async def send_gambling_log(bot, guild: discord.Guild, user: discord.Member, game_name: str, bet: int, count: int):
     bal = await database.get_balance(guild.id, user.id)
     rem = 10 - count
+    currency_name = get_setting(bot, "CURRENCY_NAME", guild.id) or "コイン"
     await send_economy_log(
-        guild, 
-        f"🎲 カジノ ({game_name})", 
-        f"{user.mention} が **{game_name}** に **{bet} {CURRENCY_NAME}** 賭けました。\n💰 残高: **{bal} {CURRENCY_NAME}**\n🔄 残り回数: **{rem}回**", 
+        guild,
+        f"🎲 カジノ ({game_name})",
+        f"{user.mention} が **{game_name}** に **{bet} {currency_name}** 賭けました。\n💰 残高: **{bal} {currency_name}**\n🔄 残り回数: **{rem}回**",
         user=user
     )

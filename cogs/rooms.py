@@ -36,7 +36,6 @@ class ExtendInnSelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.bot = bot
         self.member = member
-        self.panel_id = panel_id
         p12 = get_room_price(self.bot, getattr(self, "member", None), "宿", 12)
         p24 = get_room_price(self.bot, getattr(self, "member", None), "宿", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
@@ -64,7 +63,6 @@ class ExtendLuxuryInnSelectView(discord.ui.View):
     def __init__(self, bot, member: discord.Member):
         super().__init__(timeout=60)
         self.bot = bot
-        self.member = member
         self.member = member
         p12 = get_room_price(self.bot, self.member, "高級宿", 12)
         p24 = get_room_price(self.bot, self.member, "高級宿", 24)
@@ -762,7 +760,6 @@ class TempInnDurationSelectView(discord.ui.View):
     def __init__(self, bot, member=None, panel_id=None):
         super().__init__(timeout=60)
         self.bot = bot
-        self.panel_id = panel_id
         self.member = member
         self.panel_id = panel_id
         p12 = get_room_price(self.bot, getattr(self, "member", None), "宿", 12)
@@ -838,9 +835,8 @@ class LuxuryInnPanelView(discord.ui.View):
 
 # --- Cogの定義 ---
 class Rooms(commands.Cog):
-    def __init__(self, bot, member=None):
+    def __init__(self, bot):
         self.bot = bot
-        self.member = member
         self.check_expired_rooms.start()
 
     def cog_unload(self):

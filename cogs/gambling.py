@@ -665,7 +665,7 @@ class BlackjackGameView(discord.ui.View):
             self.dealer_hand = [self.deck.pop(), self.deck.pop()]
 
     def determine_target_outcome(self):
-        bot = self.user.guild.me
+        bot = _bot_instance
         p_normal = get_setting(bot, "GAMBLE_BLACKJACK_RATE_NORMAL_WIN") or 0.38
         p_bj = get_setting(bot, "GAMBLE_BLACKJACK_RATE_BJ_WIN") or 0.05
         p_draw = get_setting(bot, "GAMBLE_BLACKJACK_RATE_DRAW") or 0.09
@@ -715,14 +715,14 @@ class BlackjackGameView(discord.ui.View):
         return embed
 
     async def check_initial_blackjack(self):
-        bot = self.user.guild.me
+        bot = _bot_instance
         currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
         player_score = calculate_blackjack_score(self.player_hand)
         if player_score == 21:
             dealer_score = calculate_blackjack_score(self.dealer_hand)
             if dealer_score == 21:
                 win_amount = self.bet
-                await database.add_balance(interaction.guild.id, self.user.id, win_amount)
+                await database.add_balance(self.user.guild.id, self.user.id, win_amount)
                 title = "🤝 引き分け"
                 color = discord.Color.light_grey()
                 description = f"双方ブラックジャック！引き分け（プッシュ）です。\n**{win_amount} {currency_name}** が戻ります。"
@@ -747,7 +747,7 @@ class BlackjackGameView(discord.ui.View):
                     tax_amount = int(net_profit * tax_rate)
                     win_amount = self.bet + (net_profit - tax_amount)
                     tax_msg = f"\n※ カジノ手数料 ({tax_rate*100:.1f}%) として **{tax_amount:,} {currency_name}** が引かれました。"
-                await database.add_balance(interaction.guild.id, self.user.id, win_amount)
+                await database.add_balance(self.user.guild.id, self.user.id, win_amount)
                 title = "🃏 ブラックジャック！"
                 color = discord.Color.gold()
                 description = f"ブラックジャック達成！\n**{win_amount} {currency_name}** 獲得！{tax_msg}"
@@ -1309,7 +1309,7 @@ def get_win_rate_str(game_name: str, expectation: float):
             return f"当選率: {p_win:.1f}%"
         return f"プレイヤー勝率: {p_win:.1f}% / Bot勝率: {p_lose:.1f}%"
 
-async def save_auto_expectation_rates(bot, game_key, E):
+async def save_auto_expectation_rates(bot, interaction, game_key, E):
     """入力された期待値Eを基準にして、各ゲームの勝率設定を自動計算し一括保存します。"""
     if game_key == "chinchiro":
         p_win, p_lose, p_draw = calculate_gamble_win_rates("chinchiro", E)
@@ -1962,7 +1962,7 @@ class GambleAutoExpectationModal(discord.ui.Modal):
             if val < 0.0 or val > 2.0:
                 return await interaction.response.send_message("期待値は 0.0 〜 2.0 (0% 〜 200%) の範囲で入力してください。", ephemeral=True)
             
-            await save_auto_expectation_rates(bot, self.game_key, val)
+            await save_auto_expectation_rates(bot, interaction, self.game_key, val)
             
             embed = discord.Embed(
                 title="✅ 期待値自動設定完了",

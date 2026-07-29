@@ -6,7 +6,14 @@ import database
 import config
 import os
 import hashlib
+import re
 from helpers import get_setting
+
+# Discord招待URL検知用パターン（毎メッセージでのコンパイルを避けるためモジュールレベルで定義）
+DISCORD_INVITE_PATTERN = re.compile(
+    r'(?:https?://)?(?:www\.)?(?:discord\.gg|discord\.com/invite|discordapp\.com/invite)/[a-zA-Z0-9-]+',
+    re.IGNORECASE
+)
 
 class Logging(commands.Cog):
     def __init__(self, bot):
@@ -136,12 +143,6 @@ class Logging(commands.Cog):
                         user_tracker["content_count"] = 1
 
                     # @everyone / @here メンション、またはDiscord招待URL送信の検知 (3秒以内累計5回以上)
-                    import re
-                    DISCORD_INVITE_PATTERN = re.compile(
-                        r'(?:https?://)?(?:www\.)?(?:discord\.gg|discord\.com/invite|discordapp\.com/invite)/[a-zA-Z0-9-]+',
-                        re.IGNORECASE
-                    )
-                    
                     if message.mention_everyone or DISCORD_INVITE_PATTERN.search(message.content):
                         user_tracker["everyone_url_count"] += 1
                         if user_tracker["everyone_url_count"] >= 5:
@@ -292,7 +293,6 @@ class Logging(commands.Cog):
 
 
 
-    @commands.Cog.listener()
     async def check_manual_join(self, before, after, human_role):
         await asyncio.sleep(2)  # Wait for audit logs to populate
         try:
@@ -314,60 +314,23 @@ class Logging(commands.Cog):
                                 color=discord.Color.green(),
                                 timestamp=datetime.datetime.now(config.JST)
                             )
-                            await config.send_log(self.bot, after.guild, "interviewer", embed)
+                            await config.send_log(after.guild, "interviewer", embed)
                         break
         except Exception as e:
             print(f"[ManualJoin] Error checking audit logs: {e}")
 
+    @commands.Cog.listener()
     async def on_member_update(self, before, after):
         human_role = config.get_role_by_setting(self.bot, after.guild, "NEW_MEMBER_ROLE_ID", config.NEW_MEMBER_ROLE_NAME)
         if human_role and human_role in after.roles and human_role not in before.roles:
-            eval_settings = await database.get_evaluation_settings(after.guild.id)
-            if eval_settings and eval_settings.get("auto_generate_period", True):
-                existing = await database.get_evaluation_period(after.guild.id, after.id)
-                if not existing:
-                    now = datetime.datetime.now(config.JST)
-                    if 23 <= now.hour <= 23:
-                        start_time = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-                    else:
-                        start_time = now + datetime.timedelta(minutes=5)
-                    
-                    end_time = start_time + datetime.timedelta(days=14)
-                    await database.add_evaluation_period(after.guild.id, after.id, start_time, end_time)
-                    print(f"[Evaluation] Started for {after.display_name}: {start_time} to {end_time}")
+            # 評価期間の自動生成は cogs/evaluation.py の on_member_update が担当（重複処理を避けるためここでは行わない）
 
             # 面接官の手動入界検知
             auto_detect = config.get_setting(self.bot, "AUTO_DETECT_MANUAL_JOIN", after.guild.id)
             if str(auto_detect).lower() == "true" or auto_detect is True:
                 self.bot.loop.create_task(self.check_manual_join(before, after, human_role))
 
-        # 評価落ちロール付与検知
-        eval_failed_role = config.get_role_by_setting(self.bot, after.guild, "EVALUATION_FAILED_ROLE_ID", config.EVALUATION_FAILED_ROLE_NAME)
-        if eval_failed_role and eval_failed_role in after.roles and eval_failed_role not in before.roles:
-            await asyncio.sleep(1)
-            moderator = None
-            reason = "評価基準未到達のため"
-            is_manual = True
-            try:
-                async for entry in after.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_role_update):
-                    if entry.target.id == after.id:
-                        if eval_failed_role in entry.after.roles and eval_failed_role not in entry.before.roles:
-                            moderator = entry.user
-                            if entry.reason == "通貨マイナスになったため" or (entry.user and entry.user.bot):
-                                is_manual = False
-                            break
-            except Exception as e:
-                print(f"[Evaluation Failure Log] Failed to fetch audit log: {e}")
-            
-            if is_manual:
-                embed = discord.Embed(
-                    title="📉 評価落ち",
-                    description=f"{after.mention} が評価落ちしました。",
-                    color=discord.Color.red()
-                )
-                embed.add_field(name="理由", value=reason, inline=False)
-                embed.add_field(name="実行者", value=moderator.mention if moderator else "不明", inline=False)
-                await config.send_log(after.guild, "evaluation_failure", embed)
+        # 評価落ちロール付与検知は cogs/evaluation.py の on_member_update が担当（重複処理を避けるためここでは行わない）
 
         # ルール違反者ロール付与検知
         violator_role = config.get_role_by_setting(self.bot, after.guild, "VIOLATOR_ROLE_ID", "ルール違反者")
@@ -532,32 +495,40 @@ class Logging(commands.Cog):
     # --- 日時フォーマット用ヘルパー ---
     def format_relative_time(self, dt: datetime.datetime) -> str:
         now = datetime.datetime.now(datetime.timezone.utc)
-        diff = now - dt
-        
-        years = now.year - dt.year
-        months = now.month - dt.month
+        # 未来の日時（例: タイムアウト解除予定）は「後」、過去は「前」で表現する
+        if dt > now:
+            diff = dt - now
+            earlier, later = now, dt
+            suffix = "後"
+        else:
+            diff = now - dt
+            earlier, later = dt, now
+            suffix = "前"
+
+        years = later.year - earlier.year
+        months = later.month - earlier.month
         if months < 0:
             years -= 1
             months += 12
-            
+
         if years > 0:
-            return f"{years}年前"
+            return f"{years}年{suffix}"
         if months > 0:
-            return f"{months}ヶ月前"
-            
+            return f"{months}ヶ月{suffix}"
+
         days = diff.days
         if days > 0:
-            return f"{days}日前"
-            
+            return f"{days}日{suffix}"
+
         hours = diff.seconds // 3600
         if hours > 0:
-            return f"{hours}時間前"
-            
+            return f"{hours}時間{suffix}"
+
         minutes = (diff.seconds % 3600) // 60
         if minutes > 0:
-            return f"{minutes}分前"
-            
-        return f"{diff.seconds}秒前"
+            return f"{minutes}分{suffix}"
+
+        return f"{diff.seconds}秒{suffix}"
 
     def format_absolute_time(self, dt: datetime.datetime) -> str:
         dt_jst = dt.astimezone(config.JST)
@@ -696,7 +667,7 @@ class Logging(commands.Cog):
         embed.set_thumbnail(url=member.display_avatar.url)
         
         if member.joined_at:
-            joined_val = f"{self.format_relative_time(member.joined_at)}前 (滞在期間)\n{self.format_absolute_time(member.joined_at)}"
+            joined_val = f"{self.format_relative_time(member.joined_at)} (滞在期間)\n{self.format_absolute_time(member.joined_at)}"
         else:
             joined_val = "不明"
         embed.add_field(name="サーバー参加日", value=joined_val, inline=False)

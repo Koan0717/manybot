@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import datetime
 import asyncio
+import re
 import database
 from helpers import (
     JST, get_setting, get_role_by_setting, has_admin_role, is_admin, is_admin_or_interviewer, is_admin_or_banker, send_log,
@@ -11,6 +12,12 @@ from helpers import (
     PRIEST_ROLE_NAME, ADMIN_ROLE_NAMES, EVALUATOR_ROLE_NAMES, DEFAULT_SETTINGS,
     format_setting_status, circled_to_int, get_circled_number, apply_bot_nicknames
 )
+# Discord招待URL検知用パターン（毎メッセージでのコンパイルを避けるためモジュールレベルで定義）
+DISCORD_INVITE_PATTERN = re.compile(
+    r'(?:https?://)?(?:www\.)?(?:discord\.gg|discord\.com/invite|discordapp\.com/invite)/[a-zA-Z0-9-]+',
+    re.IGNORECASE
+)
+
 # 注意: bot.pyの245行目あたりにあった bot_settings や triggers のキャッシュは bot 側にある。
 
 # --- UIクラス (ヘルパーのダミーインポート等も利用) ---
@@ -354,8 +361,8 @@ class AdminGroup(app_commands.Group):
             if any(rid in minus_target_ids for rid in member_roles):
                 await trigger_evaluation_failure(interaction.guild, user, "通貨マイナスになったため", interaction.user, self.bot)
 
-    @app_commands.command(name="一括初期給与", description="【運営・銀行員専用】全員（サーバー全体）に一括で初期給与（30000コイン）を受け取っていない人を含めて一律で発行します")
-    @app_commands.describe(preview="Trueの場合、実際には付与せずに対象者の一覧を表示します（デフォルト: True）")
+    @app_commands.command(name="一括初期給与", description="【運営・銀行員専用】まだ初期給与を受け取っていないメンバーのみに一括で初期給与を発行します")
+    @app_commands.describe(preview="Trueの場合、実際には付与せずに対象者（未受給者）の一覧を表示します（デフォルト: True）")
     @is_admin_or_banker()
     async def batch_initial_issue(self, interaction: discord.Interaction, preview: bool = True):
         await interaction.response.defer(ephemeral=True)
@@ -371,48 +378,61 @@ class AdminGroup(app_commands.Group):
                 
             initial_coins = get_setting(bot, "INITIAL_COINS") or 30000
             cur_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
-            
+
+            # 初期給与を「まだ受け取っていない」メンバーのみを対象にする
+            eligible = []
+            for member in members:
+                if not await database.check_initial_issued(interaction.guild.id, member.id):
+                    eligible.append(member)
+            already_count = len(members) - len(eligible)
+
             # --- プレビューモードの場合 ---
             if preview:
-                issue_list_text = [f"- {m.mention} (ID: {m.id})" for m in members[:10]]
-                if len(members) > 10:
-                    issue_list_text.append(f"他 {len(members) - 10} 名...")
+                issue_list_text = [f"- {m.mention} (ID: {m.id})" for m in eligible[:10]]
+                if len(eligible) > 10:
+                    issue_list_text.append(f"他 {len(eligible) - 10} 名...")
 
                 embed = discord.Embed(
-                    title="📋 【プレビュー】一括初期給与 対象者一覧",
+                    title="📋 【プレビュー】一括初期給与 対象者一覧（未受給者）",
                     description="実際には付与を行っていません。内容に問題がなければ、`/一括初期給与 preview:False` で実行してください。",
                     color=discord.Color.blue(),
                     timestamp=discord.utils.utcnow()
                 )
                 embed.add_field(
-                    name=f"🪙 全員一括発行 対象者 ({len(members)} 名)",
-                    value="\n".join(issue_list_text) if members else "対象者なし",
+                    name=f"🪙 未受給者 対象者 ({len(eligible)} 名)",
+                    value="\n".join(issue_list_text) if eligible else "対象者なし（全員受給済み）",
                     inline=False
                 )
-                embed.set_footer(text=f"※実行すると、全員に一律 {initial_coins:,} {cur_name} が加算され、初期給与済みにマークされます。")
+                embed.set_footer(text=f"※実行すると、未受給の {len(eligible)} 名に一律 {initial_coins:,} {cur_name} が加算されます。（受給済み {already_count} 名はスキップ）")
                 return await interaction.followup.send(embed=embed, ephemeral=True)
 
             # --- 実行モード (preview=False) の場合 ---
             issued_count = 0
             issued_members_log = []
-            
-            # 全員に初期給与を付与してフラグを TRUE にマークする
-            for member in members:
+
+            # 未受給者のみに初期給与を付与してフラグを TRUE にマークする
+            for member in eligible:
                 await database.add_balance(interaction.guild.id, member.id, initial_coins)
-                await database.mark_initial_issued(interaction.guild_id, member.id)
+                await database.mark_initial_issued(interaction.guild.id, member.id)
                 issued_count += 1
                 issued_members_log.append(f"{member.mention} (ID: {member.id})")
-                    
+
+            if issued_count == 0:
+                return await interaction.followup.send(
+                    f"対象となる未受給者がいませんでした。（受給済み {already_count} 名）",
+                    ephemeral=True
+                )
+
             await interaction.followup.send(
                 f"✅ 処理が完了しました！\n"
-                f"- 全員一括発行: {issued_count} 名に {initial_coins:,} {cur_name} を付与しました。",
+                f"- 未受給者への発行: {issued_count} 名に {initial_coins:,} {cur_name} を付与しました。（受給済み {already_count} 名はスキップ）",
                 ephemeral=True
             )
 
             if issued_count > 0:
                 embed = discord.Embed(
-                    title="🪙 一括初期給与 (全員対象・運営)",
-                    description="運営による一括初期給与が実行されました。",
+                    title="🪙 一括初期給与 (未受給者対象・運営)",
+                    description="運営による一括初期給与（未受給者のみ）が実行されました。",
                     color=discord.Color.gold(),
                     timestamp=discord.utils.utcnow()
                 )
@@ -561,11 +581,6 @@ class Admin(commands.Cog):
                         timeout_reason = "短時間に@everyoneメンションを複数回送信したため"
 
                 # Discord招待URLの検知 (discord.gg/ などの招待リンク)
-                import re
-                DISCORD_INVITE_PATTERN = re.compile(
-                    r'(?:https?://)?(?:www\.)?(?:discord\.gg|discord\.com/invite|discordapp\.com/invite)/[a-zA-Z0-9-]+',
-                    re.IGNORECASE
-                )
                 if DISCORD_INVITE_PATTERN.search(message.content):
                     user_tracker["invite_count"] += 1
                     if user_tracker["invite_count"] >= 5:

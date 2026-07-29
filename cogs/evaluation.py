@@ -155,7 +155,7 @@ class EvaluationGroup(app_commands.Group):
             return await interaction.followup.send(f"{user.mention} の評価期間が設定されていません。", ephemeral=True)
             
         new_end = period["end_time"] + datetime.timedelta(days=additional_days)
-        await database.update_evaluation_period_end(user.id, new_end)
+        await database.update_evaluation_period_end(interaction.guild.id, user.id, new_end)
         
         await interaction.followup.send(
             f"✅ {user.mention} の評価終了日時を変更しました。\n"
@@ -308,7 +308,9 @@ class Evaluation(commands.Cog):
                 existing = await database.get_evaluation_period(after.guild.id, after.id)
                 if not existing:
                     now = datetime.datetime.now(JST)
-                    if 23 <= now.hour <= 23:
+                    # 23時台に付与された場合は評価開始を翌0時に繰り下げ、それ以外は5分後に開始
+                    # （深夜帯をもっと広く繰り下げたい場合はこの条件を範囲指定に変更する）
+                    if now.hour == 23:
                         start_time = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
                     else:
                         start_time = now + datetime.timedelta(minutes=5)
@@ -359,17 +361,6 @@ class Evaluation(commands.Cog):
             
         guild = message.guild
         if guild:
-            try:
-                cfg = self.bot.get_evaluation_config(guild.id)
-                human_role = get_role_by_setting(self.bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
-                print(f"[DEBUG-EVAL] msg_id={message.id} channel={message.channel.id}")
-                print(f"  cfg={cfg}")
-                print(f"  human_role={human_role.name if human_role else None}")
-                has_role = human_role in getattr(message.author, 'roles', [])
-                print(f"  has_role={has_role}")
-            except Exception as e:
-                print(f"[DEBUG-EVAL ERROR] {e}")
-                
             cfg = self.bot.get_evaluation_config(guild.id)
             if not cfg.get("is_enabled", True):
                 return

@@ -111,7 +111,7 @@ def draw_progress_bar(base_img, x, y, w, h, current, total, bar_type="vc"):
     
     base_img.paste(grad_bar, (x, y), mask=grad_bar)
 
-async def generate_rank_card(
+def generate_rank_card(
     user_name: str,
     avatar_bytes: bytes,
     server_logo_bytes: bytes,

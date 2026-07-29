@@ -1518,6 +1518,18 @@ async def extend_evaluation_period(guild_id: int, user_id: int, extra_days: int)
 
 
 
+async def update_evaluation_period_end(guild_id: int, user_id: int, new_end_time: datetime.datetime) -> bool:
+
+    p = await get_pool(guild_id)
+
+    async with p.acquire() as conn:
+
+        result = await conn.execute('UPDATE evaluation_periods SET end_time = $1 WHERE guild_id = $2 AND user_id = $3', new_end_time, guild_id, user_id)
+
+        return result != "UPDATE 0"
+
+
+
 # --- VC菴懈・繝医Μ繧ｬ繝ｼ邂｡逅・畑髢｢謨ｰ ---
 
 async def add_auto_vc_trigger(channel_id: int):
@@ -1758,10 +1770,6 @@ async def save_setting(guild_id: int, key: str, value):
             DO UPDATE SET setting_value = $3
 
         ''', guild_id, key, val_json)
-
-
-
-import json
 
 
 
@@ -2463,7 +2471,7 @@ async def set_rank_settings(guild_id: int, whitelist_ids: list[int], blacklist_i
 
             INSERT INTO rank_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids)
 
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
 
             ON CONFLICT (guild_id)
 
@@ -2503,7 +2511,7 @@ async def get_vc_coins_settings(guild_id: int) -> dict:
 
         else:
 
-            await conn.execute('INSERT INTO vc_coins_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (guild_id) DO NOTHING', guild_id, [], [], [], [])
+            await conn.execute('INSERT INTO vc_coins_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (guild_id) DO NOTHING', guild_id, [], [], [], [], False, [])
 
             return {"whitelist": [], "blacklist": [], "categories": [], "blacklist_categories": [], "enable_exclude_rank_role": False, "exclude_rank_role_ids": []}
 
@@ -2561,7 +2569,7 @@ async def set_vc_coins_settings(guild_id: int, whitelist_ids: list[int], blackli
 
             INSERT INTO vc_coins_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids)
 
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
 
             ON CONFLICT (guild_id)
 
@@ -2575,9 +2583,9 @@ async def set_vc_coins_settings(guild_id: int, whitelist_ids: list[int], blackli
 
 # --- VC貊槫惠譎る俣邂｡逅・畑髢｢謨ｰ ---
 
-async def add_vc_duration(user_id: int, category_id: int, seconds: int):
+async def add_vc_duration(guild_id: int, user_id: int, category_id: int, seconds: int):
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
@@ -2719,11 +2727,11 @@ async def add_evaluation_vc_time(guild_id: int, user_id: int, seconds: int):
 
     await get_user(guild_id, user_id)
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
-        await conn.execute('UPDATE users SET evaluation_vc_time = evaluation_vc_time + $1 WHERE user_id = $2', seconds, user_id)
+        await conn.execute('UPDATE users SET evaluation_vc_time = evaluation_vc_time + $1 WHERE guild_id = $3 AND user_id = $2', seconds, user_id, guild_id)
 
 
 
@@ -3041,11 +3049,11 @@ async def set_initial_issued(guild_id: int, user_id: int):
 
     await get_user(guild_id, user_id)
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
-        await conn.execute('UPDATE users SET initial_issued = TRUE WHERE user_id = $1', user_id)
+        await conn.execute('UPDATE users SET initial_issued = TRUE WHERE guild_id = $2 AND user_id = $1', user_id, guild_id)
 
 
 
@@ -3253,7 +3261,7 @@ async def update_rank_settings_list(guild_id: int, field_type: str, item_id: int
 
         if not row:
 
-            await conn.execute('INSERT INTO rank_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (guild_id) DO NOTHING', guild_id, [], [], [], [])
+            await conn.execute('INSERT INTO rank_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (guild_id) DO NOTHING', guild_id, [], [], [], [], False, [])
 
             wl_ch, bl_ch, wl_cat, bl_cat = [], [], [], []
 
@@ -3341,7 +3349,7 @@ async def update_vc_coins_settings_list(guild_id: int, field_type: str, item_id:
 
         if not row:
 
-            await conn.execute('INSERT INTO vc_coins_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (guild_id) DO NOTHING', guild_id, [], [], [], [])
+            await conn.execute('INSERT INTO vc_coins_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (guild_id) DO NOTHING', guild_id, [], [], [], [], False, [])
 
             wl_ch, bl_ch, wl_cat, bl_cat = [], [], [], []
 
@@ -3611,7 +3619,7 @@ async def get_expired_user_items():
 
         try:
 
-            rows = await p.fetch("SELECT id, user_id, item_id FROM user_items WHERE expire_at < $1 AND is_role_removed = FALSE", get_now_naive())
+            rows = await p.fetch("SELECT id, user_id, item_id FROM user_items WHERE expire_at < $1 AND role_removed = FALSE", get_now_naive())
 
             all_expired.extend([dict(row) for row in rows])
 
@@ -3629,7 +3637,7 @@ async def mark_user_item_role_removed(user_item_id: int):
 
         try:
 
-            await p.execute("UPDATE user_items SET is_role_removed = TRUE WHERE id = $1", user_item_id)
+            await p.execute("UPDATE user_items SET role_removed = TRUE WHERE id = $1", user_item_id)
 
         except Exception:
 
