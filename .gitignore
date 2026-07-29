@@ -1,8 +1,0 @@
-.env
-__pycache__/
-*.db
-node_modules/
-.next/
-.vercel/
-
-__pycache__/
