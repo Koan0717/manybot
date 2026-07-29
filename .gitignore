@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+dashboard/node_modules/
+
+# Environment variables
+.env
+*.env
+
+# Python cache & virtual environments
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Databases & logs
+*.db
+*.log
+
+# Build & web framework outputs
+.next/
+.vercel/
+out/
+build/
