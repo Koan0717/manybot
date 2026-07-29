@@ -1,6 +1,0 @@
-cogs\admin.py:108:title="⚙️ ０番区bot 管理パネル",
-cogs\admin.py:1983:super().__init__(label="◀ 管理パネルに戻る", style=discord.ButtonStyle.secondary, row=row)
-cogs\admin.py:2179:await interaction.response.send_message("✅ VC管理パネルを設置しました。", ephemeral=True)
-cogs\gambling.py:2085:super().__init__(label="⬅️ 管理パネルに戻る", style=discord.ButtonStyle.secondary, custom_id=f"admin_gamble_back_btn_{back_to}", row=4)
-cogs\gambling.py:2165:title="🎰 ギャンブル管理パネル",
-cogs\gambling.py:2199:@app_commands.command(name="設定", description="【賭博統括・管理者専用】ギャンブル管理パネルを表示します")
