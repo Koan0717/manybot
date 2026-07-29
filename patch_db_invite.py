@@ -1,1 +1,0 @@
-﻿import asyncio`nimport database`nimport config`n`nasync def main():`n    print("Connecting to DB...")`n    await database.init_db()`n    print("DB Init done.")`n`nif __name__ == "__main__":`n    asyncio.run(main())
