@@ -66,13 +66,23 @@ async def get_all_configured_pools():
 
             url = r['database_url']
 
-            if url not in pools:
+            if not url:
 
-                pools[url] = await asyncpg.create_pool(url, statement_cache_size=0, min_size=1, max_size=10)
+                continue
 
-            if pools[url] not in all_pools:
+            try:
 
-                all_pools.append(pools[url])
+                if url not in pools:
+
+                    pools[url] = await asyncpg.create_pool(url, statement_cache_size=0, min_size=1, max_size=10)
+
+                if pools[url] not in all_pools:
+
+                    all_pools.append(pools[url])
+
+            except Exception as e:
+
+                print(f"[DB Warning] Failed to connect to configured pool ({url}): {e}")
 
         return all_pools
 
@@ -212,11 +222,17 @@ async def get_pool(guild_id: int = None):
 
         if url:
 
-            if url not in pools:
+            try:
 
-                pools[url] = await asyncpg.create_pool(url, statement_cache_size=0, min_size=1, max_size=10)
+                if url not in pools:
 
-            return pools[url]
+                    pools[url] = await asyncpg.create_pool(url, statement_cache_size=0, min_size=1, max_size=10)
+
+                return pools[url]
+
+            except Exception as e:
+
+                print(f"[DB Warning] Failed to connect to guild pool ({guild_id}): {e}")
 
     return await get_master_pool()
 
