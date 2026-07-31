@@ -82,7 +82,7 @@ async def get_all_configured_pools():
 
             except Exception as e:
 
-                print(f"[DB Warning] Failed to connect to configured pool ({url}): {e}")
+                print(f"❌ [DB Error] Supabase (専用DB) への接続に失敗しました ({url}): {e}")
 
         return all_pools
 
@@ -232,7 +232,7 @@ async def get_pool(guild_id: int = None):
 
             except Exception as e:
 
-                print(f"[DB Warning] Failed to connect to guild pool ({guild_id}): {e}")
+                print(f"❌ [DB Error] Supabase (専用DB) への接続に失敗しました (ギルドID: {guild_id}): {e}")
 
     return await get_master_pool()
 

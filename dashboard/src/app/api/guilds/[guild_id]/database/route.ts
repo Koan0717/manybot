@@ -9,7 +9,6 @@ export async function GET(
   { params }: { params: { guild_id: string } }
 ) {
   const guildId = params.guild_id;
-  
 
   try {
     const result = await masterPool.query(
@@ -34,8 +33,6 @@ export async function POST(
   { params }: { params: { guild_id: string } }
 ) {
   const guildId = params.guild_id;
-  
-
   const { database_url } = await request.json();
 
   try {
@@ -50,17 +47,38 @@ export async function POST(
     } catch (e) {}
 
     if (database_url) {
+      // Test Supabase connection first
+      let newPool: Pool | null = null;
+      try {
+        newPool = new Pool({ connectionString: database_url?.replace('?sslmode=require', ''), ssl: { rejectUnauthorized: false } });
+        // Run test query
+        await newPool.query('SELECT 1');
+      } catch (connError: any) {
+        if (newPool) await newPool.end().catch(() => {});
+        console.error('Supabase connection failed:', connError);
+        return NextResponse.json(
+          { error: `Supabase（専用データベース）の接続に失敗しました: ${connError.message || 'URLまたはパスワードをご確認ください'}` },
+          { status: 400 }
+        );
+      }
+
+      // Save to master DB after connection succeeds
       await masterPool.query(
         'INSERT INTO guild_databases (guild_id, database_url) VALUES ($1, $2) ON CONFLICT (guild_id) DO UPDATE SET database_url = EXCLUDED.database_url',
         [guildId, database_url]
       );
-      
-      // Run setup schema on the newly added DB
+
+      // Setup schema
       try {
-        const newPool = new Pool({ connectionString: database_url?.replace('?sslmode=require', ''), ssl: { rejectUnauthorized: false } });
         await setupDbSchema(newPool);
       } catch (setupError: any) {
-        return NextResponse.json({ error: 'テーブルの初期化に失敗しました。URLが正しいか確認してください。' }, { status: 500 });
+        console.error('Supabase schema setup failed:', setupError);
+        return NextResponse.json(
+          { error: `Supabaseの接続には成功しましたが、テーブルの初期化に失敗しました: ${setupError.message}` },
+          { status: 500 }
+        );
+      } finally {
+        await newPool.end().catch(() => {});
       }
 
     } else {
@@ -71,6 +89,7 @@ export async function POST(
     }
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Database POST error:', error);
+    return NextResponse.json({ error: `データベース設定の保存に失敗しました: ${error.message}` }, { status: 500 });
   }
 }
