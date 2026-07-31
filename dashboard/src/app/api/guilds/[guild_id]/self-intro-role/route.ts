@@ -1,5 +1,27 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+
+async function ensureTable(pool: any) {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS self_intro_role_settings (
+      guild_id            BIGINT PRIMARY KEY,
+      channel_id          BIGINT,
+      welcome_channel_id  BIGINT,
+      role_id             BIGINT,
+      template            TEXT,
+      is_enabled          BOOLEAN DEFAULT TRUE
+    )`
+  );
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS self_intro_welcome_messages (
+      guild_id    BIGINT,
+      user_id     BIGINT,
+      message_id  BIGINT,
+      channel_id  BIGINT,
+      PRIMARY KEY (guild_id, user_id)
+    )`
+  );
+}
 
 export async function GET(
   request: Request,
@@ -8,6 +30,7 @@ export async function GET(
   const guildId = params.guild_id;
   const pool = await getPool(guildId);
   try {
+    await ensureTable(pool);
     const result = await pool.query(
       'SELECT channel_id, welcome_channel_id, role_id, template, is_enabled FROM self_intro_role_settings WHERE guild_id = $1',
       [guildId]
@@ -35,6 +58,7 @@ export async function POST(
   const guildId = params.guild_id;
   const pool = await getPool(guildId);
   try {
+    await ensureTable(pool);
     const body = await request.json();
     const { channel_id, welcome_channel_id, role_id, template, is_enabled } = body;
     const sql = [
