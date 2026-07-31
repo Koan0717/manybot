@@ -2,25 +2,29 @@ import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 
 async function ensureTable(pool: any) {
-  await pool.query(
-    `CREATE TABLE IF NOT EXISTS self_intro_role_settings (
-      guild_id            BIGINT PRIMARY KEY,
-      channel_id          BIGINT,
-      welcome_channel_id  BIGINT,
-      role_id             BIGINT,
-      template            TEXT,
-      is_enabled          BOOLEAN DEFAULT TRUE
-    )`
-  );
-  await pool.query(
-    `CREATE TABLE IF NOT EXISTS self_intro_welcome_messages (
-      guild_id    BIGINT,
-      user_id     BIGINT,
-      message_id  BIGINT,
-      channel_id  BIGINT,
-      PRIMARY KEY (guild_id, user_id)
-    )`
-  );
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS self_intro_role_settings (
+        guild_id            BIGINT PRIMARY KEY,
+        channel_id          BIGINT,
+        welcome_channel_id  BIGINT,
+        role_id             BIGINT,
+        template            TEXT,
+        is_enabled          BOOLEAN DEFAULT TRUE
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS self_intro_welcome_messages (
+        guild_id    BIGINT,
+        user_id     BIGINT,
+        message_id  BIGINT,
+        channel_id  BIGINT,
+        PRIMARY KEY (guild_id, user_id)
+      )
+    `);
+  } catch (e: any) {
+    console.error('ensureTable error:', e);
+  }
 }
 
 export async function GET(
@@ -28,8 +32,8 @@ export async function GET(
   { params }: { params: { guild_id: string } }
 ) {
   const guildId = params.guild_id;
-  const pool = await getPool(guildId);
   try {
+    const pool = await getPool(guildId);
     await ensureTable(pool);
     const result = await pool.query(
       'SELECT channel_id, welcome_channel_id, role_id, template, is_enabled FROM self_intro_role_settings WHERE guild_id = $1',
@@ -47,7 +51,8 @@ export async function GET(
       is_enabled: row.is_enabled ?? false,
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('GET error:', error);
+    return NextResponse.json({ error: error.message || String(error) }, { status: 500 });
   }
 }
 
@@ -56,27 +61,35 @@ export async function POST(
   { params }: { params: { guild_id: string } }
 ) {
   const guildId = params.guild_id;
-  const pool = await getPool(guildId);
   try {
+    const pool = await getPool(guildId);
     await ensureTable(pool);
     const body = await request.json();
     const { channel_id, welcome_channel_id, role_id, template, is_enabled } = body;
-    const sql = [
-      'INSERT INTO self_intro_role_settings (guild_id, channel_id, welcome_channel_id, role_id, template, is_enabled)',
-      'VALUES ($1, $2, $3, $4, $5, $6)',
-      'ON CONFLICT (guild_id) DO UPDATE',
-      'SET channel_id = $2, welcome_channel_id = $3, role_id = $4, template = $5, is_enabled = $6'
-    ].join(' ');
+
+    const sql = `
+      INSERT INTO self_intro_role_settings (guild_id, channel_id, welcome_channel_id, role_id, template, is_enabled)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (guild_id) DO UPDATE
+      SET channel_id = EXCLUDED.channel_id,
+          welcome_channel_id = EXCLUDED.welcome_channel_id,
+          role_id = EXCLUDED.role_id,
+          template = EXCLUDED.template,
+          is_enabled = EXCLUDED.is_enabled
+    `;
+
     await pool.query(sql, [
       guildId,
-      channel_id ? channel_id.toString() : null,
-      welcome_channel_id ? welcome_channel_id.toString() : null,
-      role_id ? role_id.toString() : null,
-      template || null,
-      is_enabled ?? false,
+      channel_id ? String(channel_id) : null,
+      welcome_channel_id ? String(welcome_channel_id) : null,
+      role_id ? String(role_id) : null,
+      template || '',
+      Boolean(is_enabled),
     ]);
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('POST error:', error);
+    return NextResponse.json({ error: error.message || String(error) }, { status: 500 });
   }
 }
