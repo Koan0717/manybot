@@ -1052,6 +1052,48 @@ async def setup_db_schema(p):
 
 
 
+        await conn.execute('''
+
+            CREATE TABLE IF NOT EXISTS self_intro_role_settings (
+
+                guild_id            BIGINT PRIMARY KEY,
+
+                channel_id          BIGINT,
+
+                welcome_channel_id  BIGINT,
+
+                role_id             BIGINT,
+
+                template            TEXT,
+
+                is_enabled          BOOLEAN DEFAULT TRUE
+
+            )
+
+        ''')
+
+
+
+        await conn.execute('''
+
+            CREATE TABLE IF NOT EXISTS self_intro_welcome_messages (
+
+                guild_id    BIGINT,
+
+                user_id     BIGINT,
+
+                message_id  BIGINT,
+
+                channel_id  BIGINT,
+
+                PRIMARY KEY (guild_id, user_id)
+
+            )
+
+        ''')
+
+
+
 async def setup_db():
 
     p = await get_master_pool()
@@ -3895,3 +3937,70 @@ async def is_command_enabled(guild_id: int, command_name: str) -> bool:
             return row['is_enabled']
             
         return True
+
+# --- 自己紹介ロール設定 ---
+
+async def get_self_intro_role_settings(guild_id: int) -> dict:
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            'SELECT channel_id, welcome_channel_id, role_id, template, is_enabled FROM self_intro_role_settings WHERE guild_id = $1',
+            guild_id
+        )
+        if row:
+            return {
+                "channel_id": row['channel_id'],
+                "welcome_channel_id": row['welcome_channel_id'],
+                "role_id": row['role_id'],
+                "template": row['template'],
+                "is_enabled": row['is_enabled'],
+            }
+        return {"channel_id": None, "welcome_channel_id": None, "role_id": None, "template": None, "is_enabled": False}
+
+
+
+async def save_self_intro_role_settings(guild_id: int, channel_id, welcome_channel_id, role_id, template: str, is_enabled: bool):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO self_intro_role_settings (guild_id, channel_id, welcome_channel_id, role_id, template, is_enabled)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (guild_id) DO UPDATE
+            SET channel_id = $2, welcome_channel_id = $3, role_id = $4, template = $5, is_enabled = $6
+        ''', guild_id, channel_id, welcome_channel_id, role_id, template, is_enabled)
+
+
+
+async def save_self_intro_welcome_message(guild_id: int, user_id: int, message_id: int, channel_id: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO self_intro_welcome_messages (guild_id, user_id, message_id, channel_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id, user_id) DO UPDATE
+            SET message_id = $3, channel_id = $4
+        ''', guild_id, user_id, message_id, channel_id)
+
+
+
+async def get_self_intro_welcome_message(guild_id: int, user_id: int) -> dict:
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            'SELECT message_id, channel_id FROM self_intro_welcome_messages WHERE guild_id = $1 AND user_id = $2',
+            guild_id, user_id
+        )
+        if row:
+            return {"message_id": row['message_id'], "channel_id": row['channel_id']}
+        return None
+
+
+
+async def delete_self_intro_welcome_message(guild_id: int, user_id: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute(
+            'DELETE FROM self_intro_welcome_messages WHERE guild_id = $1 AND user_id = $2',
+            guild_id, user_id
+        )
+

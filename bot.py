@@ -221,7 +221,8 @@ class EconomyBot(commands.Bot):
             "cogs.ranking",
             "cogs.reaction_roles",
             "cogs.shop",
-            "cogs.tickets"
+            "cogs.tickets",
+            "cogs.self_intro_roles",
         ]
         for cog in cogs_to_load:
             try:
