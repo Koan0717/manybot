@@ -37,20 +37,20 @@ export async function POST(
   try {
     const body = await request.json();
     const { channel_id, welcome_channel_id, role_id, template, is_enabled } = body;
-    await pool.query(
-      \INSERT INTO self_intro_role_settings (guild_id, channel_id, welcome_channel_id, role_id, template, is_enabled)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (guild_id) DO UPDATE
-       SET channel_id = $2, welcome_channel_id = $3, role_id = $4, template = $5, is_enabled = $6\,
-      [
-        guildId,
-        channel_id ? channel_id.toString() : null,
-        welcome_channel_id ? welcome_channel_id.toString() : null,
-        role_id ? role_id.toString() : null,
-        template || null,
-        is_enabled ?? false,
-      ]
-    );
+    const sql = [
+      'INSERT INTO self_intro_role_settings (guild_id, channel_id, welcome_channel_id, role_id, template, is_enabled)',
+      'VALUES ($1, $2, $3, $4, $5, $6)',
+      'ON CONFLICT (guild_id) DO UPDATE',
+      'SET channel_id = $2, welcome_channel_id = $3, role_id = $4, template = $5, is_enabled = $6'
+    ].join(' ');
+    await pool.query(sql, [
+      guildId,
+      channel_id ? channel_id.toString() : null,
+      welcome_channel_id ? welcome_channel_id.toString() : null,
+      role_id ? role_id.toString() : null,
+      template || null,
+      is_enabled ?? false,
+    ]);
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
