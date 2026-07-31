@@ -42,31 +42,49 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
       fetch(`/api/guilds/${guildId}/channels`).then(r => r.json()),
       fetch(`/api/guilds/${guildId}/roles`).then(r => r.json()),
     ]).then(([settings, ch, ro]) => {
-      if (!settings.error) {
+      if (settings && !settings.error) {
         setIsEnabled(settings.is_enabled ?? false);
         setChannelId(settings.channel_id ?? '');
         setWelcomeChannelId(settings.welcome_channel_id ?? '');
         setRoleId(settings.role_id ?? '');
         setTemplate(settings.template ?? '');
       }
-      if (!ch.error && Array.isArray(ch)) setChannels(ch);
-      if (!ro.error && Array.isArray(ro)) setRoles(ro.filter((r: Role) => r.name !== '@everyone'));
+      if (ch && !ch.error && Array.isArray(ch)) setChannels(ch);
+      if (ro && !ro.error && Array.isArray(ro)) setRoles(ro.filter((r: Role) => r.name !== '@everyone'));
+      setLoading(false);
+    }).catch(err => {
+      console.error(err);
       setLoading(false);
     });
   }, [guildId]);
 
   const handleSave = async () => {
+    if (isEnabled && (!channelId || !roleId)) {
+      toast.error('有効にする場合は「自己紹介チャンネル」と「付与するロール」を両方選択してください。');
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch(`/api/guilds/${guildId}/self-intro-role`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel_id: channelId || null, welcome_channel_id: welcomeChannelId || null, role_id: roleId || null, template, is_enabled: isEnabled }),
+        body: JSON.stringify({
+          channel_id: channelId || null,
+          welcome_channel_id: welcomeChannelId || null,
+          role_id: roleId || null,
+          template: template || '',
+          is_enabled: isEnabled
+        }),
       });
+
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `HTTP Error ${res.status}`);
+      }
       toast.success('設定を保存しました');
     } catch (e: any) {
+      console.error('Save error:', e);
       toast.error(`保存に失敗しました: ${e.message}`);
     } finally {
       setSaving(false);

@@ -23,7 +23,7 @@ async function ensureTable(pool: any) {
       )
     `);
   } catch (e: any) {
-    console.error('ensureTable error:', e);
+    console.error('[self-intro-role] ensureTable error:', e);
   }
 }
 
@@ -36,7 +36,7 @@ export async function GET(
     const pool = await getPool(guildId);
     await ensureTable(pool);
     const result = await pool.query(
-      'SELECT channel_id, welcome_channel_id, role_id, template, is_enabled FROM self_intro_role_settings WHERE guild_id = $1',
+      'SELECT channel_id, welcome_channel_id, role_id, template, is_enabled FROM self_intro_role_settings WHERE guild_id = $1::bigint',
       [guildId]
     );
     if (result.rows.length === 0) {
@@ -51,8 +51,8 @@ export async function GET(
       is_enabled: row.is_enabled ?? false,
     });
   } catch (error: any) {
-    console.error('GET error:', error);
-    return NextResponse.json({ error: error.message || String(error) }, { status: 500 });
+    console.error('[self-intro-role] GET error:', error);
+    return NextResponse.json({ error: error?.message || String(error) }, { status: 500 });
   }
 }
 
@@ -69,7 +69,7 @@ export async function POST(
 
     const sql = `
       INSERT INTO self_intro_role_settings (guild_id, channel_id, welcome_channel_id, role_id, template, is_enabled)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1::bigint, $2::bigint, $3::bigint, $4::bigint, $5, $6)
       ON CONFLICT (guild_id) DO UPDATE
       SET channel_id = EXCLUDED.channel_id,
           welcome_channel_id = EXCLUDED.welcome_channel_id,
@@ -89,7 +89,7 @@ export async function POST(
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error('POST error:', error);
-    return NextResponse.json({ error: error.message || String(error) }, { status: 500 });
+    console.error('[self-intro-role] POST error:', error);
+    return NextResponse.json({ error: error?.message || String(error) }, { status: 500 });
   }
 }
