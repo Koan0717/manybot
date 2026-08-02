@@ -529,6 +529,28 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
                             pass
             channel = await interaction.guild.create_voice_channel(name=f"{room_type}-{interaction.user.display_name}", category=target_category, overwrites=overwrites, user_limit=(2 if room_type=="宿" else 0))
             
+            # 評価落ちロールの表示制御
+            # room_type -> panel_key マッピング
+            _ROOM_TYPE_TO_KEY = {
+                "宿": "inn",
+                "高級宿": "luxury_inn",
+                "賭博VC": "gambling_vc",
+                "ゲームVC": "game_vc",
+                "カスタムVC": "custom_vc",
+            }
+            panel_key = _ROOM_TYPE_TO_KEY.get(room_type)
+            if panel_key:
+                allow_low_eval = get_setting(bot, f"ROOM_ACCESS_LOW_EVAL_{panel_key}", interaction.guild.id)
+                if allow_low_eval is False:
+                    downgrade_role_id = get_setting(bot, "DOWNGRADE_ROLE_ID", interaction.guild.id)
+                    if downgrade_role_id:
+                        try:
+                            downgrade_role = interaction.guild.get_role(int(downgrade_role_id))
+                            if downgrade_role:
+                                await channel.set_permissions(downgrade_role, view_channel=False, connect=False)
+                        except Exception as e:
+                            print(f"[RoomAccess] 評価落ちロールのパーミッション設定に失敗: {e}")
+
             if duration == 0:
                 expire_at = database.get_now_naive() + datetime.timedelta(days=36500) # 無制限
             else:

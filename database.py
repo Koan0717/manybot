@@ -1439,6 +1439,18 @@ async def extend_room(channel_id: int, new_expire_at: datetime.datetime):
         await conn.execute('UPDATE rooms SET expire_at = $1 WHERE channel_id = $2', new_expire_at, channel_id)
 
 
+async def get_all_rooms_for_guild(guild_id: int):
+
+    p = await get_pool(guild_id)
+
+    async with p.acquire() as conn:
+
+        rows = await conn.fetch('SELECT channel_id, owner_id, room_type, expire_at FROM rooms')
+
+        return [{"channel_id": r['channel_id'], "owner_id": r['owner_id'], "room_type": r['room_type'], "expire_at": r['expire_at']} for r in rows]
+
+
+
 
 async def get_expired_rooms():
 

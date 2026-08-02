@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 
 const ROOM_TYPES = [
-  { key: 'inn', label: '一般宿' },
-  { key: 'luxury_inn', label: '高級宿' },
-  { key: 'gambling_vc', label: '賭博VC' },
-  { key: 'game_vc', label: 'ゲームVC' },
-  { key: 'custom_vc', label: 'カスタムVC' },
+  { key: 'inn', label: '一般宿', roomType: '宿' },
+  { key: 'luxury_inn', label: '高級宿', roomType: '高級宿' },
+  { key: 'gambling_vc', label: '賭博VC', roomType: '賭博VC' },
+  { key: 'game_vc', label: 'ゲームVC', roomType: 'ゲームVC' },
+  { key: 'custom_vc', label: 'カスタムVC', roomType: 'カスタムVC' },
 ];
 
 export async function GET(
@@ -73,6 +73,30 @@ export async function POST(
         `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, 0, 'reload_bot_settings')`,
         [guildId]
       );
+
+      // 既存チャンネルへの一括パーミッション適用をリクエスト
+      // OFFになっているroom_typeを列挙してBotに伝える
+      const deniedRoomTypes = ROOM_TYPES
+        .filter(rt => body[rt.key] === false)
+        .map(rt => rt.roomType);
+      const allowedRoomTypes = ROOM_TYPES
+        .filter(rt => body[rt.key] !== false)
+        .map(rt => rt.roomType);
+
+      // denied（見えなくする）対象をBotに依頼
+      if (deniedRoomTypes.length > 0) {
+        await client.query(
+          `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, 0, $2)`,
+          [guildId, `apply_room_access_deny:${deniedRoomTypes.join(',')}`]
+        );
+      }
+      // allowed（見えるようにする）対象もBotに依頼（設定をONに戻した場合の解除）
+      if (allowedRoomTypes.length > 0) {
+        await client.query(
+          `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, 0, $2)`,
+          [guildId, `apply_room_access_allow:${allowedRoomTypes.join(',')}`]
+        );
+      }
 
       await client.query('COMMIT');
       return NextResponse.json({ success: true });
