@@ -85,27 +85,37 @@ export default function DashboardLayout({
   // 強制セットアップ画面
   if (status?.is_new_server && !status?.has_dedicated_db && !pathname.endsWith('/database')) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 text-white p-6 relative overflow-hidden">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-950 text-white p-6 relative overflow-hidden mecha-grid-bg">
         <div className="absolute top-0 right-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
-        
-        <div className="max-w-xl w-full bg-neutral-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl relative z-10 text-center">
-          <div className="w-16 h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-            </svg>
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="max-w-xl w-full mecha-corners mecha-scan-wrap bg-neutral-900/90 border border-red-800/60 mecha-clip shadow-[0_0_50px_-10px_rgba(255,43,61,0.4)] relative z-10">
+          <div className="mecha-hazard h-1.5 w-full opacity-80"></div>
+          <div className="p-8 text-center">
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <span className="mecha-led w-2 h-2 rounded-full bg-red-500 text-red-500"></span>
+              <span className="font-tech text-[11px] tracking-[0.25em] text-red-500/80 uppercase">System Alert :: Setup Required</span>
+            </div>
+            <div className="w-16 h-16 mecha-clip-sm bg-red-500/15 border border-red-700/50 text-red-500 flex items-center justify-center mx-auto mb-6">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+              </svg>
+            </div>
+            <h1 className="font-mecha text-2xl md:text-3xl font-black mb-4 text-white tracking-wide">初期設定が必要です</h1>
+            <p className="font-tech text-sm text-zinc-400 mb-8 leading-relaxed">
+              このサーバーで初めてBotを利用するためには、データを保存する<strong className="text-red-300">専用のSupabaseデータベース</strong>を設定する必要があります。<br />
+              設定が完了するまで、他の機能は利用できません。
+            </p>
+            <Link
+              href={`/dashboard/${guildId}/database`}
+              className="mecha-btn-sheen mecha-clip-sm inline-flex items-center justify-center gap-2 bg-gradient-to-r from-red-700 via-red-600 to-red-800 hover:from-red-600 hover:via-red-500 hover:to-red-700 text-white font-mecha font-bold py-3 px-8 transition-all w-full border border-red-400/30 shadow-lg shadow-red-900/30"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              データベース設定へ進む
+            </Link>
           </div>
-          <h1 className="text-3xl font-bold mb-4 text-white">初期設定が必要です</h1>
-          <p className="text-zinc-400 mb-8 leading-relaxed">
-            このサーバーで初めてBotを利用するためには、データを保存する<strong>専用のSupabaseデータベース</strong>を設定する必要があります。<br/>
-            設定が完了するまで、他の機能は利用できません。
-          </p>
-          <Link 
-            href={`/dashboard/${guildId}/database`}
-            className="inline-block bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg transition-colors w-full"
-          >
-            データベース設定へ進む
-          </Link>
         </div>
       </div>
     );
@@ -154,9 +164,9 @@ export default function DashboardLayout({
               </h2>
               <p className="text-xs text-zinc-400 mt-1">サーバーID: {guildId}</p>
               {!status?.has_dedicated_db && (
-                <div className="mt-3 bg-red-950/50 border border-red-900 text-red-400 text-xs px-2 py-1.5 rounded flex items-center gap-1.5">
-                  <span>⚠️</span>
-                  <span>専用DB未設定<br/>(メインDB使用中)</span>
+                <div className="mt-3 mecha-clip-sm bg-red-950/40 border border-red-900/70 text-red-400 text-xs px-2.5 py-1.5 flex items-center gap-2">
+                  <span className="mecha-led w-1.5 h-1.5 rounded-full bg-red-500 text-red-500 flex-shrink-0"></span>
+                  <span className="font-tech leading-snug">DEFAULT CORE<br/>専用DB未設定</span>
                 </div>
               )}
             </div>
