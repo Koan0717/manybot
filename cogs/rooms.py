@@ -961,76 +961,94 @@ class Rooms(commands.Cog):
         if after.channel is not None:
             if after.channel.id in self.bot.auto_vc_triggers:
                 trigger_id = after.channel.id
+                # トリガーチャンネルごとに排他ロックを取得し、同時入室によるVC名の
+                # 採番衝突・二重作成・他人のVCへの誤流用を防ぐ
+                if not hasattr(self.bot, "auto_vc_locks"):
+                    self.bot.auto_vc_locks = {}
+                lock = self.bot.auto_vc_locks.setdefault(trigger_id, asyncio.Lock())
+
                 try:
-                    pool = await database.get_pool()
-                    async with pool.acquire() as conn:
-                        existing_room = await conn.fetchrow('SELECT channel_id FROM rooms WHERE owner_id = $1 AND room_type = $2 AND trigger_channel_id = $3', member.id, "一時部屋", trigger_id)
-                    
-                    if existing_room:
-                        existing_channel = self.bot.get_channel(existing_room["channel_id"])
-                        if not existing_channel:
-                            try:
-                                existing_channel = await self.bot.fetch_channel(existing_room["channel_id"])
-                            except:
-                                pass
-                        
-                        if existing_channel:
-                            await asyncio.sleep(0.3)
-                            if member.voice and member.voice.channel and member.voice.channel.id == trigger_id:
-                                await member.move_to(existing_channel)
+                    async with lock:
+                        # ロック取得までの間に本人が既にVCから退出/移動している場合は何もしない
+                        if not (member.voice and member.voice.channel and member.voice.channel.id == trigger_id):
                             return
-                        else:
-                            await database.remove_room(existing_room["channel_id"])
 
-                    guild = member.guild
-                    category = after.channel.category
-                    
-                    cfg = self.bot.auto_vc_configs.get(trigger_id)
-                    if not cfg or not cfg.get("base_name"):
-                        channel_name = f"🔊│{member.display_name}の部屋"
-                    else:
-                        base_name = cfg["base_name"].replace("{user}", member.display_name)
-                        include_owner_name = cfg.get("include_owner_name", True)
-                        use_numbering = cfg.get("use_numbering", False)
-                        
-                        if include_owner_name:
-                            channel_name = f"{base_name}│{member.display_name}"
-                        else:
-                            channel_name = base_name
-                        
-                        if use_numbering:
-                            existing_numbers = set()
-                            if category:
-                                prefix = channel_name + "ー"
-                                for ch in category.voice_channels:
-                                    if ch.name.startswith(prefix):
-                                        suffix = ch.name[len(prefix):]
-                                        num = circled_to_int(suffix)
-                                        if num is not None:
-                                            existing_numbers.add(num)
-                            next_num = 1
-                            while next_num in existing_numbers:
-                                next_num += 1
-                            circled_num = get_circled_number(next_num)
-                            channel_name = f"{channel_name}ー{circled_num}"
+                        pool = await database.get_pool()
+                        async with pool.acquire() as conn:
+                            existing_room = await conn.fetchrow('SELECT channel_id FROM rooms WHERE owner_id = $1 AND room_type = $2 AND trigger_channel_id = $3', member.id, "一時部屋", trigger_id)
 
-                    if category:
-                        for existing_ch in category.voice_channels:
-                            if existing_ch.name == channel_name:
-                                now_naive = database.get_now_naive()
-                                far_future = now_naive + datetime.timedelta(days=36500)
-                                await database.add_room(existing_ch.id, member.id, "一時部屋", far_future, trigger_channel_id=trigger_id)
+                        if existing_room:
+                            existing_channel = self.bot.get_channel(existing_room["channel_id"])
+                            if not existing_channel:
+                                try:
+                                    existing_channel = await self.bot.fetch_channel(existing_room["channel_id"])
+                                except:
+                                    pass
+
+                            if existing_channel:
                                 await asyncio.sleep(0.3)
                                 if member.voice and member.voice.channel and member.voice.channel.id == trigger_id:
-                                    await member.move_to(existing_ch)
+                                    await member.move_to(existing_channel)
                                 return
+                            else:
+                                await database.remove_room(existing_room["channel_id"])
 
-                    new_channel = await guild.create_voice_channel(
-                        name=channel_name,
-                        category=category,
-                        reason=f"Auto-VC for {member.display_name}"
-                    )
-                    
+                        guild = member.guild
+                        category = after.channel.category
+
+                        cfg = self.bot.auto_vc_configs.get(trigger_id)
+                        if not cfg or not cfg.get("base_name"):
+                            channel_name = f"🔊│{member.display_name}の部屋"
+                        else:
+                            base_name = cfg["base_name"].replace("{user}", member.display_name)
+                            include_owner_name = cfg.get("include_owner_name", True)
+                            use_numbering = cfg.get("use_numbering", False)
+
+                            if include_owner_name:
+                                channel_name = f"{base_name}│{member.display_name}"
+                            else:
+                                channel_name = base_name
+
+                            if use_numbering:
+                                # 既存の「このトリガー由来の一時部屋」の採番のみを対象にし、
+                                # 同名の別チャンネル(他トリガー/手動作成)に影響されないようにする
+                                existing_numbers = set()
+                                if category:
+                                    trigger_room_ids = set()
+                                    try:
+                                        async with pool.acquire() as conn:
+                                            rows = await conn.fetch(
+                                                'SELECT channel_id FROM rooms WHERE room_type = $1 AND trigger_channel_id = $2',
+                                                "一時部屋", trigger_id
+                                            )
+                                        trigger_room_ids = {r["channel_id"] for r in rows}
+                                    except Exception:
+                                        pass
+                                    prefix = channel_name + "ー"
+                                    for ch in category.voice_channels:
+                                        if ch.id in trigger_room_ids and ch.name.startswith(prefix):
+                                            suffix = ch.name[len(prefix):]
+                                            num = circled_to_int(suffix)
+                                            if num is not None:
+                                                existing_numbers.add(num)
+                                next_num = 1
+                                while next_num in existing_numbers:
+                                    next_num += 1
+                                circled_num = get_circled_number(next_num)
+                                channel_name = f"{channel_name}ー{circled_num}"
+
+                        new_channel = await guild.create_voice_channel(
+                            name=channel_name,
+                            category=category,
+                            reason=f"Auto-VC for {member.display_name}"
+                        )
+
+                        now_naive = database.get_now_naive()
+                        far_future = now_naive + datetime.timedelta(days=36500)
+                        await database.add_room(new_channel.id, member.id, "一時部屋", far_future, trigger_channel_id=trigger_id)
+                        print(f"[Auto-VC] Created room {new_channel.id} and registered in DB")
+
+                    # --- ここからはロック外(他ユーザーの入室処理をブロックしない) ---
                     # 権限の適用
                     is_invite_only = cfg.get("is_invite_only", False) if cfg else False
                     invite_visible_role_ids = cfg.get("invite_visible_role_ids", []) if cfg else []
@@ -1064,12 +1082,7 @@ class Rooms(commands.Cog):
                             await member.move_to(new_channel)
                         except:
                             pass
-                    
-                    now_naive = database.get_now_naive()
-                    far_future = now_naive + datetime.timedelta(days=36500)
-                    await database.add_room(new_channel.id, member.id, "一時部屋", far_future, trigger_channel_id=trigger_id)
-                    print(f"[Auto-VC] Created room {new_channel.id} and registered in DB")
-                    
+
                     if not cfg or cfg.get("show_panel", True):
                         embed = discord.Embed(
                             title="⚙️ 部屋の設定",

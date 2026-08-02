@@ -86,7 +86,7 @@ class IPC(commands.Cog):
 
                         elif panel_type == "reload_vc_triggers":
                             try:
-                                self.bot.auto_vc_triggers = await database.get_auto_vc_triggers()
+                                self.bot.auto_vc_triggers = set(await database.get_auto_vc_triggers())
                                 db_configs = await database.get_all_auto_vc_configs()
                                 self.bot.auto_vc_configs = { c["channel_id"]: c for c in db_configs }
                                 print(f"[IPC] Reloaded VC triggers: {len(self.bot.auto_vc_triggers)} triggers")
