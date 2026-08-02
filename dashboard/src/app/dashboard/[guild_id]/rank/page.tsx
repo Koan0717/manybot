@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import Select from 'react-select';
 import { toast } from 'react-hot-toast';
+import { Trophy } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
 
 export default function RankSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -96,9 +98,7 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
 
   return (
     <div className="max-w-4xl mx-auto pb-20">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-white">ランク・経験値設定</h1>
-      </div>
+      <PageHeader icon={Trophy} title="ランク・経験値設定" subtitle="発言や活動に応じた経験値・ランクを設定します" />
 
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">
@@ -108,7 +108,7 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
 
       <div className="space-y-6">
         {/* 全体設定 */}
-        <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700">
+        <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl">
           <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">全体設定</h2>
           
           <div className="flex items-center justify-between bg-zinc-900 p-4 rounded border border-zinc-700">
@@ -176,7 +176,7 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
         </div>
 
         {/* チャンネル設定 */}
-        <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700">
+        <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl">
           <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">経験値獲得の対象チャンネル・カテゴリ</h2>
           <p className="text-sm text-zinc-400 mb-6">
             経験値（XP）を獲得できるチャンネルと、できないチャンネルを指定します。<br/>
@@ -247,7 +247,7 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
         <button
           onClick={handleSave}
           disabled={saving}
-          className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-8 py-2 rounded font-bold shadow-lg transition-colors"
+          className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-8 py-2 rounded font-bold shadow-lg transition-colors"
         >
           {saving ? '保存中...' : '設定を保存'}
         </button>

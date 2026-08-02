@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import Select from 'react-select';
 import { toast } from 'react-hot-toast';
+import { ShoppingBag } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
 
 export default function ShopSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -187,11 +189,11 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-white">ショップ設定</h1>
+      <div className="flex justify-between items-center gap-4 flex-wrap mb-2">
+        <PageHeader icon={ShoppingBag} title="ショップ設定" subtitle="コインで交換できるアイテムを管理します" />
         <button 
           onClick={() => openModal()}
-          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold shadow-lg transition-colors"
+          className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-red-900/20 transition-all hover:-translate-y-0.5 -mt-8"
         >
           ＋ 新規アイテム追加
         </button>
@@ -203,7 +205,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
         </div>
       )}
 
-      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700">
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl">
         {items.length === 0 ? (
           <p className="text-zinc-400 text-center py-8">現在販売されているアイテムはありません。</p>
         ) : (
@@ -243,7 +245,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
         )}
       </div>
 
-      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mt-8 mb-12">
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mt-8 mb-12">
         <h2 className="text-xl font-bold text-white mb-4">ショップパネルの設置</h2>
         <p className="text-zinc-400 mb-6 text-sm">
           指定したチャンネルに、ユーザーがショップを利用するためのパネル（ボタン付きメッセージ）を送信します。
@@ -388,7 +390,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
                 <button 
                   onClick={saveItem}
                   disabled={saving}
-                  className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-6 py-2 rounded font-bold shadow transition-colors"
+                  className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-6 py-2 rounded font-bold shadow transition-colors"
                 >
                   {saving ? '保存中...' : '保存する'}
                 </button>

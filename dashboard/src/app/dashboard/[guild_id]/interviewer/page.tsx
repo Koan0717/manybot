@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Save, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Save, Loader2, Plus, Trash2, UserCheck } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import PageHeader from '@/components/PageHeader';
 
 export default function InterviewerPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -70,10 +71,7 @@ export default function InterviewerPage({ params }: { params: { guild_id: string
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold mb-2">面接官設定</h1>
-        <p className="text-zinc-400">手動での入界手続きの自動検知と、面接官ごとの対応人数の管理を行います。</p>
-      </div>
+      <PageHeader icon={UserCheck} title="面接官設定" subtitle="手動での入界手続きの自動検知と、面接官ごとの対応人数を管理します" />
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
         <h2 className="text-lg font-bold mb-4">自動検知設定</h2>
@@ -93,7 +91,7 @@ export default function InterviewerPage({ params }: { params: { guild_id: string
           </label>
         </div>
         <div className="mt-4 flex justify-end">
-          <button onClick={handleSaveSetting} disabled={saving} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors">
+          <button onClick={handleSaveSetting} disabled={saving} className="flex items-center gap-2 mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 text-white px-4 py-2 rounded-lg transition-colors">
             {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
             設定を保存
           </button>

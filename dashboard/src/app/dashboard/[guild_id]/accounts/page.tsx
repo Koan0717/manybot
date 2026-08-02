@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
+import { Users } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
 
 interface Account {
   id: number;
@@ -117,7 +119,7 @@ export default function AccountsPage({ params }: { params: { guild_id: string } 
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold mb-8 text-red-500">アカウント設定 (サブアカウント管理)</h1>
+      <PageHeader icon={Users} title="アカウント設定" subtitle="サブアカウント（サーバーごとの管理者）を発行・管理します" />
       
       {error && (
         <div className="bg-red-900/50 text-red-200 p-4 rounded mb-6 border border-red-700">
@@ -125,7 +127,7 @@ export default function AccountsPage({ params }: { params: { guild_id: string } 
         </div>
       )}
 
-      <div className="bg-neutral-800 rounded-lg shadow-xl border border-neutral-700 p-6 mb-8">
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 mb-8 shadow-xl">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold">このサーバーのサブアカウント一覧</h2>
           <div className="flex gap-4 items-center">
@@ -140,7 +142,7 @@ export default function AccountsPage({ params }: { params: { guild_id: string } 
             </label>
             <button
               onClick={() => isFormOpen ? setIsFormOpen(false) : openCreateForm()}
-              className={`${isFormOpen ? 'bg-zinc-600 hover:bg-zinc-700' : 'bg-red-600 hover:bg-red-700'} text-white px-4 py-2 rounded transition-colors`}
+              className={`${isFormOpen ? 'bg-zinc-600 hover:bg-zinc-700' : 'mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700'} text-white px-4 py-2 rounded transition-colors`}
             >
               {isFormOpen ? 'キャンセル' : '新規作成'}
             </button>
@@ -186,7 +188,7 @@ export default function AccountsPage({ params }: { params: { guild_id: string } 
               </div>
             </div>
             <div className="flex justify-end">
-              <button type="submit" className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded transition-colors">
+              <button type="submit" className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 text-white px-6 py-2 rounded transition-colors">
                 {editingId ? '保存する' : '作成する'}
               </button>
             </div>

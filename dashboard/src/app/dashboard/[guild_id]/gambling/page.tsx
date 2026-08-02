@@ -493,7 +493,7 @@ export default function GamblingSettingsPage() {
       </div>
 
       {/* ギャンブルパネルの設置 */}
-      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mt-8 mb-12">
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mt-8 mb-12">
         <h2 className="text-xl font-bold text-white mb-4">ギャンブルパネルの設置</h2>
         <p className="text-zinc-400 mb-6 text-sm">
           指定したチャンネルやフォーラムに、ユーザーがギャンブルを遊ぶためのパネル（ボタン付きメッセージ）を送信します。<br/>

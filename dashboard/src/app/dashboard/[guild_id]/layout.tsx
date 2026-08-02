@@ -3,7 +3,46 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Menu, X, LogOut } from 'lucide-react';
+import {
+  Menu,
+  X,
+  LogOut,
+  SlidersHorizontal,
+  DoorOpen,
+  ShieldOff,
+  Zap,
+  Timer,
+  ShoppingBag,
+  Ticket,
+  Trophy,
+  ClipboardCheck,
+  Coins,
+  Dices,
+  Gift,
+  Terminal,
+  ScrollText,
+  UserCheck,
+  UserPlus,
+  ShieldAlert,
+  LayoutPanelTop,
+  Database,
+  Users,
+  ChevronLeft,
+  CircuitBoard,
+  type LucideIcon,
+} from 'lucide-react';
+
+interface NavItem {
+  label: string;
+  path: string;
+  roles: string[];
+  icon: LucideIcon;
+}
+
+interface NavSection {
+  section: string;
+  items: NavItem[];
+}
 
 export default function DashboardLayout({
   children,
@@ -48,38 +87,68 @@ export default function DashboardLayout({
       .finally(() => setLoading(false));
   }, [guildId]);
 
-  let navItems = [
-    { label: '基本・評価設定', path: `/dashboard/${guildId}`, roles: ['admin', 'subadmin'] },
-    { label: 'VCルーム設定', path: `/dashboard/${guildId}/rooms`, roles: ['admin', 'subadmin'] },
-    { label: '評価落ちVCアクセス制御', path: `/dashboard/${guildId}/room-access`, roles: ['admin', 'subadmin'] },
-    { label: 'VCトリガー設定', path: `/dashboard/${guildId}/vc-triggers`, roles: ['admin', 'subadmin'] },
-    { label: 'ショップ設定', path: `/dashboard/${guildId}/shop`, roles: ['admin', 'shop', 'subadmin'] },
-    { label: 'チケット設定', path: `/dashboard/${guildId}/tickets`, roles: ['admin', 'subadmin'] },
-    { label: 'ランク設定', path: `/dashboard/${guildId}/rank`, roles: ['admin', 'subadmin'] },
-    { label: '評価関連設定', path: `/dashboard/${guildId}/eval-sheet`, roles: ['admin', 'subadmin'] },
-    { label: '経済・レベリング設定', path: `/dashboard/${guildId}/economy`, roles: ['admin', 'subadmin'] },
-    { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'] },
-    { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'] },
-    { label: 'VCコイン獲得制限', path: `/dashboard/${guildId}/vc-coins`, roles: ['admin', 'subadmin'] },
-    { label: 'コマンド設定', path: `/dashboard/${guildId}/commands`, roles: ['admin', 'subadmin'] },
-    { label: 'ログ出力設定', path: `/dashboard/${guildId}/logs`, roles: ['admin', 'subadmin'] },
-    { label: '面接官設定', path: `/dashboard/${guildId}/interviewer`, roles: ['admin', 'subadmin'] },
-    { label: '条件ロール付与設定', path: `/dashboard/${guildId}/self-intro-role`, roles: ['admin', 'subadmin'] },
-    { label: '荒らし対策設定', path: `/dashboard/${guildId}/antigrief`, roles: ['admin', 'subadmin'] },
-    { label: 'その他パネル設定', path: `/dashboard/${guildId}/other-panels`, roles: ['admin', 'subadmin'] },
-    { label: 'データベース設定', path: `/dashboard/${guildId}/database`, roles: ['admin', 'subadmin'] },
-    { label: 'アカウント設定', path: `/dashboard/${guildId}/accounts`, roles: ['admin'] },
+  const navSections: NavSection[] = [
+    {
+      section: '全般',
+      items: [
+        { label: '基本・評価設定', path: `/dashboard/${guildId}`, roles: ['admin', 'subadmin'], icon: SlidersHorizontal },
+      ],
+    },
+    {
+      section: 'ボイスチャンネル',
+      items: [
+        { label: 'VCルーム設定', path: `/dashboard/${guildId}/rooms`, roles: ['admin', 'subadmin'], icon: DoorOpen },
+        { label: '評価落ちVCアクセス制御', path: `/dashboard/${guildId}/room-access`, roles: ['admin', 'subadmin'], icon: ShieldOff },
+        { label: 'VCトリガー設定', path: `/dashboard/${guildId}/vc-triggers`, roles: ['admin', 'subadmin'], icon: Zap },
+        { label: 'VCコイン獲得制限', path: `/dashboard/${guildId}/vc-coins`, roles: ['admin', 'subadmin'], icon: Timer },
+      ],
+    },
+    {
+      section: 'エンゲージメント',
+      items: [
+        { label: 'ショップ設定', path: `/dashboard/${guildId}/shop`, roles: ['admin', 'shop', 'subadmin'], icon: ShoppingBag },
+        { label: 'チケット設定', path: `/dashboard/${guildId}/tickets`, roles: ['admin', 'subadmin'], icon: Ticket },
+        { label: 'ランク設定', path: `/dashboard/${guildId}/rank`, roles: ['admin', 'subadmin'], icon: Trophy },
+        { label: '評価関連設定', path: `/dashboard/${guildId}/eval-sheet`, roles: ['admin', 'subadmin'], icon: ClipboardCheck },
+        { label: '経済・レベリング設定', path: `/dashboard/${guildId}/economy`, roles: ['admin', 'subadmin'], icon: Coins },
+        { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'], icon: Dices },
+        { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'], icon: Gift },
+      ],
+    },
+    {
+      section: '運用・モデレーション',
+      items: [
+        { label: 'コマンド設定', path: `/dashboard/${guildId}/commands`, roles: ['admin', 'subadmin'], icon: Terminal },
+        { label: 'ログ出力設定', path: `/dashboard/${guildId}/logs`, roles: ['admin', 'subadmin'], icon: ScrollText },
+        { label: '面接官設定', path: `/dashboard/${guildId}/interviewer`, roles: ['admin', 'subadmin'], icon: UserCheck },
+        { label: '条件ロール付与設定', path: `/dashboard/${guildId}/self-intro-role`, roles: ['admin', 'subadmin'], icon: UserPlus },
+        { label: '荒らし対策設定', path: `/dashboard/${guildId}/antigrief`, roles: ['admin', 'subadmin'], icon: ShieldAlert },
+        { label: 'その他パネル設定', path: `/dashboard/${guildId}/other-panels`, roles: ['admin', 'subadmin'], icon: LayoutPanelTop },
+      ],
+    },
+    {
+      section: 'システム',
+      items: [
+        { label: 'データベース設定', path: `/dashboard/${guildId}/database`, roles: ['admin', 'subadmin'], icon: Database },
+        { label: 'アカウント設定', path: `/dashboard/${guildId}/accounts`, roles: ['admin'], icon: Users },
+      ],
+    },
   ];
 
-  if (userRole) {
-    navItems = navItems.filter(item => item.roles.includes(userRole));
-    // Remove "アカウント設定" if it's a sub-account (sub-accounts have guild_id, superadmin doesn't)
-    // Actually, 'admin' role means superadmin if they don't have guild_id, but if we just rely on role it's fine.
-    // Let's assume only superadmin gets 'admin' role, sub-accounts get 'shop' or 'gambling'.
-  }
+  const filteredSections = navSections
+    .map(section => ({
+      ...section,
+      items: userRole ? section.items.filter(item => item.roles.includes(userRole)) : section.items,
+    }))
+    .filter(section => section.items.length > 0);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-white">読み込み中...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-white gap-3">
+        <CircuitBoard className="w-5 h-5 text-red-500 animate-pulse" />
+        <span className="text-zinc-400 text-sm tracking-wide">読み込み中...</span>
+      </div>
+    );
   }
 
   // 強制セットアップ画面
@@ -97,9 +166,7 @@ export default function DashboardLayout({
               <span className="font-tech text-[11px] tracking-[0.25em] text-red-500/80 uppercase">System Alert :: Setup Required</span>
             </div>
             <div className="w-16 h-16 mecha-clip-sm bg-red-500/15 border border-red-700/50 text-red-500 flex items-center justify-center mx-auto mb-6">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-              </svg>
+              <Database className="w-8 h-8" />
             </div>
             <h1 className="font-mecha text-2xl md:text-3xl font-black mb-4 text-white tracking-wide">初期設定が必要です</h1>
             <p className="font-tech text-sm text-zinc-400 mb-8 leading-relaxed">
@@ -110,9 +177,7 @@ export default function DashboardLayout({
               href={`/dashboard/${guildId}/database`}
               className="mecha-btn-sheen mecha-clip-sm inline-flex items-center justify-center gap-2 bg-gradient-to-r from-red-700 via-red-600 to-red-800 hover:from-red-600 hover:via-red-500 hover:to-red-700 text-white font-mecha font-bold py-3 px-8 transition-all w-full border border-red-400/30 shadow-lg shadow-red-900/30"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+              <Database className="w-4 h-4" />
               データベース設定へ進む
             </Link>
           </div>
@@ -124,12 +189,17 @@ export default function DashboardLayout({
   return (
     <div className="flex flex-col md:flex-row h-screen min-h-screen bg-zinc-950 text-white overflow-hidden">
       {/* Mobile Header */}
-      <header className={`md:hidden flex-none flex items-center justify-between bg-zinc-900 border-b border-zinc-800 p-4 z-30 ${isActivity ? 'pt-16' : ''}`}>
-        <div>
-          <h2 className="font-bold text-red-500 text-lg">
-            Many bot <span className="text-sm font-normal text-zinc-300 ml-2">{status?.guild_name || ''}</span>
-          </h2>
-          <p className="text-xs text-zinc-400 mt-1">サーバーID: {guildId}</p>
+      <header className={`md:hidden flex-none flex items-center justify-between bg-zinc-900/95 backdrop-blur border-b border-red-900/30 p-4 z-30 ${isActivity ? 'pt-16' : ''}`}>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 mecha-clip-sm bg-gradient-to-br from-red-600 to-red-900 flex items-center justify-center shadow shadow-red-900/40 flex-shrink-0 border border-red-500/30">
+            <CircuitBoard className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h2 className="font-mecha font-bold text-white text-sm leading-tight tracking-wide">
+              Many bot <span className="font-tech text-xs font-normal text-zinc-500 ml-1">{status?.guild_name || ''}</span>
+            </h2>
+            <p className="font-tech text-[10px] text-zinc-500">ID: {guildId}</p>
+          </div>
         </div>
         <button
           onClick={() => setIsMobileMenuOpen(true)}
@@ -143,8 +213,8 @@ export default function DashboardLayout({
       <div className="flex-1 flex overflow-hidden relative">
         {/* Mobile Sidebar Overlay */}
         {isMobileMenuOpen && (
-          <div 
-            className="absolute inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm" 
+          <div
+            className="absolute inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm"
             onClick={() => setIsMobileMenuOpen(false)}
           />
         )}
@@ -152,57 +222,83 @@ export default function DashboardLayout({
         {/* Sidebar */}
         <aside className={`
           absolute md:static inset-y-0 left-0 z-50
-          w-64 bg-zinc-900 border-r border-zinc-800 p-4 flex flex-col
+          w-72 bg-zinc-900/95 backdrop-blur border-r border-zinc-800/80 p-4 flex flex-col
           transform transition-transform duration-300 ease-in-out
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           md:translate-x-0 h-full
         `}>
-          <div className="mb-8 flex justify-between items-start flex-shrink-0">
-            <div>
-              <h2 className="text-xl font-bold text-red-500">
-                Many bot <span className="text-sm font-normal text-zinc-300 ml-2">{status?.guild_name || ''}</span>
-              </h2>
-              <p className="text-xs text-zinc-400 mt-1">サーバーID: {guildId}</p>
-              {!status?.has_dedicated_db && (
-                <div className="mt-3 mecha-clip-sm bg-red-950/40 border border-red-900/70 text-red-400 text-xs px-2.5 py-1.5 flex items-center gap-2">
-                  <span className="mecha-led w-1.5 h-1.5 rounded-full bg-red-500 text-red-500 flex-shrink-0"></span>
-                  <span className="font-tech leading-snug">DEFAULT CORE<br/>専用DB未設定</span>
-                </div>
-              )}
+          <div className="mb-4 flex justify-between items-start flex-shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 mecha-clip-sm bg-gradient-to-br from-red-600 to-red-900 flex items-center justify-center shadow-lg shadow-red-900/40 flex-shrink-0 border border-red-500/30">
+                <CircuitBoard className="w-5 h-5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="font-mecha text-lg font-black text-white leading-tight truncate tracking-wide">Many bot</h2>
+                <p className="font-tech text-[11px] text-zinc-500 truncate">{status?.guild_name || ''}</p>
+              </div>
             </div>
-            <button 
-              className="md:hidden p-2 -mr-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+            <button
+              className="md:hidden p-2 -mr-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors flex-shrink-0"
               onClick={() => setIsMobileMenuOpen(false)}
             >
               <X size={20} />
             </button>
           </div>
-          
-          <nav className="flex-1 min-h-0 space-y-2 overflow-y-auto pr-2 pb-4">
-            {navItems.map((item) => {
-              const isActive = pathname === item.path;
-              return (
-                <Link 
-                  key={item.path} 
-                  href={item.path}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`block px-4 py-3 rounded-lg transition-colors ${isActive ? 'bg-red-600/10 text-red-500 font-bold border-l-4 border-red-500' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+
+          <div className="mb-4 flex-shrink-0 space-y-2">
+            <p className="font-tech text-[10px] text-zinc-500 bg-black/40 border border-zinc-800 mecha-clip-sm px-2.5 py-1.5 tracking-wider">
+              GUILD_ID :: {guildId}
+            </p>
+            {!status?.has_dedicated_db && (
+              <div className="mecha-clip-sm bg-amber-950/40 border border-amber-900/60 text-amber-400 text-xs px-2.5 py-1.5 flex items-center gap-2">
+                <span className="mecha-led w-1.5 h-1.5 rounded-full bg-amber-400 text-amber-400 flex-shrink-0"></span>
+                <span className="font-tech leading-snug">DEFAULT CORE<br />専用DB未設定</span>
+              </div>
+            )}
+          </div>
+
+          <nav className="flex-1 min-h-0 space-y-5 overflow-y-auto pr-1 pb-4">
+            {filteredSections.map((section) => (
+              <div key={section.section}>
+                <p className="px-3 mb-1.5 font-tech text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600">
+                  // {section.section}
+                </p>
+                <div className="space-y-1">
+                  {section.items.map((item) => {
+                    const isActive = pathname === item.path;
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.path}
+                        href={item.path}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`flex items-center gap-2.5 px-3 py-2.5 text-sm transition-all group relative overflow-hidden border-l-2 ${
+                          isActive
+                            ? 'mecha-clip-sm bg-gradient-to-r from-red-600/20 to-transparent text-white font-bold border-red-500'
+                            : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-white border-transparent'
+                        }`}
+                      >
+                        {isActive && <span className="mecha-led absolute right-2 w-1.5 h-1.5 rounded-full bg-red-500 text-red-500"></span>}
+                        <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-red-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                        <span className="truncate font-tech tracking-wide">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
-          
-          <div className="pt-4 border-t border-zinc-800 mt-auto flex-shrink-0 space-y-2">
+
+          <div className="pt-4 border-t border-zinc-800/80 mt-auto flex-shrink-0 space-y-2">
             {!isSubAccount && (
-              <Link href="/" className="text-sm text-zinc-500 hover:text-white flex items-center gap-2">
-                ← サーバー選択に戻る
+              <Link href="/" className="font-tech text-xs text-zinc-500 hover:text-cyan-400 flex items-center gap-2 transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+                サーバー選択に戻る
               </Link>
             )}
             <button
               onClick={handleLogout}
-              className="text-sm text-zinc-500 hover:text-red-400 flex items-center gap-2 transition-colors w-full"
+              className="font-tech text-xs text-zinc-500 hover:text-red-400 flex items-center gap-2 transition-colors w-full"
             >
               <LogOut size={14} />
               ログアウト

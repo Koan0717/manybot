@@ -1,7 +1,8 @@
 ﻿'use client';
 import { useState, useEffect } from 'react';
-import { Save, Loader2, Eye, Shield, Hash, Bell } from 'lucide-react';
+import { Save, Loader2, Eye, Shield, Hash, Bell, UserPlus } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import PageHeader from '@/components/PageHeader';
 
 interface Channel { id: string; name: string; type: number; }
 interface Role { id: string; name: string; color: number; }
@@ -97,10 +98,7 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold mb-2">条件ロール付与設定</h1>
-        <p className="text-zinc-400">入室時に自己紹介チャンネルへ案内し、テンプレートに沿って自己紹介を書いたメンバーへ自動でロールを付与します。</p>
-      </div>
+      <PageHeader icon={UserPlus} title="条件ロール付与設定" subtitle="入室時の自己紹介テンプレートに応じて自動でロールを付与します" />
 
       {/* 有効/無効 */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
@@ -207,7 +205,7 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
 
       {/* 保存ボタン */}
       <div className="flex justify-end pb-8">
-        <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-6 py-3 rounded-lg transition-colors">
+        <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-6 py-3 rounded-lg transition-colors">
           {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
           設定を保存する
         </button>
