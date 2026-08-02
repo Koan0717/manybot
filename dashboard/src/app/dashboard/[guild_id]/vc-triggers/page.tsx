@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Save, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { Save, AlertCircle, Plus, Trash2, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Select from 'react-select';
+import PageHeader from '@/components/PageHeader';
 
 interface DiscordChannel {
   id: string;
@@ -130,16 +131,13 @@ export default function VCTriggersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-            VCトリガー設定
-          </h1>
+    <div className="max-w-4xl mx-auto pb-20 space-y-6">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <PageHeader icon={Zap} title="VCトリガー設定" subtitle="入室をトリガーに自動で個人 VC を作成する仕組みを設定します" />
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+            className="mecha-btn-sheen font-mecha flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-800 hover:from-indigo-500 hover:to-indigo-700 text-white px-4 py-2 rounded-lg font-medium shadow-lg shadow-indigo-900/20 transition-all disabled:opacity-50 -mt-8"
           >
             <Save className="w-5 h-5" />
             {saving ? '保存中...' : '保存'}
@@ -314,6 +312,5 @@ export default function VCTriggersPage() {
           </div>
         </div>
       </div>
-    </div>
   );
 }

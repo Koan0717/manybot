@@ -112,7 +112,7 @@ export default function CommandsPage({ params }: { params: { guild_id: string } 
             key={category}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700"
+            className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl"
           >
             <h2 className="text-xl font-bold text-white mb-4 border-b border-gray-700 pb-2">
               {categoryTranslations[category] || category}

@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import Select from 'react-select';
 import { toast } from 'react-hot-toast';
+import { Ticket } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
 
 export default function TicketsSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -169,11 +171,11 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-white">カスタムチケット設定</h1>
+      <div className="flex justify-between items-center gap-4 flex-wrap mb-2">
+        <PageHeader icon={Ticket} title="カスタムチケット設定" subtitle="問い合わせ用のチケットパネルを管理します" />
         <button 
           onClick={() => openModal()}
-          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold shadow-lg transition-colors"
+          className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-red-900/20 transition-all hover:-translate-y-0.5 -mt-8"
         >
           ＋ パネルを新規作成
         </button>
@@ -185,7 +187,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         </div>
       )}
 
-      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700">
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl">
         <p className="text-sm text-zinc-400 mb-6">
           特定のチャンネルに専用の「お問い合わせ・チケット作成ボタン」を設置できます。
           (設定を保存後、Botが指定されたチャンネルにパネルメッセージを送信します)
@@ -374,7 +376,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                 <button 
                   onClick={savePanel}
                   disabled={saving}
-                  className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-6 py-2 rounded font-bold shadow transition-colors"
+                  className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-6 py-2 rounded font-bold shadow transition-colors"
                 >
                   {saving ? '保存中...' : '保存する'}
                 </button>

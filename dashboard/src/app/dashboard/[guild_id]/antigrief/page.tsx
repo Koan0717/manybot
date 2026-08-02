@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import Select from 'react-select';
 import { toast } from 'react-hot-toast';
+import { ShieldAlert } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
 
 export default function AntigriefSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -88,9 +90,7 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
 
   return (
     <div className="max-w-4xl mx-auto pb-20">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-white">荒らし対策設定</h1>
-      </div>
+      <PageHeader icon={ShieldAlert} title="荒らし対策設定" subtitle="不審な操作からサーバーを自動で守ります" />
 
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">
@@ -100,7 +100,7 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
 
       <div className="space-y-6">
         {/* 全体設定 */}
-        <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700">
+        <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl">
           <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">全体設定</h2>
           
           <div className="flex items-center justify-between bg-zinc-900 p-4 rounded border border-zinc-700">
@@ -121,7 +121,7 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
         </div>
 
         {/* 監視対象の設定 */}
-        <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700">
+        <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl">
           <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">監視対象・免除設定</h2>
           <p className="text-sm text-zinc-400 mb-4">
             特定のチャンネルやカテゴリのみを監視対象にすることができます。未指定の場合は<strong>すべてのチャンネル</strong>が監視対象になります。

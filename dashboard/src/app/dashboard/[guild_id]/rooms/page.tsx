@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import Select from 'react-select';
 import { toast } from 'react-hot-toast';
+import { DoorOpen } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
 
 const defaultPrices = {
   "宿": {
@@ -214,9 +216,7 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
 
   return (
     <div className="max-w-5xl mx-auto pb-20">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-white">VCルーム・宿設定</h1>
-      </div>
+      <PageHeader icon={DoorOpen} title="VCルーム・宿設定" subtitle="宿泊VCの種類・価格・入室条件を管理します" />
 
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">
@@ -225,13 +225,13 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
       )}
 
       {/* --- 価格設定 --- */}
-      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mb-8">
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
         <div className="flex justify-between items-center mb-6 border-b border-zinc-700 pb-2">
           <h2 className="text-xl font-bold text-white">料金設定 (価格)</h2>
           <button
             onClick={handleSavePrices}
             disabled={saving}
-            className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-6 py-2 rounded font-bold shadow-lg transition-colors"
+            className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-6 py-2 rounded font-bold shadow-lg transition-colors"
           >
             {saving ? '保存中...' : '価格設定を保存'}
           </button>
@@ -268,7 +268,7 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
       </div>
 
       {/* --- ロール別特別料金設定 --- */}
-      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mb-8">
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
         <h2 className="text-xl font-bold text-white mb-6 border-b border-zinc-700 pb-2">ロール別特別料金設定</h2>
         <p className="text-sm text-zinc-400 mb-6">
           特定のロールを持っているユーザーに対して、基本料金とは異なる特別料金を適用できます。
@@ -355,7 +355,7 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
       </div>
 
       {/* --- パネル設置 --- */}
-      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700">
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl">
         <h2 className="text-xl font-bold mb-6 border-b border-zinc-700 pb-2 text-white">パネル設置 (遠隔操作)</h2>
         <p className="text-sm text-zinc-400 mb-6">
           ダッシュボードからDiscordの指定したチャンネルに、部屋作成パネルを設置します。<br/>
@@ -454,7 +454,7 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
                       <button
                         onClick={handleSavePrices}
                         disabled={saving}
-                        className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded font-bold shadow transition-colors text-sm"
+                        className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-4 py-2 rounded font-bold shadow transition-colors text-sm"
                       >
                         {saving ? '保存中...' : '設定を保存'}
                       </button>

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
+import { ClipboardCheck } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
 
 function CustomChannelSelect({ multiple, value, onChange, channels, loading }: { multiple: boolean, value: any, onChange: (val: any) => void, channels: any[], loading: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -146,10 +148,7 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-8 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-white mb-2">評価関連設定</h1>
-        <p className="text-zinc-400">自己紹介での評価シートの自動作成や、通貨がマイナスになった際のペナルティなどを設定します。</p>
-      </div>
+      <PageHeader icon={ClipboardCheck} title="評価関連設定" subtitle="自己紹介での評価シートの自動作成や、通貨がマイナスになった際のペナルティなどを設定します" />
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6 shadow-xl">
         <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
