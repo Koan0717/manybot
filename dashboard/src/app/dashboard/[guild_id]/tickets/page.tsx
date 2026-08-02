@@ -115,21 +115,23 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         })
       });
       
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.success) {
         // Update local state
         setPanels(prev => {
-          const exists = prev.find(p => p.channel_id === formData.channel_id);
+          const exists = prev.find(p => String(p.channel_id) === String(formData.channel_id));
           if (exists) {
-            return prev.map(p => p.channel_id === formData.channel_id ? formData : p);
+            return prev.map(p => String(p.channel_id) === String(formData.channel_id) ? formData : p);
           }
           return [...prev, formData];
         });
         setIsModalOpen(false);
+        toast.success('保存しました！');
       } else {
-        toast.error('保存に失敗しました');
+        toast.error('保存に失敗しました: ' + (data.error || '不明なエラー'));
       }
-    } catch (e) {
-      toast.error('エラーが発生しました');
+    } catch (e: any) {
+      toast.error('エラーが発生しました: ' + (e.message || String(e)));
     } finally {
       setSaving(false);
     }

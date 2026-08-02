@@ -157,8 +157,8 @@ export async function setupDbSchema(client: any) {
             guild_id BIGINT
         );
         CREATE TABLE IF NOT EXISTS custom_ticket_panels (
+            channel_id BIGINT PRIMARY KEY,
             guild_id BIGINT,
-            channel_id BIGINT,
             panel_title TEXT,
             panel_description TEXT,
             button_label TEXT DEFAULT 'チケットを作成する',
@@ -166,8 +166,7 @@ export async function setupDbSchema(client: any) {
             mention_role_ids BIGINT[] DEFAULT '{}'::BIGINT[],
             target_role_ids BIGINT[] DEFAULT '{}'::BIGINT[],
             ticket_prefix TEXT DEFAULT 'ticket',
-            panel_type TEXT DEFAULT 'custom_ticket',
-            PRIMARY KEY (guild_id, channel_id)
+            panel_type TEXT DEFAULT 'custom_ticket'
         );
         CREATE TABLE IF NOT EXISTS panel_requests (
             id SERIAL PRIMARY KEY,

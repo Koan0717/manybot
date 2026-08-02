@@ -51,6 +51,7 @@ export default function DashboardLayout({
   let navItems = [
     { label: '基本・評価設定', path: `/dashboard/${guildId}`, roles: ['admin', 'subadmin'] },
     { label: 'VCルーム設定', path: `/dashboard/${guildId}/rooms`, roles: ['admin', 'subadmin'] },
+    { label: '評価落ちVCアクセス制御', path: `/dashboard/${guildId}/room-access`, roles: ['admin', 'subadmin'] },
     { label: 'VCトリガー設定', path: `/dashboard/${guildId}/vc-triggers`, roles: ['admin', 'subadmin'] },
     { label: 'ショップ設定', path: `/dashboard/${guildId}/shop`, roles: ['admin', 'shop', 'subadmin'] },
     { label: 'チケット設定', path: `/dashboard/${guildId}/tickets`, roles: ['admin', 'subadmin'] },

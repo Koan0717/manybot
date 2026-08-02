@@ -416,6 +416,23 @@ class VCRenamePanelView(discord.ui.View):
 
 # --- 購入用Views & Modals ---
 async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
+    # --- 評価落ちロールによるアクセス制御 ---
+    # ROOM_ACCESS_LOW_EVAL_{panel_id} が False のとき、評価落ちロール保持者は弾く
+    setting_key = f"ROOM_ACCESS_LOW_EVAL_{panel_id}"
+    allow_low_eval = get_setting(bot, setting_key, guild.id)
+    # 設定が明示的に False になっている場合のみ制限（未設定 or True なら許可）
+    if allow_low_eval is False:
+        downgrade_role_id = get_setting(bot, "DOWNGRADE_ROLE_ID", guild.id)
+        if downgrade_role_id:
+            try:
+                downgrade_role_id = int(downgrade_role_id)
+                member_role_ids = [r.id for r in member.roles]
+                if downgrade_role_id in member_role_ids:
+                    return False  # 評価落ちロール保持者は利用不可
+            except (ValueError, TypeError):
+                pass
+
+    # --- 既存のパネル別設定チェック ---
     configs = get_setting(bot, "ROOM_PANEL_CONFIGS", guild.id)
     if not configs or not isinstance(configs, dict) or panel_id not in configs:
         return True # 設定がなければ全員許可
@@ -433,6 +450,7 @@ async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
         if not allow_main_sub: return False
         
     return True
+
 
 
 async def process_room_purchase(bot, interaction: discord.Interaction, room_type: str, duration: int, panel_id: str = None):
