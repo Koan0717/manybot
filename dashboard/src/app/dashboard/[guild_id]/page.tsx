@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
+import { SlidersHorizontal } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
 
 function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: boolean, value: any, onChange: (val: any) => void, roles: any[], loading: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -181,9 +183,9 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
 
   return (
     <div className="max-w-4xl mx-auto pb-20">
-      <h1 className="text-3xl font-bold mb-8 text-white">基本・評価設定</h1>
+      <PageHeader icon={SlidersHorizontal} title="基本・評価設定" subtitle="Botの基本動作と評価システムを設定します" />
       
-      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mb-8">
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
         <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">ボットプロファイル設定</h2>
         <p className="text-sm text-zinc-400 mb-6">
           このサーバー内でのボットのニックネームを設定できます。（未設定の場合はデフォルト名になります）
@@ -202,7 +204,7 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
         </div>
       </div>
 
-      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 mb-8">
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
         <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">すべてのロール設定</h2>
         <p className="text-sm text-zinc-400 mb-6">
           Botが使用する各種機能の対象ロールを一括で設定できます。複数選択が可能な項目もあります。
@@ -229,7 +231,7 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
         <div className="mt-8 border-t border-zinc-700 pt-4">
           <button 
             onClick={handleSave}
-            className="bg-red-600 hover:bg-red-700 text-white transition-colors px-8 py-3 rounded-lg font-bold disabled:opacity-50 w-full md:w-auto flex items-center justify-center gap-2" 
+            className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 text-white transition-colors px-8 py-3 rounded-lg font-bold disabled:opacity-50 w-full md:w-auto flex items-center justify-center gap-2" 
             disabled={loading || saving}
           >
             {saving ? '保存中...' : '設定を保存する'}

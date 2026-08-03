@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import Select from 'react-select';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { toast } from 'react-hot-toast';
+import { LayoutPanelTop } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
 
 export default function OtherPanelsSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -129,10 +131,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
 
   return (
     <div className="max-w-5xl mx-auto pb-12">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-white">その他パネル設定</h1>
-        <p className="text-zinc-400 mt-2">任意ロールパネル（リアクションでロールを付与・剥奪するパネル）をチャンネルに直接送信して設置します。</p>
-      </div>
+      <PageHeader icon={LayoutPanelTop} title="その他パネル設定" subtitle="任意ロールパネル（リアクションでロールを付与・剥奪）をチャンネルに送信して設置します" />
 
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">
@@ -140,7 +139,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
         </div>
       )}
 
-      <div className="bg-neutral-800 rounded-lg p-6 shadow-xl border border-neutral-700 max-w-3xl">
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl max-w-3xl">
         <div className="space-y-6">
           <div>
             <label className="block text-sm font-bold text-zinc-300 mb-2">送信先チャンネル <span className="text-red-500">*</span></label>
@@ -248,7 +247,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
             <button 
               onClick={handleSubmit}
               disabled={submitting}
-              className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-8 py-3 rounded-lg font-bold shadow-lg transition-colors flex items-center gap-2"
+              className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-8 py-3 rounded-lg font-bold shadow-lg transition-colors flex items-center gap-2"
             >
               {submitting ? '設置しています...' : '🚀 指定チャンネルにパネルを設置する'}
             </button>
