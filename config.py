@@ -78,7 +78,8 @@ DEFAULT_SETTINGS = {
     "VC_XP_PER_MIN": 15,
     "INITIAL_COINS": 30000,
     "ENABLE_EXCLUDE_RANK_ROLE": False,
-    "EXCLUDE_RANK_ROLE_IDS": []
+    "EXCLUDE_RANK_ROLE_IDS": [],
+    "ENABLE_ROLE_BASED_LEVEL_REWARDS": False
 }
 
 import inspect
@@ -280,32 +281,51 @@ def format_evaluation_datetime(dt: datetime.datetime) -> str:
     weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][dt.weekday()]
     return dt.strftime(f"%Y年%m月%d日({weekday_ja}) %H:%M")
 
+def _is_role_based_rewards_enabled(bot, guild_id: int) -> bool:
+    val = get_setting(bot, "ENABLE_ROLE_BASED_LEVEL_REWARDS", guild_id)
+    return str(val).lower() in ["true", "1", "yes", "on"]
+
 async def check_and_assign_level_roles(bot, member: discord.Member, level_type: str, new_level: int):
     # Check if level rewards are enabled
     is_enabled = get_setting(bot, "ENABLE_LEVEL_REWARDS", member.guild.id)
     if str(is_enabled).lower() not in ["true", "1", "yes", "on"]:
         return
 
+    role_based_enabled = _is_role_based_rewards_enabled(bot, member.guild.id)
+    member_role_ids = {r.id for r in member.roles}
+
     try:
         # --- Coin Rewards ---
         coin_rewards = await database.get_level_coin_rewards(member.guild.id, level_type)
         if coin_rewards:
-            for cr in coin_rewards:
+            default_coin_rewards = [cr for cr in coin_rewards if not cr.get("condition_role_id")]
+            conditional_coin_rewards = [cr for cr in coin_rewards if cr.get("condition_role_id")]
+
+            active_coin_rewards = default_coin_rewards
+            if role_based_enabled:
+                matched = [cr for cr in conditional_coin_rewards if cr["condition_role_id"] in member_role_ids and cr["level"] == new_level]
+                if matched:
+                    active_coin_rewards = matched
+
+            total_coins = 0
+            for cr in active_coin_rewards:
                 if cr["level"] == new_level:
-                    await database.add_balance(member.guild.id, member.id, cr["coins"])
-                    lv_channel_id = get_setting(bot, "LEVEL_UP_CHANNEL_ID", member.guild.id)
-                    if lv_channel_id:
-                        lv_channel = member.guild.get_channel(lv_channel_id)
-                        if lv_channel:
-                            currency = get_setting(bot, "CURRENCY_NAME", member.guild.id) or "Rune"
-                            await lv_channel.send(f"🪙 {member.mention} が {level_type.upper()} レベル {new_level} に到達したボーナスとして、**{cr['coins']} {currency}** を獲得しました！")
+                    total_coins += cr["coins"]
+
+            if total_coins > 0:
+                await database.add_balance(member.guild.id, member.id, total_coins)
+                lv_channel_id = get_setting(bot, "LEVEL_UP_CHANNEL_ID", member.guild.id)
+                if lv_channel_id:
+                    lv_channel = member.guild.get_channel(lv_channel_id)
+                    if lv_channel:
+                        currency = get_setting(bot, "CURRENCY_NAME", member.guild.id) or "Rune"
+                        await lv_channel.send(f"🪙 {member.mention} が {level_type.upper()} レベル {new_level} に到達したボーナスとして、**{total_coins} {currency}** を獲得しました！")
 
         # --- Role Rewards ---
         cfg = bot.get_rank_config(member.guild.id)
         exclude_enabled = cfg.get("enable_exclude_rank_role", False)
         if str(exclude_enabled).lower() in ["true", "1", "yes", "on", "True"]:
             exclude_role_ids = cfg.get("exclude_rank_role_ids", [])
-            member_role_ids = [r.id for r in member.roles]
             if any(r_id in exclude_role_ids for r_id in member_role_ids):
                 return
 
@@ -313,8 +333,18 @@ async def check_and_assign_level_roles(bot, member: discord.Member, level_type: 
         if not rewards:
             return
 
+        default_rewards = [r for r in rewards if not r.get("condition_role_id")]
+        conditional_rewards = [r for r in rewards if r.get("condition_role_id")]
+
+        # ロール別報酬がONの場合、ユーザーが持つ条件ロールに一致するルール群を優先して使用する
+        active_rewards = default_rewards
+        if role_based_enabled:
+            matched = [r for r in conditional_rewards if r["condition_role_id"] in member_role_ids]
+            if matched:
+                active_rewards = matched
+
         target_level = -1
-        for r in rewards:
+        for r in active_rewards:
             if r["level"] <= new_level:
                 target_level = max(target_level, r["level"])
 
@@ -324,13 +354,21 @@ async def check_and_assign_level_roles(bot, member: discord.Member, level_type: 
         roles_to_add = []
         roles_to_remove = []
 
-        for r in rewards:
+        for r in active_rewards:
             role = member.guild.get_role(r["role_id"])
             if not role: continue
 
             if r["level"] == target_level:
                 roles_to_add.append(role)
             else:
+                roles_to_remove.append(role)
+
+        # 過去に付与された他トラック（他条件ロール/デフォルト）の報酬ロールも整理して重複を防ぐ
+        for r in rewards:
+            if r in active_rewards:
+                continue
+            role = member.guild.get_role(r["role_id"])
+            if role and role not in roles_to_add and role not in roles_to_remove:
                 roles_to_remove.append(role)
 
         new_roles = [r for r in member.roles if r not in roles_to_remove]

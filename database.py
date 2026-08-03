@@ -446,6 +446,20 @@ async def setup_db_schema(p):
         except Exception as e:
             print(f"[Migration] antigrief_settings migration warning: {e}")
 
+        try:
+            await conn.execute('ALTER TABLE level_role_rewards ADD COLUMN IF NOT EXISTS condition_role_id BIGINT DEFAULT NULL')
+            await conn.execute('ALTER TABLE level_role_rewards DROP CONSTRAINT IF EXISTS level_role_rewards_pkey')
+            await conn.execute('ALTER TABLE level_role_rewards ADD PRIMARY KEY (guild_id, level_type, level, role_id, condition_role_id)')
+        except Exception as e:
+            print(f"[Migration] level_role_rewards condition_role_id migration warning: {e}")
+
+        try:
+            await conn.execute('ALTER TABLE level_coin_rewards ADD COLUMN IF NOT EXISTS condition_role_id BIGINT DEFAULT NULL')
+            await conn.execute('ALTER TABLE level_coin_rewards DROP CONSTRAINT IF EXISTS level_coin_rewards_pkey')
+            await conn.execute('ALTER TABLE level_coin_rewards ADD PRIMARY KEY (guild_id, level_type, level, condition_role_id)')
+        except Exception as e:
+            print(f"[Migration] level_coin_rewards condition_role_id migration warning: {e}")
+
 
 
 
@@ -464,7 +478,9 @@ async def setup_db_schema(p):
 
                 role_id BIGINT,
 
-                PRIMARY KEY (guild_id, level_type, level, role_id)
+                condition_role_id BIGINT DEFAULT NULL,
+
+                PRIMARY KEY (guild_id, level_type, level, role_id, condition_role_id)
 
             )
 
@@ -1016,7 +1032,9 @@ async def setup_db_schema(p):
 
                 coins INTEGER,
 
-                PRIMARY KEY (guild_id, level_type, level)
+                condition_role_id BIGINT DEFAULT NULL,
+
+                PRIMARY KEY (guild_id, level_type, level, condition_role_id)
 
             )
 
@@ -1887,7 +1905,7 @@ async def load_settings() -> dict:
 
 
 
-async def add_level_role_reward(guild_id: int, level_type: str, level: int, role_id: int):
+async def add_level_role_reward(guild_id: int, level_type: str, level: int, role_id: int, condition_role_id: int = None):
 
     p = await get_pool(guild_id)
 
@@ -1895,13 +1913,13 @@ async def add_level_role_reward(guild_id: int, level_type: str, level: int, role
 
         await conn.execute('''
 
-            INSERT INTO level_role_rewards (guild_id, level_type, level, role_id)
+            INSERT INTO level_role_rewards (guild_id, level_type, level, role_id, condition_role_id)
 
-            VALUES ($1, $2, $3, $4)
+            VALUES ($1, $2, $3, $4, $5)
 
-            ON CONFLICT (guild_id, level_type, level, role_id) DO NOTHING
+            ON CONFLICT (guild_id, level_type, level, role_id, condition_role_id) DO NOTHING
 
-        ''', guild_id, level_type, level, role_id)
+        ''', guild_id, level_type, level, role_id, condition_role_id)
 
 
 
@@ -1915,7 +1933,7 @@ async def get_level_role_rewards(guild_id: int, level_type: str = None) -> list[
 
             rows = await conn.fetch('''
 
-                SELECT level_type, level, role_id 
+                SELECT level_type, level, role_id, condition_role_id 
 
                 FROM level_role_rewards 
 
@@ -1929,7 +1947,7 @@ async def get_level_role_rewards(guild_id: int, level_type: str = None) -> list[
 
             rows = await conn.fetch('''
 
-                SELECT level_type, level, role_id 
+                SELECT level_type, level, role_id, condition_role_id 
 
                 FROM level_role_rewards 
 
@@ -1939,11 +1957,11 @@ async def get_level_role_rewards(guild_id: int, level_type: str = None) -> list[
 
             ''', guild_id)
 
-        return [{"level_type": r["level_type"], "level": r["level"], "role_id": r["role_id"]} for r in rows]
+        return [{"level_type": r["level_type"], "level": r["level"], "role_id": r["role_id"], "condition_role_id": r["condition_role_id"]} for r in rows]
 
 
 
-async def remove_level_role_reward(guild_id: int, level_type: str, level: int, role_id: int):
+async def remove_level_role_reward(guild_id: int, level_type: str, level: int, role_id: int, condition_role_id: int = None):
 
     p = await get_pool(guild_id)
 
@@ -1953,9 +1971,9 @@ async def remove_level_role_reward(guild_id: int, level_type: str, level: int, r
 
             DELETE FROM level_role_rewards 
 
-            WHERE guild_id = $1 AND level_type = $2 AND level = $3 AND role_id = $4
+            WHERE guild_id = $1 AND level_type = $2 AND level = $3 AND role_id = $4 AND condition_role_id IS NOT DISTINCT FROM $5
 
-        ''', guild_id, level_type, level, role_id)
+        ''', guild_id, level_type, level, role_id, condition_role_id)
 
 
 
@@ -3033,15 +3051,19 @@ async def add_reaction_role(message_id: int, emoji: str, role_id: int):
 
                     elif table == "level_role_rewards":
 
+                        await conn.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS condition_role_id BIGINT DEFAULT NULL')
+
                         await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey CASCADE')
 
-                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level, role_id)')
+                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level, role_id, condition_role_id)')
 
                     elif table == "level_coin_rewards":
 
+                        await conn.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS condition_role_id BIGINT DEFAULT NULL')
+
                         await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey CASCADE')
 
-                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level)')
+                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level, condition_role_id)')
 
                     print(f"[Migration] Added guild_id to {table} and migrated data.")
 
@@ -3715,7 +3737,7 @@ async def mark_user_item_role_removed(user_item_id: int):
 
 
 
-async def add_level_coin_reward(guild_id: int, level_type: str, level: int, coins: int):
+async def add_level_coin_reward(guild_id: int, level_type: str, level: int, coins: int, condition_role_id: int = None):
 
     p = await get_pool(guild_id)
 
@@ -3723,15 +3745,15 @@ async def add_level_coin_reward(guild_id: int, level_type: str, level: int, coin
 
         await conn.execute('''
 
-            INSERT INTO level_coin_rewards (guild_id, level_type, level, coins)
+            INSERT INTO level_coin_rewards (guild_id, level_type, level, coins, condition_role_id)
 
-            VALUES ($1, $2, $3, $4)
+            VALUES ($1, $2, $3, $4, $5)
 
-            ON CONFLICT (guild_id, level_type, level)
+            ON CONFLICT (guild_id, level_type, level, condition_role_id)
 
             DO UPDATE SET coins = EXCLUDED.coins
 
-        ''', guild_id, level_type, level, coins)
+        ''', guild_id, level_type, level, coins, condition_role_id)
 
 
 
@@ -3745,7 +3767,7 @@ async def get_level_coin_rewards(guild_id: int, level_type: str = None) -> list[
 
             rows = await conn.fetch('''
 
-                SELECT level_type, level, coins 
+                SELECT level_type, level, coins, condition_role_id 
 
                 FROM level_coin_rewards 
 
@@ -3759,7 +3781,7 @@ async def get_level_coin_rewards(guild_id: int, level_type: str = None) -> list[
 
             rows = await conn.fetch('''
 
-                SELECT level_type, level, coins 
+                SELECT level_type, level, coins, condition_role_id 
 
                 FROM level_coin_rewards 
 
@@ -3769,11 +3791,11 @@ async def get_level_coin_rewards(guild_id: int, level_type: str = None) -> list[
 
             ''', guild_id)
 
-        return [{"level_type": r["level_type"], "level": r["level"], "coins": r["coins"]} for r in rows]
+        return [{"level_type": r["level_type"], "level": r["level"], "coins": r["coins"], "condition_role_id": r["condition_role_id"]} for r in rows]
 
 
 
-async def remove_level_coin_reward(guild_id: int, level_type: str, level: int):
+async def remove_level_coin_reward(guild_id: int, level_type: str, level: int, condition_role_id: int = None):
 
     p = await get_pool(guild_id)
 
@@ -3783,9 +3805,9 @@ async def remove_level_coin_reward(guild_id: int, level_type: str, level: int):
 
             DELETE FROM level_coin_rewards 
 
-            WHERE guild_id = $1 AND level_type = $2 AND level = $3
+            WHERE guild_id = $1 AND level_type = $2 AND level = $3 AND condition_role_id IS NOT DISTINCT FROM $4
 
-        ''', guild_id, level_type, level)
+        ''', guild_id, level_type, level, condition_role_id)
 
 
 
