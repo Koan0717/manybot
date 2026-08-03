@@ -135,9 +135,19 @@ export async function setupDbSchema(client: any) {
         );
         CREATE TABLE IF NOT EXISTS level_role_rewards (
             guild_id BIGINT,
+            level_type VARCHAR(10) DEFAULT 'tc',
             level INT,
             role_id BIGINT,
-            PRIMARY KEY (guild_id, level, role_id)
+            condition_role_id BIGINT DEFAULT NULL,
+            PRIMARY KEY (guild_id, level_type, level, role_id, condition_role_id)
+        );
+        CREATE TABLE IF NOT EXISTS level_coin_rewards (
+            guild_id BIGINT,
+            level_type VARCHAR(10) DEFAULT 'tc',
+            level INT,
+            coins INT,
+            condition_role_id BIGINT DEFAULT NULL,
+            PRIMARY KEY (guild_id, level_type, level, condition_role_id)
         );
         CREATE TABLE IF NOT EXISTS room_prices (
             room_type TEXT,
