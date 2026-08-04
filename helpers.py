@@ -898,7 +898,10 @@ async def apply_bot_nicknames(bot):
         try:
             if not icon_url:
                 # 空欄の場合はサーバー別アイコンを解除（グローバルアイコンに戻す）
-                await guild.me.edit(avatar=None)
+                try:
+                    await guild.me.edit(avatar=None)
+                except Exception:
+                    pass
                 bot._bot_icon_applied_urls[guild.id] = None
                 print(f"[apply_bot_icons] Cleared guild icon in {guild.name} ({guild.id})")
             else:
@@ -912,10 +915,19 @@ async def apply_bot_nicknames(bot):
                     print(f"[apply_bot_icons] Failed to fetch image for {guild.name} ({guild.id}): URL {icon_url} is invalid or unreachable")
                     continue
 
-                await guild.me.edit(avatar=image_bytes)
+                try:
+                    # 1. サーバー別アイコン（ギルドアバター）の変更を試行
+                    await guild.me.edit(avatar=image_bytes)
+                    print(f"[apply_bot_icons] Updated guild icon in {guild.name} ({guild.id})")
+                except discord.HTTPException as guild_err:
+                    print(f"[apply_bot_icons] Guild avatar edit failed in {guild.name} ({guild.id}): {guild_err}. Trying global bot user avatar fallback...")
+                    # 2. サーバーブーストレベル不足等でギルドアバター変更が拒否された場合、Bot本体のグローバルアバター変更を試行
+                    try:
+                        await bot.user.edit(avatar=image_bytes)
+                        print(f"[apply_bot_icons] Updated global bot avatar successfully as fallback")
+                    except Exception as global_err:
+                        print(f"[apply_bot_icons] Failed to update global bot avatar: {global_err}")
+
                 bot._bot_icon_applied_urls[guild.id] = icon_url
-                print(f"[apply_bot_icons] Updated guild icon in {guild.name} ({guild.id})")
-        except discord.HTTPException as e:
-            print(f"[apply_bot_icons] Failed to edit icon in {guild.name} ({guild.id}): HTTP {e.status} - {e.text}")
         except Exception as e:
             print(f"[apply_bot_icons] Unexpected error in {guild.name} ({guild.id}): {e}")
