@@ -82,7 +82,7 @@ async def get_all_configured_pools():
 
             except Exception as e:
 
-                print(f"❌ [DB Error] Supabase (専用DB) への接続に失敗しました ({url}): {e}")
+                print(f"[DB Error] Supabase (専用DB) への接続に失敗しました ({url}): {e}")
 
         return all_pools
 
@@ -232,7 +232,7 @@ async def get_pool(guild_id: int = None):
 
             except Exception as e:
 
-                print(f"❌ [DB Error] Supabase (専用DB) への接続に失敗しました (ギルドID: {guild_id}): {e}")
+                print(f"[DB Error] Supabase (専用DB) への接続に失敗しました (ギルドID: {guild_id}): {e}")
 
     return await get_master_pool()
 
@@ -1953,6 +1953,26 @@ async def load_settings() -> dict:
             pass
 
     return settings
+
+async def get_all_sub_bot_tokens() -> dict:
+    sub_bots = {}
+    for p in await get_all_configured_pools():
+        try:
+            rows = await p.fetch("SELECT guild_id, setting_value FROM bot_settings WHERE setting_key = 'SUB_BOT_TOKEN'")
+            for r in rows:
+                g_id = r['guild_id']
+                val = r['setting_value']
+                if val:
+                    try:
+                        token_str = json.loads(val)
+                        if isinstance(token_str, str) and token_str.strip():
+                            sub_bots[g_id] = token_str.strip()
+                    except Exception:
+                        if isinstance(val, str) and val.strip():
+                            sub_bots[g_id] = val.strip()
+        except Exception:
+            pass
+    return sub_bots
 
 
 

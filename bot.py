@@ -269,6 +269,16 @@ class EconomyBot(commands.Bot):
         except Exception as e:
             print(f"[ERROR] Failed to apply bot nicknames on_ready: {e}")
 
+        # サブBot管理マネージャーの初期化・同期 (メインBotのみ実行)
+        if not getattr(self, 'is_sub_bot', False):
+            try:
+                from subbot_manager import get_sub_bot_manager
+                sub_mgr = get_sub_bot_manager(self)
+                await sub_mgr.sync_sub_bots()
+                print("[OK] SubBotManager synced successfully.")
+            except Exception as e:
+                print(f"[ERROR] Failed to sync SubBotManager on_ready: {e}")
+
 bot = EconomyBot()
 
 @bot.tree.error

@@ -2,8 +2,21 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
-import { SlidersHorizontal, ImageIcon, Search, X, Check, ChevronsUpDown } from 'lucide-react';
+import { SlidersHorizontal, ImageIcon, Search, X, Check, ChevronsUpDown, Bot, Key, ExternalLink, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+
+/**
+ * トークンの1つ目のピリオド前のBase64文字列からClient IDをデコードする
+ */
+function getClientIdFromToken(token: string): string | null {
+  if (!token || !token.includes('.')) return null;
+  const parts = token.trim().split('.');
+  try {
+    const raw = typeof window !== 'undefined' ? window.atob(parts[0]) : Buffer.from(parts[0], 'base64').toString('utf-8');
+    if (/^\d{17,20}$/.test(raw)) return raw;
+  } catch (e) {}
+  return null;
+}
 
 /**
  * Googleドライブの共有リンク等を、画像として直接表示できるURLに変換する。
@@ -327,6 +340,10 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
     if (settings['BOT_ICON_URL'] !== undefined) {
       payload['BOT_ICON_URL'] = settings['BOT_ICON_URL'];
     }
+
+    if (settings['SUB_BOT_TOKEN'] !== undefined) {
+      payload['SUB_BOT_TOKEN'] = settings['SUB_BOT_TOKEN'];
+    }
     
     try {
       const res = await fetch(`/api/guilds/${guildId}/settings`, {
@@ -346,6 +363,8 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
       setSaving(false);
     }
   };
+
+  const [showSubBotToken, setShowSubBotToken] = useState(false);
 
   return (
     <div className="max-w-4xl mx-auto pb-20">
@@ -400,6 +419,79 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
               Googleドライブの共有リンク（「リンクを知っている全員が閲覧可」に設定したもの）にも対応しています。反映まで数秒〜数十秒かかる場合があります。
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* 専用サブBot（固有トークン）設定 */}
+      <div className="rounded-xl mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
+        <div className="flex items-center justify-between border-b border-zinc-700 pb-2 mb-4">
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <Bot className="w-5 h-5 text-red-500" />
+            専用サブBot（固有Botトークン）設定
+          </h2>
+          {settings['SUB_BOT_TOKEN'] ? (
+            <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 font-bold">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              専用サブBot設定済み
+            </span>
+          ) : (
+            <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+              メインBotで動作中
+            </span>
+          )}
+        </div>
+
+        <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
+          このサーバー専用のオリジナルBot（固有アバター・固有Bot名）で運用したい場合、Discord Developer Portalで取得したBotトークンを設定してください。
+          未設定の場合は共有のメインBotが自動で動作します。
+        </p>
+
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm text-zinc-300 font-bold flex items-center gap-1.5">
+              <Key className="w-3.5 h-3.5 text-zinc-500" />
+              専用サブBotのトークン (DISCORD_BOT_TOKEN)
+            </label>
+            <div className="relative flex items-center">
+              <input
+                type={showSubBotToken ? "text" : "password"}
+                value={settings['SUB_BOT_TOKEN'] || ''}
+                onChange={(e) => handleChange('SUB_BOT_TOKEN', e.target.value, false)}
+                placeholder="MTUyNTE5NDI0... などのトークン文字列"
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 pr-10 text-white focus:border-red-500 focus:outline-none transition-colors font-mono text-xs"
+              />
+              <button
+                type="button"
+                onClick={() => setShowSubBotToken(!showSubBotToken)}
+                className="absolute right-3 text-zinc-400 hover:text-white transition-colors"
+                title={showSubBotToken ? "トークンを隠す" : "トークンを表示"}
+              >
+                {showSubBotToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-xs text-zinc-500">
+              ※ トークンは暗号化通信でデータベースに安全に保存されます。
+            </p>
+          </div>
+
+          {/* サブBot招待リンクの動的生成 */}
+          {settings['SUB_BOT_TOKEN'] && getClientIdFromToken(settings['SUB_BOT_TOKEN']) && (
+            <div className="p-3 bg-zinc-950/80 border border-zinc-800 rounded-lg flex items-center justify-between gap-4">
+              <div className="text-xs text-zinc-300">
+                <span className="font-bold text-red-400">専用サブBotをサーバーに招待する：</span>
+                <span className="text-zinc-500 ml-1">(Client ID: {getClientIdFromToken(settings['SUB_BOT_TOKEN'])})</span>
+              </div>
+              <a
+                href={`https://discord.com/oauth2/authorize?client_id=${getClientIdFromToken(settings['SUB_BOT_TOKEN'])}&permissions=8&scope=bot%20applications.commands`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mecha-btn-sheen text-xs bg-red-600 hover:bg-red-500 text-white font-bold px-3 py-1.5 rounded flex items-center gap-1.5 transition-colors flex-shrink-0"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                サーバーに招待
+              </a>
+            </div>
+          )}
         </div>
       </div>
 

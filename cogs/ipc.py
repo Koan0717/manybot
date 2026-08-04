@@ -48,7 +48,11 @@ class IPC(commands.Cog):
                             try:
                                 self.bot.bot_settings = await database.load_settings()
                                 await apply_bot_nicknames(self.bot)
-                                print(f"[IPC] Reloaded bot_settings for all guilds")
+                                from subbot_manager import get_sub_bot_manager
+                                sub_mgr = get_sub_bot_manager(self.bot)
+                                if sub_mgr:
+                                    await sub_mgr.sync_sub_bots()
+                                print(f"[IPC] Reloaded bot_settings and synced sub-bots for all guilds")
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload bot_settings: {e}")
 
