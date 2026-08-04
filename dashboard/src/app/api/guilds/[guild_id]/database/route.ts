@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { setupDbSchema } from '@/lib/db';
 
 const masterPool = new Pool({ connectionString: process.env.DATABASE_URL?.replace('?sslmode=require', ''), ssl: { rejectUnauthorized: false } });
 
@@ -68,18 +67,15 @@ export async function POST(
         [guildId, database_url]
       );
 
-      // Setup schema
-      try {
-        await setupDbSchema(newPool);
-      } catch (setupError: any) {
-        console.error('Supabase schema setup failed:', setupError);
-        return NextResponse.json(
-          { error: `Supabaseの接続には成功しましたが、テーブルの初期化に失敗しました: ${setupError.message}` },
-          { status: 500 }
-        );
-      } finally {
-        await newPool.end().catch(() => {});
-      }
+      // 注意: 以前はここで dashboard/src/lib/db.ts の setupDbSchema() を呼んでいたが、
+      // そのスキーマ定義がBot本体(database.py)のものと食い違っており
+      // (例: sticky_templates, anonymous_chats, evaluation_settings など)、
+      // 先にこちらが CREATE TABLE IF NOT EXISTS を実行してしまうと
+      // Bot側が想定するカラムが永久に作られない不具合の原因になっていた。
+      // スキーマ作成はBot本体(database.py の setup_db_schema)に一本化し、
+      // ここでは接続確認のみ行う。実際のテーブル初期化はBotの次回起動時
+      // (setup_db() が guild_databases を全走査する際)に行われる。
+      await newPool.end().catch(() => {});
 
     } else {
       await masterPool.query(
