@@ -43,48 +43,70 @@ def normalize_image_url(url: str) -> str:
 
 async def fetch_image_bytes(session, url: str, max_bytes: int = 10 * 1024 * 1024):
     """
-    指定URLから画像バイト列を取得する。Googleドライブのウイルススキャン確認ページや
-    HTMLページが返ってきた場合はNoneを返す。
+    指定URLから画像バイト列を取得する。Googleドライブのリンクや画像URLに対応。
+    取得失敗時はNoneを返す。
     """
     if not url:
         return None
-    normalized = normalize_image_url(url)
 
-    try:
-        async with session.get(normalized, allow_redirects=True) as resp:
-            if resp.status != 200:
-                return None
-            content_type = resp.headers.get("Content-Type", "")
-            data = await resp.content.read(max_bytes + 1)
+    # Google Drive リンクの場合は複数の取得パターンを試行
+    file_id = None
+    if "drive.google.com" in url or "googleusercontent.com" in url:
+        for pattern in _GDRIVE_ID_PATTERNS:
+            m = pattern.search(url)
+            if m:
+                file_id = m.group(1)
+                break
 
-            if len(data) > max_bytes:
-                return None
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
 
-            # Google Driveの大容量ファイル確認ページ(HTML)対策:
-            # confirm=tトークンが必要な場合、再度リクエストする
-            if "text/html" in content_type and "drive.google.com" in normalized:
-                text = data.decode("utf-8", errors="ignore")
-                m = re.search(r'confirm=([0-9A-Za-z_]+)', text)
-                m_id = re.search(r'id=([a-zA-Z0-9_-]+)', normalized)
-                if m and m_id:
-                    confirm_url = f"https://drive.google.com/uc?export=download&confirm={m.group(1)}&id={m_id.group(1)}"
-                    async with session.get(confirm_url, allow_redirects=True) as resp2:
-                        if resp2.status != 200:
-                            return None
-                        data = await resp2.content.read(max_bytes + 1)
-                        if len(data) > max_bytes:
-                            return None
-                        content_type = resp2.headers.get("Content-Type", "")
+    if file_id:
+        urls_to_try = [
+            f"https://drive.google.com/thumbnail?id={file_id}&sz=w1000",
+            f"https://lh3.googleusercontent.com/d/{file_id}",
+            f"https://drive.google.com/uc?export=download&id={file_id}",
+        ]
+    else:
+        urls_to_try = [normalize_image_url(url)]
 
-            if not content_type.startswith("image/"):
-                # Content-Typeが取れない場合はマジックバイトで簡易判定
-                if not (data[:8] == b'\x89PNG\r\n\x1a\n' or data[:3] == b'\xff\xd8\xff' or data[:6] in (b'GIF87a', b'GIF89a') or data[:4] == b'RIFF'):
-                    return None
+    for target_url in urls_to_try:
+        try:
+            async with session.get(target_url, headers=headers, allow_redirects=True) as resp:
+                if resp.status != 200:
+                    continue
+                content_type = resp.headers.get("Content-Type", "")
+                data = await resp.content.read(max_bytes + 1)
 
-            return data
-    except Exception as e:
-        print(f"[fetch_image_bytes] Failed to fetch image from {url}: {e}")
-        return None
+                if len(data) > max_bytes or len(data) == 0:
+                    continue
+
+                if "text/html" in content_type and "drive.google.com" in target_url:
+                    text = data.decode("utf-8", errors="ignore")
+                    m = re.search(r'confirm=([0-9A-Za-z_]+)', text)
+                    m_id = re.search(r'id=([a-zA-Z0-9_-]+)', target_url)
+                    if m and m_id:
+                        confirm_url = f"https://drive.google.com/uc?export=download&confirm={m.group(1)}&id={m_id.group(1)}"
+                        async with session.get(confirm_url, headers=headers, allow_redirects=True) as resp2:
+                            if resp2.status == 200:
+                                data = await resp2.content.read(max_bytes + 1)
+                                content_type = resp2.headers.get("Content-Type", "")
+
+                # HTMLレスポンスなら画像ではないのでスキップ
+                if data.startswith(b'<!DOCTYPE') or data.startswith(b'<html'):
+                    continue
+
+                if not content_type.startswith("image/"):
+                    # マジックバイトで簡易判定
+                    if not (data[:8] == b'\x89PNG\r\n\x1a\n' or data[:3] == b'\xff\xd8\xff' or data[:6] in (b'GIF87a', b'GIF89a') or data[:4] == b'RIFF'):
+                        continue
+
+                return data
+        except Exception as e:
+            print(f"[fetch_image_bytes] Failed to fetch image from {target_url}: {e}")
+
+    return None
 
 def get_room_settings(bot, guild_id: int = None) -> dict:
     default_settings = {
@@ -846,6 +868,8 @@ async def apply_bot_nicknames(bot):
     if not hasattr(bot, '_bot_icon_applied_urls'):
         bot._bot_icon_applied_urls = {}  # {guild_id: last_applied_url}
 
+    import aiohttp
+
     for guild in bot.guilds:
         settings = bot.bot_settings.get(guild.id, {})
         nick = settings.get("BOT_NICKNAME")
@@ -860,6 +884,7 @@ async def apply_bot_nicknames(bot):
         if current_nick != nick:
             try:
                 await guild.me.edit(nick=nick)
+                print(f"[apply_bot_nicknames] Updated nickname in {guild.name} ({guild.id}) -> {nick}")
             except Exception as e:
                 print(f"[apply_bot_nicknames] Failed to edit nickname in {guild.name} ({guild.id}): {e}")
 
@@ -868,7 +893,7 @@ async def apply_bot_nicknames(bot):
         last_applied = bot._bot_icon_applied_urls.get(guild.id)
 
         if icon_url == last_applied:
-            continue  # 前回と同じ設定なら何もしない（不要なAPI呼び出しを避ける）
+            continue  # 前回と同じ設定なら何もしない
 
         try:
             if not icon_url:
@@ -877,18 +902,20 @@ async def apply_bot_nicknames(bot):
                 bot._bot_icon_applied_urls[guild.id] = None
                 print(f"[apply_bot_icons] Cleared guild icon in {guild.name} ({guild.id})")
             else:
-                import aiohttp
-                async with aiohttp.ClientSession() as session:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                }
+                async with aiohttp.ClientSession(headers=headers) as session:
                     image_bytes = await fetch_image_bytes(session, icon_url)
 
                 if not image_bytes:
-                    print(f"[apply_bot_icons] Failed to fetch image for {guild.name} ({guild.id}): invalid URL or not an image")
+                    print(f"[apply_bot_icons] Failed to fetch image for {guild.name} ({guild.id}): URL {icon_url} is invalid or unreachable")
                     continue
 
                 await guild.me.edit(avatar=image_bytes)
                 bot._bot_icon_applied_urls[guild.id] = icon_url
                 print(f"[apply_bot_icons] Updated guild icon in {guild.name} ({guild.id})")
         except discord.HTTPException as e:
-            print(f"[apply_bot_icons] Failed to edit icon in {guild.name} ({guild.id}): {e}")
+            print(f"[apply_bot_icons] Failed to edit icon in {guild.name} ({guild.id}): HTTP {e.status} - {e.text}")
         except Exception as e:
             print(f"[apply_bot_icons] Unexpected error in {guild.name} ({guild.id}): {e}")

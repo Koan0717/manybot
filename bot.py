@@ -261,6 +261,14 @@ class EconomyBot(commands.Bot):
         print(f"[OK] Bot is ready! Logged in as {self.user} (ID: {self.user.id})")
         print("[OK] Slash commands and persistent views are synced.")
 
+    async def on_ready(self):
+        print(f"[on_ready] Bot logged in as {self.user} (ID: {self.user.id}). Applying nickname & icon settings...")
+        try:
+            from helpers import apply_bot_nicknames
+            await apply_bot_nicknames(self)
+        except Exception as e:
+            print(f"[ERROR] Failed to apply bot nicknames on_ready: {e}")
+
 bot = EconomyBot()
 
 @bot.tree.error
