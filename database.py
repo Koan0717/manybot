@@ -404,6 +404,17 @@ async def setup_db_schema(p):
 
         try:
 
+            await conn.execute('ALTER TABLE anonymous_chats ADD COLUMN IF NOT EXISTS panel_channel_id BIGINT')
+            await conn.execute('ALTER TABLE anonymous_chats ADD COLUMN IF NOT EXISTS dest_channel_id BIGINT')
+
+        except Exception as e:
+
+            print(f"[Migration] anonymous_chats migration warning: {e}")
+
+
+
+        try:
+
             await conn.execute('ALTER TABLE rooms ADD COLUMN IF NOT EXISTS trigger_channel_id BIGINT')
 
         except Exception as e:
