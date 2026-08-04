@@ -435,6 +435,14 @@ async def setup_db_schema(p):
 
             await conn.execute('ALTER TABLE anonymous_chats ADD COLUMN IF NOT EXISTS panel_channel_id BIGINT')
             await conn.execute('ALTER TABLE anonymous_chats ADD COLUMN IF NOT EXISTS dest_channel_id BIGINT')
+            # ダッシュボード(Next.js)側が過去に channel_id/guild_id という別スキーマで
+            # このテーブルを先に作ってしまっていたケースがあり、その場合
+            # panel_channel_id には一意制約が付いていないため
+            # INSERT ... ON CONFLICT (panel_channel_id) が失敗する。ここで補強する。
+            try:
+                await conn.execute('ALTER TABLE anonymous_chats ADD CONSTRAINT anonymous_chats_panel_channel_id_key UNIQUE (panel_channel_id)')
+            except Exception:
+                pass  # 既に制約がある場合はそのまま無視
 
         except Exception as e:
 
