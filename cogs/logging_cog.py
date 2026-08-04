@@ -277,7 +277,8 @@ class Logging(commands.Cog):
         
         await database.remove_inquiry_panel(channel.id)
         await database.remove_anonymous_chat(channel.id)
-        await database.remove_custom_ticket_panel(channel.id)
+        if channel.guild:
+            await database.remove_custom_ticket_panel(channel.guild.id, channel.id)
 
         if channel.guild:
             cfg = self.bot.get_evaluation_config(channel.guild.id)
