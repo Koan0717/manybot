@@ -950,6 +950,9 @@ async def setup_db_schema(p):
 
         try:
 
+            await conn.execute('ALTER TABLE sticky_templates ADD COLUMN IF NOT EXISTS title TEXT')
+            await conn.execute('ALTER TABLE sticky_templates ADD COLUMN IF NOT EXISTS content TEXT')
+            await conn.execute('ALTER TABLE sticky_templates ADD COLUMN IF NOT EXISTS last_message_id BIGINT')
             await conn.execute('ALTER TABLE sticky_templates ADD COLUMN IF NOT EXISTS last_text_message_id BIGINT')
 
         except Exception as e:
