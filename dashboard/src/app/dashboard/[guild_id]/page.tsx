@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'react-hot-toast';
-import { SlidersHorizontal, ImageIcon } from 'lucide-react';
+import { SlidersHorizontal, ImageIcon, Search } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 
 /**
@@ -28,6 +29,10 @@ function normalizeImageUrlForPreview(url: string): string {
 
 function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: boolean, value: any, onChange: (val: any) => void, roles: any[], loading: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dropdownStyle, setDropdownStyle] = useState<{ top: number, left: number, width: number, maxHeight: number, openUpward: boolean }>({ top: 0, left: 0, width: 0, maxHeight: 240, openUpward: false });
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const valArray = multiple ? (Array.isArray(value) ? value : []) : (value ? [value] : []);
 
   if (loading) return <div className="bg-zinc-900 border border-zinc-700 rounded p-2 text-zinc-500 text-sm h-10 flex items-center">読み込み中...</div>;
@@ -46,12 +51,58 @@ function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: b
   };
 
   const selectedRoles = roles.filter(r => valArray.includes(r.id));
+  const filteredRoles = searchTerm
+    ? roles.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    : roles;
+
+  const computePosition = () => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const desiredHeight = 288; // 検索欄 + リスト分の目安の高さ
+    const openUpward = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(160, Math.min(desiredHeight, (openUpward ? spaceAbove : spaceBelow) - 12));
+
+    setDropdownStyle({
+      top: openUpward ? rect.top - 4 : rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      maxHeight,
+      openUpward,
+    });
+  };
+
+  const openDropdown = () => {
+    computePosition();
+    setSearchTerm('');
+    setIsOpen(true);
+  };
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    computePosition();
+    // フォーカスをすぐに検索欄へ
+    const t = setTimeout(() => searchInputRef.current?.focus(), 0);
+
+    const handleReposition = () => computePosition();
+    window.addEventListener('resize', handleReposition);
+    window.addEventListener('scroll', handleReposition, true);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   return (
     <div className="relative">
       <div 
+        ref={triggerRef}
         className="bg-zinc-900 border border-zinc-700 rounded p-2 cursor-pointer hover:border-zinc-500 min-h-[42px] flex flex-wrap gap-1 items-center"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => (isOpen ? setIsOpen(false) : openDropdown())}
       >
         {selectedRoles.length === 0 ? (
           <span className="text-zinc-500 px-1 text-sm">未設定</span>
@@ -64,38 +115,68 @@ function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: b
         )}
       </div>
 
-      {isOpen && (
+      {isOpen && typeof document !== 'undefined' && createPortal(
         <>
-          <div className="fixed inset-0 z-0" onClick={() => setIsOpen(false)}></div>
-          <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded shadow-xl max-h-60 overflow-y-auto p-1">
-            {!multiple && (
-              <div 
-                onClick={() => { onChange(""); setIsOpen(false); }}
-                className="px-3 py-2 cursor-pointer hover:bg-zinc-700 rounded text-sm text-zinc-400"
-              >
-                未設定
+          <div className="fixed inset-0 z-[100]" onClick={() => setIsOpen(false)}></div>
+          <div
+            className="fixed z-[101] bg-zinc-800 border border-zinc-700 rounded shadow-2xl flex flex-col"
+            style={{
+              left: dropdownStyle.left,
+              width: dropdownStyle.width,
+              maxHeight: dropdownStyle.maxHeight,
+              ...(dropdownStyle.openUpward
+                ? { bottom: window.innerHeight - dropdownStyle.top }
+                : { top: dropdownStyle.top }),
+            }}
+          >
+            <div className="p-1.5 border-b border-zinc-700 flex-shrink-0">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2 top-1/2 -translate-y-1/2" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="ロールを検索..."
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded pl-7 pr-2 py-1.5 text-sm text-white focus:outline-none focus:border-red-500"
+                />
               </div>
-            )}
-            {roles.map(r => {
-              const isSelected = valArray.includes(r.id);
-              const roleColor = r.color ? `#${r.color.toString(16).padStart(6, '0')}` : 'white';
-              return (
+            </div>
+            <div className="overflow-y-auto p-1 flex-1">
+              {!multiple && (
                 <div 
-                  key={r.id}
-                  onClick={() => toggleOption(r.id)}
-                  className={`flex items-center px-3 py-2 cursor-pointer rounded text-sm ${isSelected ? 'bg-zinc-700' : 'hover:bg-zinc-700/50'}`}
+                  onClick={() => { onChange(""); setIsOpen(false); }}
+                  className="px-3 py-2 cursor-pointer hover:bg-zinc-700 rounded text-sm text-zinc-400"
                 >
-                  {multiple && (
-                    <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 ${isSelected ? 'bg-red-600 border-red-600' : 'border-zinc-500'}`}>
-                      {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-                    </div>
-                  )}
-                  <span style={{ color: roleColor, fontWeight: isSelected ? 'bold' : 'normal' }}>@ {r.name}</span>
+                  未設定
                 </div>
-              );
-            })}
+              )}
+              {filteredRoles.length === 0 && (
+                <div className="px-3 py-4 text-center text-sm text-zinc-500">該当するロールがありません</div>
+              )}
+              {filteredRoles.map(r => {
+                const isSelected = valArray.includes(r.id);
+                const roleColor = r.color ? `#${r.color.toString(16).padStart(6, '0')}` : 'white';
+                return (
+                  <div 
+                    key={r.id}
+                    onClick={() => toggleOption(r.id)}
+                    className={`flex items-center px-3 py-2 cursor-pointer rounded text-sm ${isSelected ? 'bg-zinc-700' : 'hover:bg-zinc-700/50'}`}
+                  >
+                    {multiple && (
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 flex-shrink-0 ${isSelected ? 'bg-red-600 border-red-600' : 'border-zinc-500'}`}>
+                        {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                      </div>
+                    )}
+                    <span style={{ color: roleColor, fontWeight: isSelected ? 'bold' : 'normal' }}>@ {r.name}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
