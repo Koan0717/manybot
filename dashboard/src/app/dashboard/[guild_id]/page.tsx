@@ -2,8 +2,29 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal, ImageIcon } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+
+/**
+ * Googleドライブの共有リンク等を、画像として直接表示できるURLに変換する。
+ * (Botサーバー側の helpers.normalize_image_url と同じロジックのフロント版。プレビュー表示専用)
+ */
+function normalizeImageUrlForPreview(url: string): string {
+  if (!url) return url;
+  const trimmed = url.trim();
+  if (trimmed.includes('drive.google.com')) {
+    const patterns = [
+      /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/,
+      /drive\.google\.com\/open\?id=([a-zA-Z0-9_-]+)/,
+      /[?&]id=([a-zA-Z0-9_-]+)/,
+    ];
+    for (const p of patterns) {
+      const m = trimmed.match(p);
+      if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w400`;
+    }
+  }
+  return trimmed;
+}
 
 function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: boolean, value: any, onChange: (val: any) => void, roles: any[], loading: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -161,6 +182,10 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
     if (settings['BOT_NICKNAME'] !== undefined) {
       payload['BOT_NICKNAME'] = settings['BOT_NICKNAME'];
     }
+
+    if (settings['BOT_ICON_URL'] !== undefined) {
+      payload['BOT_ICON_URL'] = settings['BOT_ICON_URL'];
+    }
     
     try {
       const res = await fetch(`/api/guilds/${guildId}/settings`, {
@@ -188,7 +213,7 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
       <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
         <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">ボットプロファイル設定</h2>
         <p className="text-sm text-zinc-400 mb-6">
-          このサーバー内でのボットのニックネームを設定できます。（未設定の場合はデフォルト名になります）
+          このサーバー内でのボットのニックネーム・アイコン（サーバー別アバター）を設定できます。（未設定の場合はデフォルトのまま）
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="flex flex-col gap-2">
@@ -200,6 +225,39 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
               placeholder="例: サポートBot"
               className="bg-zinc-900 border border-zinc-700 rounded p-2 text-white focus:border-red-500 focus:outline-none transition-colors"
             />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm text-zinc-300 font-bold flex items-center gap-1.5">
+              <ImageIcon className="w-3.5 h-3.5 text-zinc-500" />
+              ボットのアイコン画像URL
+              <span className="text-xs text-zinc-500 font-normal">(このサーバー限定)</span>
+            </label>
+            <div className="flex items-center gap-3">
+              {settings['BOT_ICON_URL'] ? (
+                <img
+                  src={normalizeImageUrlForPreview(settings['BOT_ICON_URL'])}
+                  alt="icon preview"
+                  className="w-10 h-10 rounded-full border border-zinc-700 object-cover flex-shrink-0 bg-zinc-900"
+                  onError={(e) => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+                  onLoad={(e) => { (e.target as HTMLImageElement).style.visibility = 'visible'; }}
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full border border-dashed border-zinc-700 flex items-center justify-center flex-shrink-0 text-zinc-600">
+                  <ImageIcon className="w-4 h-4" />
+                </div>
+              )}
+              <input
+                type="text"
+                value={settings['BOT_ICON_URL'] || ''}
+                onChange={(e) => handleChange('BOT_ICON_URL', e.target.value, false)}
+                placeholder="https://drive.google.com/file/d/xxxx/view など"
+                className="bg-zinc-900 border border-zinc-700 rounded p-2 text-white focus:border-red-500 focus:outline-none transition-colors flex-1 min-w-0"
+              />
+            </div>
+            <p className="text-xs text-zinc-500 mt-0.5">
+              Googleドライブの共有リンク（「リンクを知っている全員が閲覧可」に設定したもの）にも対応しています。反映まで数秒〜数十秒かかる場合があります。
+            </p>
           </div>
         </div>
       </div>

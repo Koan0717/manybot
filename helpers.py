@@ -1,5 +1,6 @@
 import datetime
 import inspect
+import re
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -8,6 +9,82 @@ import os
 import json
 
 JST = datetime.timezone(datetime.timedelta(hours=9))
+
+# --- Botアイコン(サーバーごとのアバター)関連 ---
+
+_GDRIVE_ID_PATTERNS = [
+    re.compile(r"drive\.google\.com/file/d/([a-zA-Z0-9_-]+)"),
+    re.compile(r"drive\.google\.com/open\?id=([a-zA-Z0-9_-]+)"),
+    re.compile(r"drive\.google\.com/uc\?(?:export=[a-z]+&)?id=([a-zA-Z0-9_-]+)"),
+    re.compile(r"[?&]id=([a-zA-Z0-9_-]+)"),
+]
+
+def normalize_image_url(url: str) -> str:
+    """
+    Googleドライブの共有リンク等、画像バイト列を直接返さない形式のURLを
+    直接ダウンロード可能な形式に変換する。対応不可の場合はそのまま返す。
+    """
+    if not url:
+        return url
+    url = url.strip()
+
+    if "drive.google.com" in url:
+        file_id = None
+        for pattern in _GDRIVE_ID_PATTERNS:
+            m = pattern.search(url)
+            if m:
+                file_id = m.group(1)
+                break
+        if file_id:
+            return f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    return url
+
+
+async def fetch_image_bytes(session, url: str, max_bytes: int = 10 * 1024 * 1024):
+    """
+    指定URLから画像バイト列を取得する。Googleドライブのウイルススキャン確認ページや
+    HTMLページが返ってきた場合はNoneを返す。
+    """
+    if not url:
+        return None
+    normalized = normalize_image_url(url)
+
+    try:
+        async with session.get(normalized, allow_redirects=True) as resp:
+            if resp.status != 200:
+                return None
+            content_type = resp.headers.get("Content-Type", "")
+            data = await resp.content.read(max_bytes + 1)
+
+            if len(data) > max_bytes:
+                return None
+
+            # Google Driveの大容量ファイル確認ページ(HTML)対策:
+            # confirm=tトークンが必要な場合、再度リクエストする
+            if "text/html" in content_type and "drive.google.com" in normalized:
+                text = data.decode("utf-8", errors="ignore")
+                m = re.search(r'confirm=([0-9A-Za-z_]+)', text)
+                m_id = re.search(r'id=([a-zA-Z0-9_-]+)', normalized)
+                if m and m_id:
+                    confirm_url = f"https://drive.google.com/uc?export=download&confirm={m.group(1)}&id={m_id.group(1)}"
+                    async with session.get(confirm_url, allow_redirects=True) as resp2:
+                        if resp2.status != 200:
+                            return None
+                        data = await resp2.content.read(max_bytes + 1)
+                        if len(data) > max_bytes:
+                            return None
+                        content_type = resp2.headers.get("Content-Type", "")
+
+            if not content_type.startswith("image/"):
+                # Content-Typeが取れない場合はマジックバイトで簡易判定
+                if not (data[:8] == b'\x89PNG\r\n\x1a\n' or data[:3] == b'\xff\xd8\xff' or data[:6] in (b'GIF87a', b'GIF89a') or data[:4] == b'RIFF'):
+                    return None
+
+            return data
+    except Exception as e:
+        print(f"[fetch_image_bytes] Failed to fetch image from {url}: {e}")
+        return None
 
 def get_room_settings(bot, guild_id: int = None) -> dict:
     default_settings = {
@@ -736,24 +813,58 @@ def format_setting_status(bot, guild, key):
 
 async def apply_bot_nicknames(bot):
     """
-    bot.bot_settings から BOT_NICKNAME を読み取り、各サーバーでのニックネームを更新する。
+    bot.bot_settings から BOT_NICKNAME / BOT_ICON_URL を読み取り、
+    各サーバーでのニックネームとサーバー別アイコン(Botのギルドアバター)を更新する。
     """
     if not hasattr(bot, 'bot_settings'):
         return
-        
+
+    if not hasattr(bot, '_bot_icon_applied_urls'):
+        bot._bot_icon_applied_urls = {}  # {guild_id: last_applied_url}
+
     for guild in bot.guilds:
         settings = bot.bot_settings.get(guild.id, {})
         nick = settings.get("BOT_NICKNAME")
-        
+
         if nick == "":
             nick = None  # 空文字の場合は元の名前に戻す
-            
+
         # 現在のニックネームを取得（未設定の場合は None）
         current_nick = guild.me.nick
-        
+
         # ニックネームが設定値と異なる場合のみ更新を試みる
         if current_nick != nick:
             try:
                 await guild.me.edit(nick=nick)
             except Exception as e:
                 print(f"[apply_bot_nicknames] Failed to edit nickname in {guild.name} ({guild.id}): {e}")
+
+        # --- サーバー別Botアイコンの適用 ---
+        icon_url = settings.get("BOT_ICON_URL") or None
+        last_applied = bot._bot_icon_applied_urls.get(guild.id)
+
+        if icon_url == last_applied:
+            continue  # 前回と同じ設定なら何もしない（不要なAPI呼び出しを避ける）
+
+        try:
+            if not icon_url:
+                # 空欄の場合はサーバー別アイコンを解除（グローバルアイコンに戻す）
+                await guild.me.edit(avatar=None)
+                bot._bot_icon_applied_urls[guild.id] = None
+                print(f"[apply_bot_icons] Cleared guild icon in {guild.name} ({guild.id})")
+            else:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    image_bytes = await fetch_image_bytes(session, icon_url)
+
+                if not image_bytes:
+                    print(f"[apply_bot_icons] Failed to fetch image for {guild.name} ({guild.id}): invalid URL or not an image")
+                    continue
+
+                await guild.me.edit(avatar=image_bytes)
+                bot._bot_icon_applied_urls[guild.id] = icon_url
+                print(f"[apply_bot_icons] Updated guild icon in {guild.name} ({guild.id})")
+        except discord.HTTPException as e:
+            print(f"[apply_bot_icons] Failed to edit icon in {guild.name} ({guild.id}): {e}")
+        except Exception as e:
+            print(f"[apply_bot_icons] Unexpected error in {guild.name} ({guild.id}): {e}")
