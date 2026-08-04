@@ -238,9 +238,38 @@ async def get_pool(guild_id: int = None):
 
 
 
+class _ResilientConn:
+    """
+    setup_db_schema() は数十個の CREATE TABLE / ALTER TABLE を順番に実行するが、
+    途中の1文が例外を投げると(型不一致・ロック・権限エラーなど)、後続の
+    テーブル作成やカラム追加マイグレーションが一切実行されずに関数全体が
+    そこで止まってしまう問題があった。
+
+    このラッパーは conn.execute() の呼び出しだけを横取りし、失敗しても
+    警告を出して次の文へ進めるようにする。setup_db_schema() 本体のSQLは
+    一切変更せず、安全性だけを底上げする。
+    """
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    async def execute(self, query, *args, **kwargs):
+        try:
+            return await self._conn.execute(query, *args, **kwargs)
+        except Exception as e:
+            preview = " ".join(query.split())[:100]
+            print(f"[Schema] Statement failed, continuing with next: {preview}... ({e})")
+            return None
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
 async def setup_db_schema(p):
 
-    async with p.acquire() as conn:
+    async with p.acquire() as raw_conn:
+
+        conn = _ResilientConn(raw_conn)
 
         await conn.execute('''
 
