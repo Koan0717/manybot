@@ -48,13 +48,21 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
     game_vc: true,
     custom_vc: true,
   });
+  const [violatorSettings, setViolatorSettings] = useState<Record<string, boolean>>({
+    inn: true,
+    luxury_inn: true,
+    gambling_vc: true,
+    game_vc: true,
+    custom_vc: true,
+  });
 
   useEffect(() => {
     fetch(`/api/guilds/${guildId}/room-access`)
       .then(r => r.json())
       .then(data => {
         if (!data.error) {
-          setSettings(prev => ({ ...prev, ...data }));
+          if (data.lowEval) setSettings(prev => ({ ...prev, ...data.lowEval }));
+          if (data.violator) setViolatorSettings(prev => ({ ...prev, ...data.violator }));
         }
       })
       .catch(console.error)
@@ -65,13 +73,17 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
     setSettings(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const toggleViolator = (key: string) => {
+    setViolatorSettings(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       const res = await fetch(`/api/guilds/${guildId}/room-access`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({ lowEval: settings, violator: violatorSettings }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
@@ -93,40 +105,29 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
 
   const allAllowed = Object.values(settings).every(v => v === true);
   const allDenied = Object.values(settings).every(v => v === false);
+  const violatorAllAllowed = Object.values(violatorSettings).every(v => v === true);
+  const violatorAllDenied = Object.values(violatorSettings).every(v => v === false);
 
-  return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {/* Header */}
-      <PageHeader icon={Shield} title="評価落ちVCアクセス制御" />
-      <p className="text-zinc-400 text-sm -mt-6">
-        「評価落ちロール」が付与されているメンバーが、各VCチャンネルを利用できるかどうかを設定します。
-        <br />
-        ONにすると評価落ちでも利用できます。OFFにすると評価落ちメンバーはボタンを押しても弾かれます。
-      </p>
-
-      {/* Info Banner */}
-      <div className="bg-amber-950/30 border border-amber-800/50 rounded-xl p-4 flex items-start gap-3">
-        <AlertTriangle size={18} className="text-amber-400 flex-shrink-0 mt-0.5" />
-        <div className="text-sm text-amber-200">
-          <p className="font-semibold mb-1">評価落ちロールについて</p>
-          <p className="text-amber-200/70">
-            「基本・評価設定」ページの <code className="bg-amber-900/50 px-1 rounded">評価落ちロール</code> に設定されたロールが判定に使用されます。
-            評価落ちロールが未設定の場合、このOFF設定は機能しません。
-          </p>
-        </div>
-      </div>
-
+  const renderSection = (
+    sectionSettings: Record<string, boolean>,
+    onToggle: (key: string) => void,
+    onSetAll: (val: boolean) => void,
+    sectionAllAllowed: boolean,
+    sectionAllDenied: boolean,
+    deniedMessage: string
+  ) => (
+    <>
       {/* Quick Buttons */}
       <div className="flex gap-3">
         <button
-          onClick={() => setSettings({ inn: true, luxury_inn: true, gambling_vc: true, game_vc: true, custom_vc: true })}
-          className={`text-sm px-4 py-2 rounded-lg border transition-colors ${allAllowed ? 'bg-green-600/20 border-green-600 text-green-400' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white'}`}
+          onClick={() => onSetAll(true)}
+          className={`text-sm px-4 py-2 rounded-lg border transition-colors ${sectionAllAllowed ? 'bg-green-600/20 border-green-600 text-green-400' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white'}`}
         >
           ✅ 全てON（全部許可）
         </button>
         <button
-          onClick={() => setSettings({ inn: false, luxury_inn: false, gambling_vc: false, game_vc: false, custom_vc: false })}
-          className={`text-sm px-4 py-2 rounded-lg border transition-colors ${allDenied ? 'bg-red-600/20 border-red-600 text-red-400' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white'}`}
+          onClick={() => onSetAll(false)}
+          className={`text-sm px-4 py-2 rounded-lg border transition-colors ${sectionAllDenied ? 'bg-red-600/20 border-red-600 text-red-400' : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white'}`}
         >
           🚫 全てOFF（全部制限）
         </button>
@@ -135,7 +136,7 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
       {/* Settings Cards */}
       <div className="space-y-3">
         {ROOM_TYPES.map(rt => {
-          const isAllowed = settings[rt.key] !== false;
+          const isAllowed = sectionSettings[rt.key] !== false;
           return (
             <div
               key={rt.key}
@@ -167,7 +168,7 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
                     type="checkbox"
                     className="sr-only peer"
                     checked={isAllowed}
-                    onChange={() => toggle(rt.key)}
+                    onChange={() => onToggle(rt.key)}
                   />
                   <div className="w-12 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:bg-green-600 peer-not-checked:bg-red-800/70"></div>
                 </label>
@@ -176,12 +177,62 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
               {!isAllowed && (
                 <div className="mt-3 pt-3 border-t border-red-900/40 text-xs text-red-300/70 flex items-center gap-1.5">
                   <Lock size={11} />
-                  評価落ちロールを持つメンバーはこのVCを利用できません
+                  {deniedMessage}
                 </div>
               )}
             </div>
           );
         })}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      {/* Header */}
+      <PageHeader icon={Shield} title="評価落ちVCアクセス制御" />
+      <p className="text-zinc-400 text-sm -mt-6">
+        「評価落ちロール」「違反者ロール」が付与されているメンバーが、各VCチャンネルを利用できるかどうかを設定します。
+        <br />
+        ONにするとそのロールを持っていても利用できます。OFFにするとボタンを押しても弾かれます。
+      </p>
+
+      {/* Info Banner */}
+      <div className="bg-amber-950/30 border border-amber-800/50 rounded-xl p-4 flex items-start gap-3">
+        <AlertTriangle size={18} className="text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="text-sm text-amber-200">
+          <p className="font-semibold mb-1">評価落ちロール・違反者ロールについて</p>
+          <p className="text-amber-200/70">
+            「基本・評価設定」ページの <code className="bg-amber-900/50 px-1 rounded">評価落ちロール</code> / <code className="bg-amber-900/50 px-1 rounded">違反者ロール</code> に設定されたロールが判定に使用されます。
+            ロールが未設定の場合、そのOFF設定は機能しません。
+          </p>
+        </div>
+      </div>
+
+      {/* 評価落ちセクション */}
+      <div className="pt-2">
+        <h2 className="text-white font-semibold text-lg mb-3">評価落ち</h2>
+        {renderSection(
+          settings,
+          toggle,
+          (val) => setSettings({ inn: val, luxury_inn: val, gambling_vc: val, game_vc: val, custom_vc: val }),
+          allAllowed,
+          allDenied,
+          '評価落ちロールを持つメンバーはこのVCを利用できません'
+        )}
+      </div>
+
+      {/* 違反者セクション */}
+      <div className="pt-6 border-t border-zinc-800">
+        <h2 className="text-white font-semibold text-lg mb-3">違反者</h2>
+        {renderSection(
+          violatorSettings,
+          toggleViolator,
+          (val) => setViolatorSettings({ inn: val, luxury_inn: val, gambling_vc: val, game_vc: val, custom_vc: val }),
+          violatorAllAllowed,
+          violatorAllDenied,
+          '違反者ロールを持つメンバーはこのVCを利用できません'
+        )}
       </div>
 
       {/* Save Button */}

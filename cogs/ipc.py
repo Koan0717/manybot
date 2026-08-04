@@ -126,6 +126,40 @@ class IPC(commands.Cog):
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to apply_room_access: {e}")
 
+                        elif panel_type.startswith("apply_room_access_violator_deny:") or panel_type.startswith("apply_room_access_violator_allow:"):
+                            try:
+                                from helpers import get_violator_role_ids
+                                is_deny = panel_type.startswith("apply_room_access_violator_deny:")
+                                room_types_str = panel_type.split(":", 1)[1]
+                                target_room_types = [rt.strip() for rt in room_types_str.split(",") if rt.strip()]
+
+                                violator_role_ids = get_violator_role_ids(self.bot, guild_id)
+                                violator_roles = [guild.get_role(rid) for rid in violator_role_ids]
+                                violator_roles = [r for r in violator_roles if r]
+                                if violator_roles:
+                                    existing_rooms = await database.get_all_rooms_for_guild(guild_id)
+                                    applied = 0
+                                    for room in existing_rooms:
+                                        room_type = room.get("room_type")
+                                        if room_type not in target_room_types:
+                                            continue
+                                        ch = guild.get_channel(room["channel_id"])
+                                        if not ch:
+                                            continue
+                                        for violator_role in violator_roles:
+                                            try:
+                                                if is_deny:
+                                                    await ch.set_permissions(violator_role, view_channel=False, connect=False)
+                                                else:
+                                                    await ch.set_permissions(violator_role, overwrite=None)
+                                                applied += 1
+                                            except Exception as perm_err:
+                                                print(f"[IPC] apply_room_access_violator perm error ch {room['channel_id']}: {perm_err}")
+                                    action = "非表示設定" if is_deny else "表示解除"
+                                    print(f"[IPC] apply_room_access_violator ({action}) {applied}件 in guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to apply_room_access_violator: {e}")
+
                         await database.delete_panel_request(req_id, guild_id)
                         continue
 

@@ -247,6 +247,7 @@ DEFAULT_SETTINGS = {
     "VC_COINS_PER_MIN": 12,
     "BANKER_ROLE_IDS": [],
     "GAMBLE_VIOLATOR_ROLE_ID": 123456789012345678,
+    "GAMBLE_VIOLATOR_ROLE_IDS": [],
     "MINUS_PUNISHMENT_TYPE": "evaluation_failure",
     "ENABLE_ANTIGRIEF": True
 }
@@ -429,11 +430,34 @@ def is_new_member(bot, user: discord.Member) -> bool:
         return True
     return False
 
+def get_violator_role_ids(bot, guild_id: int = None) -> list:
+    """
+    違反者ロールのID一覧を返す。
+    新設定の GAMBLE_VIOLATOR_ROLE_IDS(複数選択)を優先し、
+    未設定の場合は旧設定の GAMBLE_VIOLATOR_ROLE_ID(単一)を後方互換のため使用する。
+    """
+    ids = get_setting(bot, "GAMBLE_VIOLATOR_ROLE_IDS", guild_id)
+    if ids:
+        try:
+            return [int(rid) for rid in ids if rid]
+        except (TypeError, ValueError):
+            pass
+
+    legacy_id = get_setting(bot, "GAMBLE_VIOLATOR_ROLE_ID", guild_id)
+    if legacy_id:
+        try:
+            return [int(legacy_id)]
+        except (TypeError, ValueError):
+            pass
+
+    return []
+
 def is_violator_member(bot, user: discord.Member) -> bool:
-    violator_role_id = get_setting(bot, "GAMBLE_VIOLATOR_ROLE_ID")
-    if violator_role_id and any(r.id == violator_role_id for r in user.roles):
-        return True
-    return False
+    violator_role_ids = get_violator_role_ids(bot, user.guild.id if hasattr(user, "guild") and user.guild else None)
+    if not violator_role_ids:
+        return False
+    user_role_ids = {r.id for r in user.roles}
+    return any(rid in user_role_ids for rid in violator_role_ids)
 
 def get_room_price(bot, user: discord.Member, room_type: str, duration: int) -> int:
     """汎用的なルーム料金計算関数。ロール別特別料金が有効な場合はそれを優先する。"""
