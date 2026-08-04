@@ -238,9 +238,38 @@ async def get_pool(guild_id: int = None):
 
 
 
+class _ResilientConn:
+    """
+    setup_db_schema() は数十個の CREATE TABLE / ALTER TABLE を順番に実行するが、
+    途中の1文が例外を投げると(型不一致・ロック・権限エラーなど)、後続の
+    テーブル作成やカラム追加マイグレーションが一切実行されずに関数全体が
+    そこで止まってしまう問題があった。
+
+    このラッパーは conn.execute() の呼び出しだけを横取りし、失敗しても
+    警告を出して次の文へ進めるようにする。setup_db_schema() 本体のSQLは
+    一切変更せず、安全性だけを底上げする。
+    """
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    async def execute(self, query, *args, **kwargs):
+        try:
+            return await self._conn.execute(query, *args, **kwargs)
+        except Exception as e:
+            preview = " ".join(query.split())[:100]
+            print(f"[Schema] Statement failed, continuing with next: {preview}... ({e})")
+            return None
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
 async def setup_db_schema(p):
 
-    async with p.acquire() as conn:
+    async with p.acquire() as raw_conn:
+
+        conn = _ResilientConn(raw_conn)
 
         await conn.execute('''
 
@@ -399,6 +428,25 @@ async def setup_db_schema(p):
         except Exception as e:
 
             print(f"[Migration] inquiry_panels migration warning: {e}")
+
+
+
+        try:
+
+            await conn.execute('ALTER TABLE anonymous_chats ADD COLUMN IF NOT EXISTS panel_channel_id BIGINT')
+            await conn.execute('ALTER TABLE anonymous_chats ADD COLUMN IF NOT EXISTS dest_channel_id BIGINT')
+            # ダッシュボード(Next.js)側が過去に channel_id/guild_id という別スキーマで
+            # このテーブルを先に作ってしまっていたケースがあり、その場合
+            # panel_channel_id には一意制約が付いていないため
+            # INSERT ... ON CONFLICT (panel_channel_id) が失敗する。ここで補強する。
+            try:
+                await conn.execute('ALTER TABLE anonymous_chats ADD CONSTRAINT anonymous_chats_panel_channel_id_key UNIQUE (panel_channel_id)')
+            except Exception:
+                pass  # 既に制約がある場合はそのまま無視
+
+        except Exception as e:
+
+            print(f"[Migration] anonymous_chats migration warning: {e}")
 
 
 
@@ -910,6 +958,9 @@ async def setup_db_schema(p):
 
         try:
 
+            await conn.execute('ALTER TABLE sticky_templates ADD COLUMN IF NOT EXISTS title TEXT')
+            await conn.execute('ALTER TABLE sticky_templates ADD COLUMN IF NOT EXISTS content TEXT')
+            await conn.execute('ALTER TABLE sticky_templates ADD COLUMN IF NOT EXISTS last_message_id BIGINT')
             await conn.execute('ALTER TABLE sticky_templates ADD COLUMN IF NOT EXISTS last_text_message_id BIGINT')
 
         except Exception as e:

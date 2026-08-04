@@ -1003,7 +1003,8 @@ class Utility(commands.Cog):
     async def on_guild_channel_delete(self, channel):
         await database.remove_inquiry_panel(channel.id)
         await database.remove_anonymous_chat(channel.id)
-        await database.remove_custom_ticket_panel(channel.id)
+        if channel.guild:
+            await database.remove_custom_ticket_panel(channel.guild.id, channel.id)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
