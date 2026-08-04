@@ -432,6 +432,18 @@ async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
             except (ValueError, TypeError):
                 pass
 
+    # --- 違反者ロールによるアクセス制御 ---
+    # ROOM_ACCESS_VIOLATOR_{panel_id} が False のとき、違反者ロール保持者は弾く
+    violator_setting_key = f"ROOM_ACCESS_VIOLATOR_{panel_id}"
+    allow_violator = get_setting(bot, violator_setting_key, guild.id)
+    if allow_violator is False:
+        from helpers import get_violator_role_ids
+        violator_role_ids = get_violator_role_ids(bot, guild.id)
+        if violator_role_ids:
+            member_role_ids = [r.id for r in member.roles]
+            if any(rid in member_role_ids for rid in violator_role_ids):
+                return False  # 違反者ロール保持者は利用不可
+
     # --- 既存のパネル別設定チェック ---
     configs = get_setting(bot, "ROOM_PANEL_CONFIGS", guild.id)
     if not configs or not isinstance(configs, dict) or panel_id not in configs:
@@ -550,6 +562,19 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
                                 await channel.set_permissions(downgrade_role, view_channel=False, connect=False)
                         except Exception as e:
                             print(f"[RoomAccess] 評価落ちロールのパーミッション設定に失敗: {e}")
+
+                # 違反者ロールの表示制御
+                allow_violator = get_setting(bot, f"ROOM_ACCESS_VIOLATOR_{panel_key}", interaction.guild.id)
+                if allow_violator is False:
+                    from helpers import get_violator_role_ids
+                    violator_role_ids = get_violator_role_ids(bot, interaction.guild.id)
+                    for rid in violator_role_ids:
+                        try:
+                            violator_role = interaction.guild.get_role(rid)
+                            if violator_role:
+                                await channel.set_permissions(violator_role, view_channel=False, connect=False)
+                        except Exception as e:
+                            print(f"[RoomAccess] 違反者ロールのパーミッション設定に失敗: {e}")
 
             if duration == 0:
                 expire_at = database.get_now_naive() + datetime.timedelta(days=36500) # 無制限

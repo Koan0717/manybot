@@ -47,11 +47,19 @@ async def trigger_evaluation_failure(guild, target, reason, executor, bot):
     is_minus_trigger = (reason == "通貨マイナスになったため")
     
     if is_minus_trigger and punish_type == "violator":
-        # 違反者ロールを付与
-        role = get_role_by_setting(bot, guild, "GAMBLE_VIOLATOR_ROLE_ID", "違反者")
-        if role and role not in target.roles:
+        # 違反者ロールを付与(複数設定されている場合は全て付与)
+        from helpers import get_violator_role_ids
+        violator_role_ids = get_violator_role_ids(bot, guild.id)
+        roles_to_add = [guild.get_role(rid) for rid in violator_role_ids]
+        roles_to_add = [r for r in roles_to_add if r and r not in target.roles]
+        if not roles_to_add:
+            # 未設定の場合は名前フォールバック
+            fallback_role = get_role_by_setting(bot, guild, "GAMBLE_VIOLATOR_ROLE_ID", "違反者")
+            if fallback_role and fallback_role not in target.roles:
+                roles_to_add = [fallback_role]
+        if roles_to_add:
             try:
-                await target.add_roles(role, reason=reason)
+                await target.add_roles(*roles_to_add, reason=reason)
             except Exception as e:
                 print(f"[Evaluation] Failed to add violator role: {e}")
                 

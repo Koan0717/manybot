@@ -125,7 +125,7 @@ const ROLE_SETTINGS = [
   { key: 'SHOP_MANAGER_ROLE_ID', label: 'ショップ統括ロール', multiple: false },
   { key: 'MINUS_TARGET_ROLE_IDS', label: '通貨マイナス落ち対象ロール', multiple: true },
   { key: 'BANKER_ROLE_IDS', label: '銀行員ロール', multiple: true },
-  { key: 'GAMBLE_VIOLATOR_ROLE_ID', label: '違反者ロール', multiple: false },
+  { key: 'GAMBLE_VIOLATOR_ROLE_IDS', label: '違反者ロール', multiple: true },
 ];
 
 export default function GeneralSettings({ params }: { params: { guild_id: string } }) {
