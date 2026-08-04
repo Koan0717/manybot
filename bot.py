@@ -262,12 +262,22 @@ class EconomyBot(commands.Bot):
         print("[OK] Slash commands and persistent views are synced.")
 
     async def on_ready(self):
-        print(f"[on_ready] Bot logged in as {self.user} (ID: {self.user.id}). Applying nickname & icon settings...")
+        print(f"[on_ready] Bot logged in as {self.user} (ID: {self.user.id}). Syncing commands & settings...")
         try:
             from helpers import apply_bot_nicknames
             await apply_bot_nicknames(self)
         except Exception as e:
             print(f"[ERROR] Failed to apply bot nicknames on_ready: {e}")
+
+        # スラッシュコマンド（初期発行コマンド等56種すべて）を接続中ギルドへ即時同期
+        for guild in self.guilds:
+            try:
+                g_obj = discord.Object(id=guild.id)
+                self.tree.copy_global_to(guild=g_obj)
+                synced = await self.tree.sync(guild=g_obj)
+                print(f"[on_ready] Synced {len(synced)} slash commands to guild {guild.name} ({guild.id})")
+            except Exception as e:
+                print(f"[on_ready ERROR] Failed to sync slash commands to {guild.name} ({guild.id}): {e}")
 
         # サブBot管理マネージャーの初期化・同期 (メインBotのみ実行)
         if not getattr(self, 'is_sub_bot', False):
