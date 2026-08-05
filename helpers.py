@@ -848,11 +848,15 @@ async def _edit_guild_avatar(member: discord.Member, avatar_bytes: bytes | None)
         "/guilds/{guild_id}/members/@me",
         guild_id=member.guild.id,
     )
-    await member._state.http.request(
+    updated_member = await member._state.http.request(
         route,
         json={"avatar": avatar},
         reason="Update bot's server-specific avatar",
     )
+    if avatar is not None and not updated_member.get("avatar"):
+        raise RuntimeError(
+            "Discord did not save the server-specific avatar for this bot account."
+        )
 
 async def apply_bot_nicknames(bot):
     """
