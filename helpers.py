@@ -835,6 +835,21 @@ def format_setting_status(bot, guild, key):
         
     return str(val)
 
+
+async def _edit_guild_avatar(member: discord.Member, avatar_bytes: bytes | None) -> None:
+    """Update the bot's avatar for this guild without changing its global avatar."""
+    avatar = (
+        discord.utils._bytes_to_base64_data(avatar_bytes)
+        if avatar_bytes is not None
+        else None
+    )
+    await member._state.http.edit_member(
+        member.guild.id,
+        member.id,
+        avatar=avatar,
+        reason="Update bot's server-specific avatar",
+    )
+
 async def apply_bot_nicknames(bot):
     """
     bot.bot_settings から BOT_NICKNAME / BOT_ICON_URL を読み取り、
@@ -873,7 +888,7 @@ async def apply_bot_nicknames(bot):
         try:
             if not icon_url:
                 # 空欄の場合はサーバー別アイコンを解除（グローバルアイコンに戻す）
-                await guild.me.edit(avatar=None)
+                await _edit_guild_avatar(guild.me, None)
                 bot._bot_icon_applied_urls[guild.id] = None
                 print(f"[apply_bot_icons] Cleared guild icon in {guild.name} ({guild.id})")
             else:
@@ -885,7 +900,7 @@ async def apply_bot_nicknames(bot):
                     print(f"[apply_bot_icons] Failed to fetch image for {guild.name} ({guild.id}): invalid URL or not an image")
                     continue
 
-                await guild.me.edit(avatar=image_bytes)
+                await _edit_guild_avatar(guild.me, image_bytes)
                 bot._bot_icon_applied_urls[guild.id] = icon_url
                 print(f"[apply_bot_icons] Updated guild icon in {guild.name} ({guild.id})")
         except discord.HTTPException as e:
