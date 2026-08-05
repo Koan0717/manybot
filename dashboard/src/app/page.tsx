@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { CircuitBoard, ChevronRight, ServerCrash, Loader2, Database, Server, CheckCircle2, XCircle, PlusCircle } from 'lucide-react';
 
-const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || '1234567890';
+const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || '';
 let discordSdk: DiscordSDK | null = null;
 
 type ConnStatus = { ok: boolean; latencyMs?: number; error?: string; configured?: boolean };
@@ -15,7 +15,7 @@ export default function Home() {
   const [guilds, setGuilds] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [status, setStatus] = useState<{ supabase: ConnStatus; render: ConnStatus } | null>(null);
+  const [status, setStatus] = useState<{ supabase: ConnStatus; render: ConnStatus; clientId: string | null } | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
 
   useEffect(() => {
@@ -25,6 +25,8 @@ export default function Home() {
       .catch(() => setStatus(null))
       .finally(() => setStatusLoading(false));
   }, []);
+
+  const inviteClientId = status?.clientId || clientId;
 
   useEffect(() => {
     // Check authentication status to handle sub-account redirection
@@ -127,15 +129,21 @@ export default function Home() {
         </div>
 
         {/* Invite Bot */}
-        <a
-          href={`https://discord.com/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mecha-clip-sm mb-6 flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 transition-all text-white font-mecha font-bold py-3 px-4 border border-red-500/30 shadow-lg shadow-red-900/30"
-        >
-          <PlusCircle className="w-4 h-4" />
-          新しいサーバーにBotを招待する
-        </a>
+        {inviteClientId ? (
+          <a
+            href={`https://discord.com/oauth2/authorize?client_id=${inviteClientId}&permissions=8&scope=bot%20applications.commands`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mecha-clip-sm mb-6 flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 transition-all text-white font-mecha font-bold py-3 px-4 border border-red-500/30 shadow-lg shadow-red-900/30"
+          >
+            <PlusCircle className="w-4 h-4" />
+            新しいサーバーにBotを招待する
+          </a>
+        ) : !statusLoading && (
+          <div className="mecha-clip-sm mb-6 flex items-center justify-center gap-2 bg-zinc-900 text-zinc-500 font-tech text-sm py-3 px-4 border border-zinc-800">
+            招待リンクを取得できませんでした(DISCORD_BOT_TOKENを確認してください)
+          </div>
+        )}
 
         <div className="mecha-corners mecha-scan-wrap mecha-grid-bg bg-neutral-900/80 border border-red-900/40 mecha-clip shadow-[0_0_35px_-10px_rgba(255,43,61,0.35)] p-6 md:p-8">
           <h2 className="font-mecha text-lg font-bold mb-6 pb-3 border-b border-red-900/30 flex items-center gap-2 text-zinc-200">

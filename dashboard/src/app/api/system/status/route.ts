@@ -37,5 +37,25 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ supabase, render });
+  // --- Bot招待用のアプリケーションID(client_id)を取得 ---
+  // NEXT_PUBLIC_DISCORD_CLIENT_ID を別途設定する必要が無いよう、
+  // 既に設定済みの DISCORD_BOT_TOKEN から Discord API 経由で取得する。
+  let clientId: string | null = null;
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  if (botToken) {
+    try {
+      const res = await fetch('https://discord.com/api/v10/oauth2/applications/@me', {
+        headers: { Authorization: `Bot ${botToken}` },
+        next: { revalidate: 3600 },
+      });
+      if (res.ok) {
+        const app = await res.json();
+        clientId = app.id;
+      }
+    } catch {
+      // 取得失敗時は null のまま(フロント側でエラー表示)
+    }
+  }
+
+  return NextResponse.json({ supabase, render, clientId });
 }
