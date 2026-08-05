@@ -26,40 +26,32 @@ function normalizeImageUrlForPreview(url: string): string {
   return trimmed;
 }
 
-function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: boolean, value: any, onChange: (val: any) => void, roles: any[], loading: boolean }) {
+function RoleSelect({ 
+  label,
+  multiple, 
+  value, 
+  onChange, 
+  roles, 
+  loading 
+}: { 
+  label: string,
+  multiple: boolean, 
+  value: any, 
+  onChange: (val: any) => void, 
+  roles: any[], 
+  loading: boolean 
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [openUpward, setOpenUpward] = useState(false);
-  const [maxMenuHeight, setMaxMenuHeight] = useState(280);
-  const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const valArray = multiple ? (Array.isArray(value) ? value : []) : (value ? [value] : []);
 
   useEffect(() => {
     if (isOpen && searchInputRef.current) {
-      searchInputRef.current.focus();
+      setTimeout(() => searchInputRef.current?.focus(), 50);
     }
   }, [isOpen]);
-
-  const handleToggleOpen = () => {
-    if (!isOpen && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-
-      // 下のスペースが250px未満で、かつ上の方が広い場合のみ上向きに開く
-      const shouldOpenUp = spaceBelow < 250 && spaceAbove > spaceBelow;
-      setOpenUpward(shouldOpenUp);
-
-      // 上下どちらに開いても画面端を突き抜けないように max-height を動的に制限
-      const availableSpace = shouldOpenUp ? spaceAbove - 24 : spaceBelow - 24;
-      const calculatedMax = Math.max(160, Math.min(300, availableSpace));
-      setMaxMenuHeight(calculatedMax);
-    }
-    setIsOpen(!isOpen);
-    setSearchTerm('');
-  };
 
   if (loading) return <div className="bg-zinc-900 border border-zinc-700 rounded p-2 text-zinc-500 text-sm h-10 flex items-center">読み込み中...</div>;
 
@@ -80,60 +72,95 @@ function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: b
   const filteredRoles = roles.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div>
+      {/* トリガーボタン */}
       <div 
-        className="bg-zinc-900 border border-zinc-700 rounded p-2 cursor-pointer hover:border-zinc-500 min-h-[42px] flex flex-wrap gap-1 items-center justify-between transition-colors"
-        onClick={handleToggleOpen}
+        className="bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 cursor-pointer hover:border-zinc-500 min-h-[44px] flex flex-wrap gap-1.5 items-center justify-between transition-all"
+        onClick={() => { setIsOpen(true); setSearchTerm(''); }}
       >
-        <div className="flex flex-wrap gap-1 items-center flex-1">
+        <div className="flex flex-wrap gap-1.5 items-center flex-1 min-w-0">
           {selectedRoles.length === 0 ? (
             <span className="text-zinc-500 px-1 text-sm">未設定</span>
           ) : (
             selectedRoles.map(r => (
-              <span key={r.id} className="bg-zinc-800 text-xs px-2 py-1 rounded border border-zinc-700 font-bold" style={{ color: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : 'white' }}>
+              <span key={r.id} className="bg-zinc-800 text-xs px-2.5 py-1 rounded border border-zinc-700 font-bold flex items-center gap-1" style={{ color: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : 'white' }}>
                 @ {r.name}
               </span>
             ))
           )}
         </div>
-        <span className="text-zinc-500 text-xs px-2">▼</span>
+        <div className="bg-zinc-800 text-zinc-400 hover:text-white px-2.5 py-1 rounded text-xs border border-zinc-700 flex-shrink-0 flex items-center gap-1 font-bold">
+          <span>選択 / 変更</span>
+        </div>
       </div>
 
+      {/* ロール選択モーダルダイアログ */}
       {isOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
-          <div 
-            className={`absolute z-50 left-0 right-0 bg-zinc-800 border border-zinc-700 rounded shadow-2xl flex flex-col p-2 ${
-              openUpward ? 'bottom-full mb-1' : 'top-full mt-1'
-            }`}
-            style={{ maxHeight: `${maxMenuHeight}px` }}
-          >
-            {/* 検索フィルター */}
-            <div className="mb-2 pb-2 border-b border-zinc-700/80 flex-shrink-0">
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="🔍 ロール名で検索..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                className="w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-red-500"
-              />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150">
+          {/* バックドロップクリックで閉じる */}
+          <div className="absolute inset-0" onClick={() => setIsOpen(false)}></div>
+
+          {/* モーダル本体 */}
+          <div className="relative z-10 w-full max-w-lg bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            
+            {/* モーダルヘッダー */}
+            <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/90">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <span className="text-red-500">●</span> {label}
+                </h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {multiple ? '設定するロールを選択してください（複数選択可）' : '設定するロールを1つ選択してください'}
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsOpen(false)}
+                className="text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-lg w-8 h-8 flex items-center justify-center transition-colors text-sm font-bold"
+              >
+                ✕
+              </button>
             </div>
 
-            {/* ロール一覧リスト */}
-            <div className="overflow-y-auto flex-1 space-y-0.5 custom-scrollbar min-h-0">
+            {/* 検索入力欄 */}
+            <div className="p-4 border-b border-zinc-800 bg-zinc-950/40">
+              <div className="relative">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="🔍 ロール名でリアルタイム検索..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 transition-colors placeholder:text-zinc-500"
+                />
+                {searchTerm && (
+                  <button 
+                    onClick={() => setSearchTerm('')} 
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500 hover:text-zinc-300"
+                  >
+                    クリア
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* ロールリスト */}
+            <div className="overflow-y-auto p-3 flex-1 space-y-1 custom-scrollbar min-h-[200px]">
               {!multiple && (
                 <div 
                   onClick={() => { onChange(""); setIsOpen(false); }}
-                  className="px-3 py-2 cursor-pointer hover:bg-zinc-700/70 rounded text-sm text-zinc-400 flex items-center justify-between"
+                  className={`px-3.5 py-2.5 cursor-pointer rounded-lg text-sm transition-all flex items-center justify-between border ${
+                    valArray.length === 0 ? 'bg-zinc-800 border-zinc-600 text-white font-bold' : 'hover:bg-zinc-800/60 border-transparent text-zinc-400'
+                  }`}
                 >
-                  <span>未設定（選択解除）</span>
-                  {valArray.length === 0 && <span className="text-xs text-red-400">選択中</span>}
+                  <span>未設定（選択を解除）</span>
+                  {valArray.length === 0 && <span className="text-xs bg-red-950 text-red-400 border border-red-800 px-2 py-0.5 rounded">現在選択中</span>}
                 </div>
               )}
+
               {filteredRoles.length === 0 ? (
-                <div className="px-3 py-4 text-sm text-zinc-500 text-center">「{searchTerm}」に一致するロールはありません</div>
+                <div className="py-10 text-center text-zinc-500 text-sm">
+                  「{searchTerm}」に一致するロールは見つかりませんでした
+                </div>
               ) : (
                 filteredRoles.map(r => {
                   const isSelected = valArray.includes(r.id);
@@ -142,21 +169,46 @@ function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: b
                     <div 
                       key={r.id}
                       onClick={() => toggleOption(r.id)}
-                      className={`flex items-center px-3 py-2 cursor-pointer rounded text-sm transition-colors ${isSelected ? 'bg-zinc-700/80 font-bold' : 'hover:bg-zinc-700/40'}`}
+                      className={`flex items-center justify-between px-3.5 py-2.5 cursor-pointer rounded-lg text-sm transition-all border ${
+                        isSelected 
+                          ? 'bg-zinc-800/90 border-zinc-600 shadow-sm' 
+                          : 'hover:bg-zinc-800/40 border-transparent'
+                      }`}
                     >
-                      {multiple && (
-                        <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 flex-shrink-0 ${isSelected ? 'bg-red-600 border-red-600' : 'border-zinc-500'}`}>
-                          {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>}
-                        </div>
+                      <div className="flex items-center gap-3">
+                        {multiple && (
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${
+                            isSelected ? 'bg-red-600 border-red-600' : 'border-zinc-600'
+                          }`}>
+                            {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                          </div>
+                        )}
+                        <span className="font-bold" style={{ color: roleColor }}>@ {r.name}</span>
+                      </div>
+                      {isSelected && !multiple && (
+                        <span className="text-xs bg-red-950 text-red-400 border border-red-800 px-2 py-0.5 rounded">選択中</span>
                       )}
-                      <span style={{ color: roleColor }}>@ {r.name}</span>
                     </div>
                   );
                 })
               )}
             </div>
+
+            {/* フッター */}
+            <div className="p-3.5 border-t border-zinc-800 bg-zinc-900/90 flex items-center justify-between">
+              <span className="text-xs text-zinc-400">
+                選択中: <strong className="text-white">{selectedRoles.length}</strong> 個のロール
+              </span>
+              <button 
+                onClick={() => setIsOpen(false)}
+                className="bg-red-600 hover:bg-red-500 text-white font-bold text-xs px-5 py-2 rounded-lg transition-colors"
+              >
+                決定して閉じる
+              </button>
+            </div>
+
           </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -268,7 +320,7 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
   };
 
   return (
-    <div className="max-w-4xl mx-auto pb-64">
+    <div className="max-w-4xl mx-auto pb-32">
       <PageHeader icon={SlidersHorizontal} title="基本・評価設定" subtitle="Botの基本動作と評価システムを設定します" />
       
       <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
@@ -337,6 +389,7 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
                 {setting.multiple && <span className="ml-2 text-xs text-zinc-500 font-normal">(複数選択可)</span>}
               </label>
               <RoleSelect 
+                label={setting.label}
                 multiple={setting.multiple}
                 value={settings[setting.key] || (setting.multiple ? [] : '')}
                 onChange={(val) => handleChange(setting.key, val, setting.multiple)}
