@@ -30,6 +30,7 @@ function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: b
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [openUpward, setOpenUpward] = useState(false);
+  const [maxMenuHeight, setMaxMenuHeight] = useState(280);
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -45,12 +46,16 @@ function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: b
     if (!isOpen && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
-      // 画面下部のスペースが300px未満の場合は上向きに開く
-      if (spaceBelow < 320) {
-        setOpenUpward(true);
-      } else {
-        setOpenUpward(false);
-      }
+      const spaceAbove = rect.top;
+
+      // 下のスペースが250px未満で、かつ上の方が広い場合のみ上向きに開く
+      const shouldOpenUp = spaceBelow < 250 && spaceAbove > spaceBelow;
+      setOpenUpward(shouldOpenUp);
+
+      // 上下どちらに開いても画面端を突き抜けないように max-height を動的に制限
+      const availableSpace = shouldOpenUp ? spaceAbove - 24 : spaceBelow - 24;
+      const calculatedMax = Math.max(160, Math.min(300, availableSpace));
+      setMaxMenuHeight(calculatedMax);
     }
     setIsOpen(!isOpen);
     setSearchTerm('');
@@ -98,12 +103,13 @@ function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: b
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
           <div 
-            className={`absolute z-50 left-0 right-0 bg-zinc-800 border border-zinc-700 rounded shadow-2xl max-h-72 flex flex-col p-2 ${
+            className={`absolute z-50 left-0 right-0 bg-zinc-800 border border-zinc-700 rounded shadow-2xl flex flex-col p-2 ${
               openUpward ? 'bottom-full mb-1' : 'top-full mt-1'
             }`}
+            style={{ maxHeight: `${maxMenuHeight}px` }}
           >
             {/* 検索フィルター */}
-            <div className="mb-2 pb-2 border-b border-zinc-700/80">
+            <div className="mb-2 pb-2 border-b border-zinc-700/80 flex-shrink-0">
               <input
                 ref={searchInputRef}
                 type="text"
@@ -116,7 +122,7 @@ function RoleSelect({ multiple, value, onChange, roles, loading }: { multiple: b
             </div>
 
             {/* ロール一覧リスト */}
-            <div className="overflow-y-auto max-h-56 flex-1 space-y-0.5 custom-scrollbar">
+            <div className="overflow-y-auto flex-1 space-y-0.5 custom-scrollbar min-h-0">
               {!multiple && (
                 <div 
                   onClick={() => { onChange(""); setIsOpen(false); }}
