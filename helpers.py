@@ -843,10 +843,14 @@ async def _edit_guild_avatar(member: discord.Member, avatar_bytes: bytes | None)
         if avatar_bytes is not None
         else None
     )
-    await member._state.http.edit_member(
-        member.guild.id,
-        member.id,
-        avatar=avatar,
+    route = discord.http.Route(
+        "PATCH",
+        "/guilds/{guild_id}/members/@me",
+        guild_id=member.guild.id,
+    )
+    await member._state.http.request(
+        route,
+        json={"avatar": avatar},
         reason="Update bot's server-specific avatar",
     )
 
