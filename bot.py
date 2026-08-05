@@ -299,6 +299,16 @@ async def check_command_enabled(interaction: discord.Interaction):
         
     return True
 
+@bot.event
+async def on_guild_join(guild: discord.Guild):
+    """新規サーバーに参加した際、自動的にスラッシュコマンドを同期します"""
+    try:
+        bot.tree.copy_global_to(guild=guild)
+        synced = await bot.tree.sync(guild=guild)
+        print(f"[OK] Automatically synced {len(synced)} commands to new guild: {guild.name} ({guild.id})")
+    except Exception as e:
+        print(f"[ERROR] Failed to auto-sync commands to new guild {guild.name} ({guild.id}): {e}")
+
 # --- 中央集権イベント (メインハンドラ) ---
 @bot.event
 async def on_message(message):
