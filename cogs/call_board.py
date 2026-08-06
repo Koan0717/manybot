@@ -208,15 +208,25 @@ class CallBoardJoinView(discord.ui.View):
         except Exception:
             pass
 
-        # 案内通知
+        # 案内通知 (ボタンを押した本人へエフェメラル送信)
         await interaction.followup.send(f"✅ マッチングしました！プライベートVCを作成しました: {vc.mention}", ephemeral=True)
 
-        # 募集表示チャンネル（または設置場所）に通知メッセージ送信 (30秒後自動消去)
+        # 作成されたプライベートVC内のテキストチャットに送信 (当事者2人と管理者のみ閲覧可能)
         try:
-            notify_msg = await interaction.channel.send(
-                f"🔔 {recruiter.mention} {joiner.mention}\n**通話募集がマッチングしました！** 専用VCを作成しました ➜ {vc.mention}"
+            await vc.send(
+                f"🔔 {recruiter.mention} {joiner.mention}\n"
+                f"**通話募集がマッチングしました！**\n"
+                f"このチャンネルは募集者と参加者の2人にしか見えないプライベート空間です。ご自由にお話しください！"
             )
-            asyncio.create_task(delete_message_after(notify_msg, 30))
+        except Exception as e:
+            print(f"[ERROR] Failed to send matching message inside VC: {e}")
+
+        # 募集者のDMにも非公開で通知（募集者が気づけるように）
+        try:
+            await recruiter.send(
+                f"🔔 **通話募集がマッチングしました！**\n"
+                f"{joiner.mention} さんがあなたの通話募集に参加しました！専用VCが作成されました ➜ {vc.mention}"
+            )
         except Exception:
             pass
 
