@@ -117,6 +117,8 @@ class EmblemRequestModal(discord.ui.Modal, title='スタンプ制作依頼'):
             mention_str = " ".join(mentions)
             await ticket_channel.send(content=mention_str, embed=embed, view=TicketControlView())
             await interaction.followup.send(f"✅ チケットを作成しました: {ticket_channel.mention}", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.followup.send("❌ エラー: Botにチャンネル作成権限（チャンネルの管理）がありません。サーバー権限を確認してください。", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"エラーが発生しました: {e}", ephemeral=True)
 
@@ -170,8 +172,12 @@ class EmblemRequestPanelView(discord.ui.View):
 
     @discord.ui.button(label="スタンプを依頼する", style=discord.ButtonStyle.primary, emoji="🎨", custom_id="persistent_emblem_req_btn")
     async def request_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = EmblemSelectView(interaction.client, interaction.guild)
-        await interaction.response.send_message("担当者を選択してください：", view=view, ephemeral=True)
+        try:
+            view = EmblemSelectView(interaction.client, interaction.guild)
+            await interaction.response.send_message("担当者を選択してください：", view=view, ephemeral=True)
+        except Exception as e:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
 # --- 告解室 ---
 class ConfessionRequestModal(discord.ui.Modal, title='告解・相談依頼'):
@@ -246,6 +252,8 @@ class ConfessionRequestModal(discord.ui.Modal, title='告解・相談依頼'):
             mention_str = " ".join(mentions)
             await ticket_channel.send(content=f"{interaction.user.mention} {self.target_member.mention} {mention_str}", embed=embed, view=TicketControlView())
             await interaction.followup.send(f"✅ チケットを作成しました: {ticket_channel.mention}", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.followup.send("❌ エラー: Botにチャンネル作成権限（チャンネルの管理）がありません。サーバー権限を確認してください。", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"エラーが発生しました: {e}", ephemeral=True)
 
@@ -391,6 +399,8 @@ class InquiryRequestModal(discord.ui.Modal, title="お問い合わせ"):
 
             await ticket_channel.send(content=mention_str, embed=embed, view=TicketControlView())
             await interaction.followup.send(f"✅ お問い合わせチケットを作成しました: {ticket_channel.mention}", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.followup.send("❌ エラー: Botにチャンネル作成権限（チャンネルの管理）がありません。サーバー権限を確認してください。", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"エラーが発生しました: {e}", ephemeral=True)
 
@@ -836,6 +846,8 @@ class CustomTicketRequestModal(discord.ui.Modal):
             
             await ticket_channel.send(content=mention_str, embed=embed, view=TicketControlView())
             await interaction.followup.send(f"✅ チケットを作成しました: {ticket_channel.mention}", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.followup.send("❌ エラー: Botにチャンネル作成権限（チャンネルの管理）がありません。サーバー権限を確認してください。", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 

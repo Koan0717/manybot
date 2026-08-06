@@ -290,6 +290,15 @@ async def check_command_enabled(interaction: discord.Interaction):
     
     if interaction.command is None:
         return True
+
+    # ダッシュボード未設定チェック
+    if not hasattr(bot, 'bot_settings') or interaction.guild_id not in bot.bot_settings:
+        await interaction.response.send_message(
+            "❌ このサーバーはまだダッシュボードで初期設定がされていません。\n"
+            "先にダッシュボードからサーバーの設定を行ってください。",
+            ephemeral=True
+        )
+        return False
     
     cmd_name = interaction.command.qualified_name
     is_enabled = await database.is_command_enabled(interaction.guild_id, cmd_name)
@@ -298,6 +307,16 @@ async def check_command_enabled(interaction: discord.Interaction):
         return False
         
     return True
+
+@bot.event
+async def on_guild_join(guild: discord.Guild):
+    """新規サーバーに参加した際、自動的にスラッシュコマンドを同期します"""
+    try:
+        bot.tree.copy_global_to(guild=guild)
+        synced = await bot.tree.sync(guild=guild)
+        print(f"[OK] Automatically synced {len(synced)} commands to new guild: {guild.name} ({guild.id})")
+    except Exception as e:
+        print(f"[ERROR] Failed to auto-sync commands to new guild {guild.name} ({guild.id}): {e}")
 
 # --- 中央集権イベント (メインハンドラ) ---
 @bot.event

@@ -5,6 +5,20 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
   try {
     const guildId = params.guild_id;
     const pool = await getPool(guildId);
+
+    // テーブルが存在しない場合は自動作成（Botが未起動の新規サーバー対応）
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS log_settings (
+        guild_id BIGINT,
+        log_type TEXT,
+        channel_id BIGINT,
+        is_enabled BOOLEAN DEFAULT TRUE,
+        PRIMARY KEY (guild_id, log_type)
+      )
+    `);
+    try {
+      await pool.query('ALTER TABLE log_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT TRUE');
+    } catch (e) {}
     
     const res = await pool.query(
         'SELECT log_type, channel_id, is_enabled FROM log_settings WHERE guild_id = $1',
@@ -31,6 +45,23 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     const guildId = params.guild_id;
     const pool = await getPool(guildId);
     const body = await request.json();
+
+    // テーブルが存在しない場合は自動作成（Botが未起動の新規サーバー対応）
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS log_settings (
+        guild_id BIGINT,
+        log_type TEXT,
+        channel_id BIGINT,
+        is_enabled BOOLEAN DEFAULT TRUE,
+        PRIMARY KEY (guild_id, log_type)
+      )
+    `);
+    // 既存テーブルに is_enabled カラムがない場合は追加
+    try {
+      await pool.query('ALTER TABLE log_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT TRUE');
+    } catch (e) {
+      // ignore if already exists or not supported
+    }
 
     const client = await pool.connect();
     try {

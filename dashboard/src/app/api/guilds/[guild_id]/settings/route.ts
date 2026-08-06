@@ -54,6 +54,26 @@ export async function POST(
   const pool = await getPool(guildId);
   try {
     const body = await request.json();
+
+    // テーブルが存在しない場合は自動作成（Botが未起動の新規サーバー対応）
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS bot_settings (
+        guild_id BIGINT,
+        setting_key TEXT,
+        setting_value TEXT,
+        PRIMARY KEY (guild_id, setting_key)
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS panel_requests (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT,
+        channel_id BIGINT,
+        panel_type TEXT,
+        processed BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     
     // Begin transaction
     const client = await pool.connect();

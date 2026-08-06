@@ -297,7 +297,13 @@ async def setup_db_schema(p):
 
                 vc_xp INTEGER DEFAULT 0,
 
-                vc_level INTEGER DEFAULT 1
+                vc_level INTEGER DEFAULT 1,
+
+                evaluation_vc_time INTEGER DEFAULT 0,
+
+                initial_issued BOOLEAN DEFAULT FALSE,
+
+                event_points INTEGER DEFAULT 0
 
             )
 
@@ -1209,7 +1215,22 @@ async def get_user(guild_id: int, user_id: int):
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT balance, chinchiro_count, chinchiro_last_date, tc_xp, tc_level, vc_xp, vc_level, evaluation_vc_time, initial_issued, chinchiro_daily_bet, event_points FROM users WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+        try:
+            row = await conn.fetchrow('SELECT balance, chinchiro_count, chinchiro_last_date, tc_xp, tc_level, vc_xp, vc_level, evaluation_vc_time, initial_issued, chinchiro_daily_bet, event_points FROM users WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+        except asyncpg.exceptions.UndefinedColumnError:
+            # カラムが存在しない場合、自動的に追加して再試行
+            print("[Auto-Recovery] users テーブルに不足カラムを追加中...")
+            for col_sql in [
+                'ALTER TABLE users ADD COLUMN IF NOT EXISTS evaluation_vc_time INTEGER DEFAULT 0',
+                'ALTER TABLE users ADD COLUMN IF NOT EXISTS initial_issued BOOLEAN DEFAULT FALSE',
+                'ALTER TABLE users ADD COLUMN IF NOT EXISTS event_points INTEGER DEFAULT 0',
+                'ALTER TABLE users ADD COLUMN IF NOT EXISTS chinchiro_daily_bet INTEGER DEFAULT 0',
+            ]:
+                try:
+                    await conn.execute(col_sql)
+                except Exception:
+                    pass
+            row = await conn.fetchrow('SELECT balance, chinchiro_count, chinchiro_last_date, tc_xp, tc_level, vc_xp, vc_level, evaluation_vc_time, initial_issued, chinchiro_daily_bet, event_points FROM users WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
 
         if row:
 
