@@ -39,6 +39,7 @@ interface NavItem {
   path: string;
   roles: string[];
   icon: LucideIcon;
+  group: '評価鯖' | '雑談鯖' | 'その他';
 }
 
 interface NavSection {
@@ -93,57 +94,82 @@ export default function DashboardLayout({
     {
       section: '全般',
       items: [
-        { label: '基本・評価設定', path: `/dashboard/${guildId}`, roles: ['admin', 'subadmin'], icon: SlidersHorizontal },
+        { label: '基本・評価設定', path: `/dashboard/${guildId}`, roles: ['admin', 'subadmin'], icon: SlidersHorizontal, group: '評価鯖' },
       ],
     },
     {
       section: 'ボイスチャンネル',
       items: [
-        { label: 'VCルーム設定', path: `/dashboard/${guildId}/rooms`, roles: ['admin', 'subadmin'], icon: DoorOpen },
-        { label: '通話募集掲示板設定', path: `/dashboard/${guildId}/call-board`, roles: ['admin', 'subadmin'], icon: PhoneCall },
-        { label: '評価落ちVCアクセス制御', path: `/dashboard/${guildId}/room-access`, roles: ['admin', 'subadmin'], icon: ShieldOff },
-        { label: 'VCトリガー設定', path: `/dashboard/${guildId}/vc-triggers`, roles: ['admin', 'subadmin'], icon: Zap },
-        { label: 'VCコイン獲得制限', path: `/dashboard/${guildId}/vc-coins`, roles: ['admin', 'subadmin'], icon: Timer },
+        { label: 'VCルーム設定', path: `/dashboard/${guildId}/rooms`, roles: ['admin', 'subadmin'], icon: DoorOpen, group: '評価鯖' },
+        { label: '通話募集掲示板設定', path: `/dashboard/${guildId}/call-board`, roles: ['admin', 'subadmin'], icon: PhoneCall, group: '雑談鯖' },
+        { label: '評価落ちVCアクセス制御', path: `/dashboard/${guildId}/room-access`, roles: ['admin', 'subadmin'], icon: ShieldOff, group: '評価鯖' },
+        { label: 'VCトリガー設定', path: `/dashboard/${guildId}/vc-triggers`, roles: ['admin', 'subadmin'], icon: Zap, group: '雑談鯖' },
+        { label: 'VCコイン獲得制限', path: `/dashboard/${guildId}/vc-coins`, roles: ['admin', 'subadmin'], icon: Timer, group: '評価鯖' },
       ],
     },
     {
       section: 'エンゲージメント',
       items: [
-        { label: 'ショップ設定', path: `/dashboard/${guildId}/shop`, roles: ['admin', 'shop', 'subadmin'], icon: ShoppingBag },
-        { label: 'チケット設定', path: `/dashboard/${guildId}/tickets`, roles: ['admin', 'subadmin'], icon: Ticket },
-        { label: 'ランク設定', path: `/dashboard/${guildId}/rank`, roles: ['admin', 'subadmin'], icon: Trophy },
-        { label: '評価関連設定', path: `/dashboard/${guildId}/eval-sheet`, roles: ['admin', 'subadmin'], icon: ClipboardCheck },
-        { label: '経済・レベリング設定', path: `/dashboard/${guildId}/economy`, roles: ['admin', 'subadmin'], icon: Coins },
-        { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'], icon: Dices },
-        { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'], icon: Gift },
+        { label: 'ショップ設定', path: `/dashboard/${guildId}/shop`, roles: ['admin', 'shop', 'subadmin'], icon: ShoppingBag, group: '評価鯖' },
+        { label: 'チケット設定', path: `/dashboard/${guildId}/tickets`, roles: ['admin', 'subadmin'], icon: Ticket, group: '雑談鯖' },
+        { label: 'ランク設定', path: `/dashboard/${guildId}/rank`, roles: ['admin', 'subadmin'], icon: Trophy, group: '評価鯖' },
+        { label: '評価関連設定', path: `/dashboard/${guildId}/eval-sheet`, roles: ['admin', 'subadmin'], icon: ClipboardCheck, group: '評価鯖' },
+        { label: '経済・レベリング設定', path: `/dashboard/${guildId}/economy`, roles: ['admin', 'subadmin'], icon: Coins, group: '評価鯖' },
+        { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'], icon: Dices, group: '評価鯖' },
+        { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'], icon: Gift, group: '評価鯖' },
       ],
     },
     {
       section: '運用・モデレーション',
       items: [
-        { label: 'コマンド設定', path: `/dashboard/${guildId}/commands`, roles: ['admin', 'subadmin'], icon: Terminal },
-        { label: 'ログ出力設定', path: `/dashboard/${guildId}/logs`, roles: ['admin', 'subadmin'], icon: ScrollText },
-        { label: '面接官設定', path: `/dashboard/${guildId}/interviewer`, roles: ['admin', 'subadmin'], icon: UserCheck },
-        { label: '条件ロール付与設定', path: `/dashboard/${guildId}/self-intro-role`, roles: ['admin', 'subadmin'], icon: UserPlus },
-        { label: '荒らし対策設定', path: `/dashboard/${guildId}/antigrief`, roles: ['admin', 'subadmin'], icon: ShieldAlert },
-        { label: 'その他パネル設定', path: `/dashboard/${guildId}/other-panels`, roles: ['admin', 'subadmin'], icon: LayoutPanelTop },
+        { label: 'コマンド設定', path: `/dashboard/${guildId}/commands`, roles: ['admin', 'subadmin'], icon: Terminal, group: 'その他' },
+        { label: 'ログ出力設定', path: `/dashboard/${guildId}/logs`, roles: ['admin', 'subadmin'], icon: ScrollText, group: 'その他' },
+        { label: '面接官設定', path: `/dashboard/${guildId}/interviewer`, roles: ['admin', 'subadmin'], icon: UserCheck, group: '評価鯖' },
+        { label: '条件ロール付与設定', path: `/dashboard/${guildId}/self-intro-role`, roles: ['admin', 'subadmin'], icon: UserPlus, group: '雑談鯖' },
+        { label: '荒らし対策設定', path: `/dashboard/${guildId}/antigrief`, roles: ['admin', 'subadmin'], icon: ShieldAlert, group: '雑談鯖' },
+        { label: 'その他パネル設定', path: `/dashboard/${guildId}/other-panels`, roles: ['admin', 'subadmin'], icon: LayoutPanelTop, group: '雑談鯖' },
       ],
     },
     {
       section: 'システム',
       items: [
-        { label: 'データベース設定', path: `/dashboard/${guildId}/database`, roles: ['admin', 'subadmin'], icon: Database },
-        { label: 'アカウント設定', path: `/dashboard/${guildId}/accounts`, roles: ['admin'], icon: Users },
+        { label: 'データベース設定', path: `/dashboard/${guildId}/database`, roles: ['admin', 'subadmin'], icon: Database, group: 'その他' },
+        { label: 'アカウント設定', path: `/dashboard/${guildId}/accounts`, roles: ['admin'], icon: Users, group: 'その他' },
       ],
     },
   ];
 
-  const filteredSections = navSections
-    .map(section => ({
-      ...section,
-      items: userRole ? section.items.filter(item => item.roles.includes(userRole)) : section.items,
+  const GROUP_ORDER: Array<'評価鯖' | '雑談鯖' | 'その他'> = ['評価鯖', '雑談鯖', 'その他'];
+  const GROUP_LABELS: Record<string, string> = {
+    '評価鯖': '評価鯖の設定',
+    '雑談鯖': '雑談鯖用の設定',
+    'その他': 'その他の設定',
+  };
+
+  // 各セクションを、既存のセクション名・項目名を一切変えずに
+  // 上位グループ(評価鯖/雑談鯖/その他)ごとに分割する
+  const groupedNavGroups = GROUP_ORDER.map(group => ({
+    group,
+    groupLabel: GROUP_LABELS[group],
+    sections: navSections
+      .map(section => ({
+        ...section,
+        items: section.items.filter(item => item.group === group),
+      }))
+      .filter(section => section.items.length > 0),
+  })).filter(g => g.sections.length > 0);
+
+  const filteredGroups = groupedNavGroups
+    .map(g => ({
+      ...g,
+      sections: g.sections
+        .map(section => ({
+          ...section,
+          items: userRole ? section.items.filter(item => item.roles.includes(userRole)) : section.items,
+        }))
+        .filter(section => section.items.length > 0),
     }))
-    .filter(section => section.items.length > 0);
+    .filter(g => g.sections.length > 0);
 
   if (loading) {
     return (
@@ -260,34 +286,41 @@ export default function DashboardLayout({
             )}
           </div>
 
-          <nav className="flex-1 min-h-0 space-y-5 overflow-y-auto pr-1 pb-4">
-            {filteredSections.map((section) => (
-              <div key={section.section}>
-                <p className="px-3 mb-1.5 font-tech text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600">
-                  // {section.section}
+          <nav className="flex-1 min-h-0 space-y-6 overflow-y-auto pr-1 pb-4">
+            {filteredGroups.map((groupEntry) => (
+              <div key={groupEntry.group} className="space-y-5">
+                <p className="px-3 font-mecha text-xs font-black tracking-wider text-red-400/90 border-b border-red-900/40 pb-1.5">
+                  {groupEntry.groupLabel}
                 </p>
-                <div className="space-y-1">
-                  {section.items.map((item) => {
-                    const isActive = pathname === item.path;
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.path}
-                        href={item.path}
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className={`flex items-center gap-2.5 px-3 py-2.5 text-sm transition-all group relative overflow-hidden border-l-2 ${
-                          isActive
-                            ? 'mecha-clip-sm bg-gradient-to-r from-red-600/20 to-transparent text-white font-bold border-red-500'
-                            : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-white border-transparent'
-                        }`}
-                      >
-                        {isActive && <span className="mecha-led absolute right-2 w-1.5 h-1.5 rounded-full bg-red-500 text-red-500"></span>}
-                        <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-red-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
-                        <span className="truncate font-tech tracking-wide">{item.label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
+                {groupEntry.sections.map((section) => (
+                  <div key={`${groupEntry.group}-${section.section}`}>
+                    <p className="px-3 mb-1.5 font-tech text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-600">
+                      // {section.section}
+                    </p>
+                    <div className="space-y-1">
+                      {section.items.map((item) => {
+                        const isActive = pathname === item.path;
+                        const Icon = item.icon;
+                        return (
+                          <Link
+                            key={item.path}
+                            href={item.path}
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className={`flex items-center gap-2.5 px-3 py-2.5 text-sm transition-all group relative overflow-hidden border-l-2 ${
+                              isActive
+                                ? 'mecha-clip-sm bg-gradient-to-r from-red-600/20 to-transparent text-white font-bold border-red-500'
+                                : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-white border-transparent'
+                            }`}
+                          >
+                            {isActive && <span className="mecha-led absolute right-2 w-1.5 h-1.5 rounded-full bg-red-500 text-red-500"></span>}
+                            <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-red-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                            <span className="truncate font-tech tracking-wide">{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
           </nav>
