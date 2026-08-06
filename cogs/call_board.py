@@ -323,12 +323,24 @@ class CallBoardJoinView(discord.ui.View):
                 ephemeral=True
             )
         else:
-            # DMが閉じられている場合のフォールバック: 募集チャンネルにメンション付き確認ボタン（エフェメラル）などを試みる
             await interaction.followup.send(
                 f"⚠️ **{recruiter.display_name}** さんのDMが開かれていないためダイレクトメッセージで送れませんでした。\n"
                 f"募集者のDM受信設定をご確認いただくか、直接声をおかけください。",
                 ephemeral=True
             )
+
+
+# --- パネルに設置されるボタンView (永続) ---
+class CallBoardPanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="📞 通話を募集する", style=discord.ButtonStyle.success, custom_id="persistent_call_board_panel_btn")
+    async def panel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.response.send_modal(CallBoardModal())
+        except Exception as e:
+            print(f"[ERROR] Failed to send CallBoardModal: {e}")
 
 
 class CallBoard(commands.Cog):

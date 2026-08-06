@@ -107,6 +107,7 @@ class EconomyBot(commands.Bot):
         try:
             from cogs.shop import ShopPanelView
             from cogs.utility import CustomTicketPanelView, EmblemRequestPanelView, ConfessionRequestPanelView, InquiryRequestPanelView, AnonymousChatPanelView, TicketControlView
+            from cogs.call_board import CallBoardPanelView, CallBoardJoinView
             self.add_view(ShopPanelView(self))
             self.add_view(CustomTicketPanelView())
             self.add_view(EmblemRequestPanelView())
@@ -114,6 +115,8 @@ class EconomyBot(commands.Bot):
             self.add_view(InquiryRequestPanelView())
             self.add_view(AnonymousChatPanelView())
             self.add_view(TicketControlView())
+            self.add_view(CallBoardPanelView())
+            self.add_view(CallBoardJoinView())
         except Exception as e:
             print(f'Failed to load persistent views: {e}')
         self.bot_settings = await database.load_settings()
