@@ -223,6 +223,7 @@ class EconomyBot(commands.Bot):
             "cogs.shop",
             "cogs.tickets",
             "cogs.self_intro_roles",
+            "cogs.call_board",
         ]
         for cog in cogs_to_load:
             try:

@@ -243,6 +243,15 @@ class IPC(commands.Cog):
                         from cogs.rooms import LuxuryInnPanelView
                         embed = discord.Embed(title="🏰 高級宿", description="高級宿の作成はこちらのボタンからどうぞ。", color=discord.Color.purple())
                         view = LuxuryInnPanelView()
+                    elif panel_type == "call_board":
+                        from cogs.call_board import CallBoardPanelView
+                        embed = discord.Embed(
+                            title="📞 通話募集掲示板",
+                            description="通話の参加者を募集できます！\n下のボタンを押して「目的」や「一言」を入力してください。",
+                            color=discord.Color.blurple()
+                        )
+                        view = CallBoardPanelView()
+
 
                     if embed and view:
                         try:

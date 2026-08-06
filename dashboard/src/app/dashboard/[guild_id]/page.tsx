@@ -247,6 +247,8 @@ const ROLE_SETTINGS = [
   { key: 'MINUS_TARGET_ROLE_IDS', label: '通貨マイナス落ち対象ロール', multiple: true },
   { key: 'BANKER_ROLE_IDS', label: '銀行員ロール', multiple: true },
   { key: 'GAMBLE_VIOLATOR_ROLE_IDS', label: '違反者ロール', multiple: true },
+  { key: 'MALE_ROLE_ID', label: '男性ロール (通話募集枠:青)', multiple: false },
+  { key: 'FEMALE_ROLE_ID', label: '女性ロール (通話募集枠:ピンク)', multiple: false },
 ];
 
 export default function GeneralSettings({ params }: { params: { guild_id: string } }) {

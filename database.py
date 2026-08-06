@@ -521,6 +521,16 @@ async def setup_db_schema(p):
 
 
         await conn.execute('''
+            CREATE TABLE IF NOT EXISTS call_board_settings (
+                guild_id BIGINT PRIMARY KEY,
+                panel_channel_id BIGINT,
+                board_channel_id BIGINT,
+                vc_category_id BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        await conn.execute('''
 
             CREATE TABLE IF NOT EXISTS level_role_rewards (
 
@@ -3804,12 +3814,41 @@ async def mark_user_item_role_removed(user_item_id: int):
             await p.execute("UPDATE user_items SET role_removed = TRUE WHERE id = $1", user_item_id)
 
         except Exception:
+            except KeyError:
 
-            pass
+                inquiry_val = None
+
+            try:
+
+                inquiry_vals = row["inquiry_mention_role_ids"]
+
+            except KeyError:
+
+                inquiry_vals = None
+
+            if inquiry_vals is None:
+
+                inquiry_vals = []
+
+            return {
+
+                "employee_role_id": row["employee_role_id"], 
+
+                "manager_role_id": row["manager_role_id"],
+
+                "inquiry_mention_role_id": inquiry_val,
+
+                "inquiry_mention_role_ids": inquiry_vals
+
+            }
+
+        else:
+
+            return {"employee_role_id": None, "manager_role_id": None, "inquiry_mention_role_id": None, "inquiry_mention_role_ids": []}
 
 
 
-async def add_level_coin_reward(guild_id: int, level_type: str, level: int, coins: int, condition_role_id: int = None):
+async def set_shop_settings(guild_id: int, employee_role_id: int, manager_role_id: int, inquiry_mention_role_id: int, inquiry_mention_role_ids: list):
 
     p = await get_pool(guild_id)
 
@@ -3817,285 +3856,136 @@ async def add_level_coin_reward(guild_id: int, level_type: str, level: int, coin
 
         await conn.execute('''
 
-            INSERT INTO level_coin_rewards (guild_id, level_type, level, coins, condition_role_id)
+            INSERT INTO shop_settings (guild_id, employee_role_id, manager_role_id, inquiry_mention_role_id, inquiry_mention_role_ids)
 
             VALUES ($1, $2, $3, $4, $5)
 
-            ON CONFLICT (guild_id, level_type, level, condition_role_id)
+            ON CONFLICT (guild_id) DO UPDATE SET
 
-            DO UPDATE SET coins = EXCLUDED.coins
+            employee_role_id = EXCLUDED.employee_role_id,
 
-        ''', guild_id, level_type, level, coins, condition_role_id)
+            manager_role_id = EXCLUDED.manager_role_id,
+            inquiry_mention_role_id = EXCLUDED.inquiry_mention_role_id,
+            inquiry_mention_role_ids = EXCLUDED.inquiry_mention_role_ids
+        ''', guild_id, employee_role_id, manager_role_id, inquiry_mention_role_id, inquiry_mention_role_ids)
 
 
-
-async def get_level_coin_rewards(guild_id: int, level_type: str = None) -> list[dict]:
-
+async def get_shop_items(guild_id: int):
     p = await get_pool(guild_id)
-
     async with p.acquire() as conn:
-
-        if level_type:
-
-            rows = await conn.fetch('''
-
-                SELECT level_type, level, coins, condition_role_id 
-
-                FROM level_coin_rewards 
-
-                WHERE guild_id = $1 AND level_type = $2 
-
-                ORDER BY level ASC
-
-            ''', guild_id, level_type)
-
-        else:
-
-            rows = await conn.fetch('''
-
-                SELECT level_type, level, coins, condition_role_id 
-
-                FROM level_coin_rewards 
-
-                WHERE guild_id = $1
-
-                ORDER BY level_type ASC, level ASC
-
-            ''', guild_id)
-
-        return [{"level_type": r["level_type"], "level": r["level"], "coins": r["coins"], "condition_role_id": r["condition_role_id"]} for r in rows]
+        rows = await conn.fetch('SELECT item_id, name, usage, price, target_role_ids, reward_role_ids, duration_days, is_eval_extend, extend_days FROM shop_items WHERE guild_id = $1 ORDER BY item_id ASC', guild_id)
+        return [dict(r) for r in rows]
 
 
+async def get_shop_item(item_id: int):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        row = await conn.fetchrow('SELECT item_id, guild_id, name, usage, price, target_role_ids, reward_role_ids, duration_days, is_eval_extend, extend_days FROM shop_items WHERE item_id = $1', item_id)
+        return dict(row) if row else None
 
-async def remove_level_coin_reward(guild_id: int, level_type: str, level: int, condition_role_id: int = None):
 
+async def add_shop_item(guild_id: int, name: str, usage: str, price: int, target_role_ids: list = None, reward_role_ids: list = None, duration_days: int = None, is_eval_extend: bool = False, extend_days: int = None):
+    if target_role_ids is None: target_role_ids = []
+    if reward_role_ids is None: reward_role_ids = []
     p = await get_pool(guild_id)
-
     async with p.acquire() as conn:
+        row = await conn.fetchrow('''
+            INSERT INTO shop_items (guild_id, name, usage, price, target_role_ids, reward_role_ids, duration_days, is_eval_extend, extend_days)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING item_id
+        ''', guild_id, name, usage, price, target_role_ids, reward_role_ids, duration_days, is_eval_extend, extend_days)
+        return dict(row)["item_id"] if row else None
 
+
+async def update_shop_item(item_id: int, name: str, usage: str, price: int, target_role_ids: list = None, reward_role_ids: list = None, duration_days: int = None, is_eval_extend: bool = False, extend_days: int = None):
+    if target_role_ids is None: target_role_ids = []
+    if reward_role_ids is None: reward_role_ids = []
+    p = await get_pool()
+    async with p.acquire() as conn:
         await conn.execute('''
-
-            DELETE FROM level_coin_rewards 
-
-            WHERE guild_id = $1 AND level_type = $2 AND level = $3 AND condition_role_id IS NOT DISTINCT FROM $4
-
-        ''', guild_id, level_type, level, condition_role_id)
+            UPDATE shop_items SET name = $1, usage = $2, price = $3, target_role_ids = $4, reward_role_ids = $5, duration_days = $6, is_eval_extend = $7, extend_days = $8 WHERE item_id = $9
+        ''', name, usage, price, target_role_ids, reward_role_ids, duration_days, is_eval_extend, extend_days, item_id)
 
 
-
-# --- VC繝ｩ繝ｳ繧ｭ繝ｳ繧ｰ蜿門ｾ礼畑髢｢謨ｰ ---
-
-async def get_top_users(guild_id: int, mode: str, limit: int = 10) -> list[dict]:
-
-    p = await get_pool(guild_id)
-
+async def delete_shop_item(item_id: int):
+    p = await get_pool()
     async with p.acquire() as conn:
+        await conn.execute('DELETE FROM shop_items WHERE item_id = $1', item_id)
 
-        if mode == "tc":
 
-            rows = await conn.fetch('''
+async def add_user_item(user_id: int, item_id: int, expire_at: datetime.datetime = None):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO user_items (user_id, item_id, expire_at, role_removed) 
+            VALUES ($1, $2, $3, FALSE)
+        ''', user_id, item_id, expire_at)
 
-                SELECT user_id, tc_level as level, tc_xp as xp
 
-                FROM users 
+async def get_user_items(user_id: int):
+    p = await get_pool()
+    async with p.acquire() as conn:
+        rows = await conn.fetch('SELECT * FROM user_items WHERE user_id = $1', user_id)
+        return [dict(r) for r in rows]
 
-                WHERE guild_id = $1
 
-                ORDER BY tc_level DESC, tc_xp DESC 
-
-                LIMIT $2
-
-            ''', guild_id, limit)
-
-        else:
-
-            rows = await conn.fetch('''
-
-                SELECT user_id, vc_level as level, vc_xp as xp
-
-                FROM users 
-
-                WHERE guild_id = $1
-
-                ORDER BY vc_level DESC, vc_xp DESC 
-
-                LIMIT $2
-
-            ''', guild_id, limit)
-
-        return [{"user_id": r["user_id"], "level": r["level"], "xp": r["xp"]} for r in rows]
-
-async def get_expired_evaluation_periods() -> list:
-
-    pools = await get_all_configured_pools()
-
-    now = get_now_naive()
-
+async def get_expired_user_items():
     all_expired = []
-
-    for p in pools:
-
+    for p in await get_all_configured_pools():
         try:
-
-            async with p.acquire() as conn:
-
-                rows = await conn.fetch('''
-
-                    SELECT guild_id, user_id, start_time, end_time 
-
-                    FROM evaluation_periods 
-
-                    WHERE end_time < $1
-
-                ''', now)
-
-                all_expired.extend([dict(row) for row in rows])
-
-        except Exception as e:
-
-            print(f'[DB Error] Failed to fetch expired evaluation periods: {e}')
-
+            rows = await p.fetch("SELECT id, user_id, item_id FROM user_items WHERE expire_at < $1 AND role_removed = FALSE", get_now_naive())
+            all_expired.extend([dict(row) for row in rows])
+        except Exception:
+            pass
     return all_expired
 
 
+async def mark_user_item_role_removed(user_item_id: int):
+    for p in await get_all_configured_pools():
+        try:
+            await p.execute("UPDATE user_items SET role_removed = TRUE WHERE id = $1", user_item_id)
+        except Exception:
+            pass
 
 
-
-async def get_interviewer_stats(guild_id: int, interviewer_id: int) -> int:
-
-    pool = await get_pool(guild_id)
-
-    async with pool.acquire() as conn:
-
-        row = await conn.fetchrow('SELECT total_handled FROM interviewer_stats WHERE guild_id = $1 AND interviewer_id = $2', guild_id, interviewer_id)
-
-        return row['total_handled'] if row else 0
-
-
-
-async def increment_interviewer_stats(guild_id: int, interviewer_id: int) -> int:
-
-    pool = await get_pool(guild_id)
-
-    async with pool.acquire() as conn:
-
-        row = await conn.fetchrow('''
-
-            INSERT INTO interviewer_stats (guild_id, interviewer_id, total_handled)
-
-            VALUES ($1, $2, 1)
-
-            ON CONFLICT (guild_id, interviewer_id) 
-
-            DO UPDATE SET total_handled = interviewer_stats.total_handled + 1
-
-            RETURNING total_handled
-
-        ''', guild_id, interviewer_id)
-
-        return row['total_handled']
-
-
-
-async def set_interviewer_stats(guild_id: int, interviewer_id: int, total: int):
-
-    pool = await get_pool(guild_id)
-
-    async with pool.acquire() as conn:
-
-        await conn.execute('''
-
-            INSERT INTO interviewer_stats (guild_id, interviewer_id, total_handled)
-
-            VALUES ($1, $2, $3)
-
-            ON CONFLICT (guild_id, interviewer_id) 
-
-            DO UPDATE SET total_handled = $3
-
-        ''', guild_id, interviewer_id, total)
-
-
-
-async def get_all_interviewer_stats(guild_id: int):
-
-    pool = await get_pool(guild_id)
-
-    async with pool.acquire() as conn:
-
-        rows = await conn.fetch('SELECT interviewer_id, total_handled FROM interviewer_stats WHERE guild_id = $1 ORDER BY total_handled DESC', guild_id)
-
-        return [{"interviewer_id": str(r['interviewer_id']), "total_handled": r['total_handled']} for r in rows]
-
-
-
-async def update_available_commands(commands_to_sync: list):
-    p = await get_master_pool()
+async def add_level_coin_reward(guild_id: int, level_type: str, level: int, coins: int, condition_role_id: int = None):
+    p = await get_pool(guild_id)
     async with p.acquire() as conn:
-        for cmd in commands_to_sync:
-            await conn.execute('''
-                INSERT INTO available_commands (command_name, description, category) 
-                VALUES ($1, $2, $3)
-                ON CONFLICT (command_name) DO UPDATE 
-                SET description = EXCLUDED.description, category = EXCLUDED.category
-            ''', cmd['name'], cmd['description'], cmd['category'])
-
-async def is_command_enabled(guild_id: int, command_name: str) -> bool:
-    if guild_id is None:
-        return True
-    
-    pool = await get_pool(guild_id)
-    if not pool:
-        return True
-        
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow('''
-            SELECT is_enabled FROM command_settings 
-            WHERE guild_id = $1 AND (command_name = $2 OR command_name = $3)
-            ORDER BY is_enabled ASC LIMIT 1
-        ''', guild_id, command_name, f'/{command_name}')
-        
-        if row is not None:
-            return row['is_enabled']
-            
-        return True
-
-# --- 自己紹介ロール設定 ---
-
-async def get_self_intro_role_settings(guild_id: int) -> dict:
-    pool = await get_pool(guild_id)
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            'SELECT channel_id, welcome_channel_id, role_id, template, is_enabled FROM self_intro_role_settings WHERE guild_id = $1',
-            guild_id
-        )
-        if row:
-            return {
-                "channel_id": row['channel_id'],
-                "welcome_channel_id": row['welcome_channel_id'],
-                "role_id": row['role_id'],
-                "template": row['template'],
-                "is_enabled": row['is_enabled'],
-            }
-        return {"channel_id": None, "welcome_channel_id": None, "role_id": None, "template": None, "is_enabled": False}
-
-
-
-async def save_self_intro_role_settings(guild_id: int, channel_id, welcome_channel_id, role_id, template: str, is_enabled: bool):
-    pool = await get_pool(guild_id)
-    async with pool.acquire() as conn:
         await conn.execute('''
-            INSERT INTO self_intro_role_settings (guild_id, channel_id, welcome_channel_id, role_id, template, is_enabled)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (guild_id) DO UPDATE
-            SET channel_id = $2, welcome_channel_id = $3, role_id = $4, template = $5, is_enabled = $6
-        ''', guild_id, channel_id, welcome_channel_id, role_id, template, is_enabled)
+            INSERT INTO level_coin_rewards (guild_id, level_type, level, coins, condition_role_id)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (guild_id, level_type, level, condition_role_id)
+            DO UPDATE SET coins = EXCLUDED.coins
+        ''', guild_id, level_type, level, coins, condition_role_id)
 
 
+async def get_level_coin_rewards(guild_id: int, level_type: str = None) -> list[dict]:
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        if level_type:
+            rows = await conn.fetch('''
+                SELECT level_type, level, coins, condition_role_id 
+                FROM level_coin_rewards 
+                WHERE guild_id = $1 AND level_type = $2 
+                ORDER BY level ASC
+            ''', guild_id, level_type)
+        else:
+            rows = await conn.fetch('''
+                SELECT level_type, level, coins, condition_role_id 
+                FROM level_coin_rewards 
+                WHERE guild_id = $1
+                ORDER BY level_type ASC, level ASC
+            ''', guild_id)
+        return [{"level_type": r["level_type"], "level": r["level"], "coins": r["coins"], "condition_role_id": r["condition_role_id"]} for r in rows]
 
-async def save_self_intro_welcome_message(guild_id: int, user_id: int, message_id: int, channel_id: int):
-    pool = await get_pool(guild_id)
-    async with pool.acquire() as conn:
+
+async def remove_level_coin_reward(guild_id: int, level_type: str, level: int, condition_role_id: int = None):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        await conn.execute('''
+            DELETE FROM level_coin_rewards 
+            WHERE guild_id = $1 AND level_type = $2 AND level = $3 AND condition_role_id IS NOT DISTINCT FROM $4
+        ''', guild_id, level_type, level, condition_role_id)
         await conn.execute('''
             INSERT INTO self_intro_welcome_messages (guild_id, user_id, message_id, channel_id)
             VALUES ($1, $2, $3, $4)

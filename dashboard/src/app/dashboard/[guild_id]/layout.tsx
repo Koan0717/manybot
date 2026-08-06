@@ -29,8 +29,10 @@ import {
   Users,
   ChevronLeft,
   CircuitBoard,
+  PhoneCall,
   type LucideIcon,
 } from 'lucide-react';
+
 
 interface NavItem {
   label: string;
@@ -98,6 +100,7 @@ export default function DashboardLayout({
       section: 'ボイスチャンネル',
       items: [
         { label: 'VCルーム設定', path: `/dashboard/${guildId}/rooms`, roles: ['admin', 'subadmin'], icon: DoorOpen },
+        { label: '通話募集掲示板設定', path: `/dashboard/${guildId}/call-board`, roles: ['admin', 'subadmin'], icon: PhoneCall },
         { label: '評価落ちVCアクセス制御', path: `/dashboard/${guildId}/room-access`, roles: ['admin', 'subadmin'], icon: ShieldOff },
         { label: 'VCトリガー設定', path: `/dashboard/${guildId}/vc-triggers`, roles: ['admin', 'subadmin'], icon: Zap },
         { label: 'VCコイン獲得制限', path: `/dashboard/${guildId}/vc-coins`, roles: ['admin', 'subadmin'], icon: Timer },
