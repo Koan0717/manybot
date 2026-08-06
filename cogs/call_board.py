@@ -50,55 +50,66 @@ class CallBoardConfirmView(discord.ui.View):
     async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
 
-        guild = interaction.guild
-        if not guild:
-            return await interaction.followup.send("サーバー内で実行してください。", ephemeral=True)
+        try:
+            guild = interaction.guild
+            if not guild:
+                return await interaction.followup.send("❌ サーバー内で実行してください。", ephemeral=True)
 
-        # 設定の取得
-        settings = await database.get_call_board_settings(guild.id)
-        board_channel_id = settings.get("board_channel_id")
-        if not board_channel_id:
-            return await interaction.followup.send("❌ 通話募集を表示するチャンネルがダッシュボードで設定されていません。", ephemeral=True)
+            # 設定の取得
+            settings = await database.get_call_board_settings(guild.id)
+            board_channel_id = settings.get("board_channel_id")
+            if not board_channel_id:
+                return await interaction.followup.send("❌ 通話募集を表示するチャンネル（募集一覧掲載チャンネル）がダッシュボードで設定されていません。ダッシュボードで設定を保存してください。", ephemeral=True)
 
-        board_channel = guild.get_channel(int(board_channel_id))
-        if not board_channel:
+            board_channel = guild.get_channel(int(board_channel_id))
+            if not board_channel:
+                try:
+                    board_channel = await guild.fetch_channel(int(board_channel_id))
+                except Exception:
+                    pass
+
+            if not board_channel:
+                return await interaction.followup.send(f"❌ 募集表示チャンネル (ID: `{board_channel_id}`) が見つかりませんでした。Botにチャンネル閲覧権限があるか確認してください。", ephemeral=True)
+
+            # 性別ロールの確認
+            male_role_id = get_setting(interaction.client, "MALE_ROLE_ID", guild.id)
+            female_role_id = get_setting(interaction.client, "FEMALE_ROLE_ID", guild.id)
+
+            user_role_ids = [r.id for r in self.recruiter.roles]
+            embed_color = discord.Color.blurple()
+
             try:
-                board_channel = await guild.fetch_channel(int(board_channel_id))
-            except Exception:
+                if male_role_id and int(male_role_id) in user_role_ids:
+                    embed_color = discord.Color.blue()
+                elif female_role_id and int(female_role_id) in user_role_ids:
+                    embed_color = discord.Color(0xFF69B4) # Hot Pink
+            except (ValueError, TypeError):
                 pass
 
-        if not board_channel:
-            return await interaction.followup.send("❌ 募集表示チャンネルが見つかりませんでした。", ephemeral=True)
+            # 募集Embed作成
+            embed = discord.Embed(
+                title=f"📞 通話募集 | {self.recruiter.display_name}",
+                color=embed_color,
+                timestamp=discord.utils.utcnow()
+            )
+            if self.recruiter.display_avatar:
+                embed.set_thumbnail(url=self.recruiter.display_avatar.url)
+            embed.add_field(name="👤 募集者", value=f"{self.recruiter.mention} (`{self.recruiter.id}`)", inline=True)
+            embed.add_field(name="📌 目的", value=self.purpose, inline=False)
+            embed.add_field(name="💬 一言", value=self.comment, inline=False)
+            embed.set_footer(text="下の「参加する」ボタンを押すと、専用プライベートVCが作成されます。")
 
-        # 性別ロールの確認
-        male_role_id = get_setting(interaction.client, "MALE_ROLE_ID", guild.id)
-        female_role_id = get_setting(interaction.client, "FEMALE_ROLE_ID", guild.id)
+            join_view = CallBoardJoinView(recruiter_id=self.recruiter.id)
+            await board_channel.send(embed=embed, view=join_view)
 
-        user_role_ids = [r.id for r in self.recruiter.roles]
-        embed_color = discord.Color.blurple()
-
-        if male_role_id and int(male_role_id) in user_role_ids:
-            embed_color = discord.Color.blue()
-        elif female_role_id and int(female_role_id) in user_role_ids:
-            embed_color = discord.Color(0xFF69B4) # Hot Pink
-
-        # 募集Embed作成
-        embed = discord.Embed(
-            title=f"📞 通話募集 | {self.recruiter.display_name}",
-            color=embed_color,
-            timestamp=discord.utils.utcnow()
-        )
-        embed.set_thumbnail(url=self.recruiter.display_avatar.url)
-        embed.add_field(name="👤 募集者", value=f"{self.recruiter.mention} (`{self.recruiter.id}`)", inline=True)
-        embed.add_field(name="📌 目的", value=self.purpose, inline=False)
-        embed.add_field(name="💬 一言", value=self.comment, inline=False)
-        embed.set_footer(text="下の「参加する」ボタンを押すと、専用プライベートVCが作成されます。")
-
-        join_view = CallBoardJoinView(recruiter_id=self.recruiter.id)
-        await board_channel.send(embed=embed, view=join_view)
-
-        await interaction.followup.send("✅ 通話募集を投稿しました！", ephemeral=True)
-        self.stop()
+            # 確認用メッセージを完了表示に更新
+            await interaction.edit_original_response(content="✅ 通話募集の投稿が完了しました！募集一覧チャンネルをご確認ください。", embed=None, view=None)
+            self.stop()
+        except discord.Forbidden:
+            await interaction.followup.send("❌ 募集表示チャンネルへのメッセージ送信権限（埋め込みリンク権限含む）がBotにありません。", ephemeral=True)
+        except Exception as e:
+            print(f"[ERROR] Call board confirm error: {e}")
+            await interaction.followup.send(f"❌ 投稿処理中にエラーが発生しました: {e}", ephemeral=True)
 
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="❌")
     async def cancel_button(self, interaction: discord.Interaction, button: discord.ui.Button):
