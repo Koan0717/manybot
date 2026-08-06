@@ -3881,3 +3881,31 @@ async def delete_self_intro_welcome_message(guild_id: int, user_id: int):
             guild_id, user_id
         )
 
+
+async def get_call_board_settings(guild_id: int) -> dict:
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            'SELECT panel_channel_id, board_channel_id, vc_category_id FROM call_board_settings WHERE guild_id = $1',
+            guild_id
+        )
+        if row:
+            return {
+                "panel_channel_id": str(row['panel_channel_id']) if row['panel_channel_id'] else "",
+                "board_channel_id": str(row['board_channel_id']) if row['board_channel_id'] else "",
+                "vc_category_id": str(row['vc_category_id']) if row['vc_category_id'] else ""
+            }
+        return {"panel_channel_id": "", "board_channel_id": "", "vc_category_id": ""}
+
+
+async def save_call_board_settings(guild_id: int, panel_channel_id: int, board_channel_id: int, vc_category_id: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO call_board_settings (guild_id, panel_channel_id, board_channel_id, vc_category_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id) DO UPDATE
+            SET panel_channel_id = $2, board_channel_id = $3, vc_category_id = $4
+        ''', guild_id, panel_channel_id, board_channel_id, vc_category_id)
+
+

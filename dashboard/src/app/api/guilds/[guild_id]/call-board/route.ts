@@ -88,13 +88,60 @@ export async function POST(
         return NextResponse.json({ error: 'パネル設置チャンネルが指定されていません。' }, { status: 400 });
       }
 
-      await pool.query(
-        `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
-         VALUES ($1, $2, 'call_board')`,
-        [guildId, panelCh]
-      );
+      const token = process.env.DISCORD_BOT_TOKEN;
+      let sentDirectly = false;
 
-      return NextResponse.json({ success: true, message: 'パネル設置リクエストを送信しました。' });
+      if (token) {
+        try {
+          const discordRes = await fetch(`https://discord.com/api/v10/channels/${panelCh}/messages`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bot ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              embeds: [{
+                title: '📞 通話募集掲示板',
+                description: 'ボイスチャンネルで一緒に通話する相手を募集できます！\n下のボタンを押して「目的」や「一言」を入力してください。',
+                color: 5793266
+              }],
+              components: [
+                {
+                  type: 1,
+                  components: [
+                    {
+                      type: 2,
+                      style: 3,
+                      label: '📞 通話を募集する',
+                      custom_id: 'persistent_call_board_panel_btn'
+                    }
+                  ]
+                }
+              ]
+            })
+          });
+
+          if (discordRes.ok) {
+            sentDirectly = true;
+          } else {
+            const errData = await discordRes.json();
+            console.error('[Discord REST API Error]', errData);
+            return NextResponse.json({ error: `Discordエラー: ${errData.message || JSON.stringify(errData)}` }, { status: 400 });
+          }
+        } catch (err: any) {
+          console.error('[Discord Direct Post Failed]', err);
+        }
+      }
+
+      if (!sentDirectly) {
+        await pool.query(
+          `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
+           VALUES ($1, $2, 'call_board')`,
+          [guildId, panelCh]
+        );
+      }
+
+      return NextResponse.json({ success: true, message: 'パネルを正常に設置しました！' });
     }
 
     return NextResponse.json({ success: true });
