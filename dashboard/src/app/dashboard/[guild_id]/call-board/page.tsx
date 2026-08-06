@@ -87,7 +87,7 @@ export default function CallBoardSettingsPage({ params }: { params: { guild_id: 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'deploy',
-          panel_channel_id: formData.panel_channel_id
+          ...formData
         })
       });
       const data = await res.json();

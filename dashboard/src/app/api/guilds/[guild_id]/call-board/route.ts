@@ -66,32 +66,36 @@ export async function POST(
       )
     `);
 
+    const panelCh = panel_channel_id ? String(panel_channel_id) : null;
+    const boardCh = board_channel_id ? String(board_channel_id) : null;
+    const vcCat = vc_category_id ? String(vc_category_id) : null;
+
+    // 設定の保存（saveでもdeployでも保存）
+    if (panelCh || boardCh || vcCat) {
+      await pool.query(
+        `INSERT INTO call_board_settings (guild_id, panel_channel_id, board_channel_id, vc_category_id)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (guild_id) DO UPDATE
+         SET panel_channel_id = EXCLUDED.panel_channel_id,
+             board_channel_id = EXCLUDED.board_channel_id,
+             vc_category_id = EXCLUDED.vc_category_id`,
+        [guildId, panelCh, boardCh, vcCat]
+      );
+    }
+
     if (action === 'deploy') {
-      if (!panel_channel_id) {
+      if (!panelCh) {
         return NextResponse.json({ error: 'パネル設置チャンネルが指定されていません。' }, { status: 400 });
       }
 
       await pool.query(
         `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
          VALUES ($1, $2, 'call_board')`,
-        [guildId, panel_channel_id]
+        [guildId, panelCh]
       );
 
       return NextResponse.json({ success: true, message: 'パネル設置リクエストを送信しました。' });
     }
-
-    // デフォルトまたは action === 'save'
-    const panelCh = panel_channel_id ? String(panel_channel_id) : null;
-    const boardCh = board_channel_id ? String(board_channel_id) : null;
-    const vcCat = vc_category_id ? String(vc_category_id) : null;
-
-    await pool.query(
-      `INSERT INTO call_board_settings (guild_id, panel_channel_id, board_channel_id, vc_category_id)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (guild_id) DO UPDATE
-       SET panel_channel_id = $2, board_channel_id = $3, vc_category_id = $4`,
-      [guildId, panelCh, boardCh, vcCat]
-    );
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
