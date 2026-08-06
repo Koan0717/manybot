@@ -290,6 +290,15 @@ async def check_command_enabled(interaction: discord.Interaction):
     
     if interaction.command is None:
         return True
+
+    # ダッシュボード未設定チェック
+    if not hasattr(bot, 'bot_settings') or interaction.guild_id not in bot.bot_settings:
+        await interaction.response.send_message(
+            "❌ このサーバーはまだダッシュボードで初期設定がされていません。\n"
+            "先にダッシュボードからサーバーの設定を行ってください。",
+            ephemeral=True
+        )
+        return False
     
     cmd_name = interaction.command.qualified_name
     is_enabled = await database.is_command_enabled(interaction.guild_id, cmd_name)
