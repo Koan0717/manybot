@@ -341,6 +341,13 @@ class CallBoardPanelView(discord.ui.View):
             await interaction.response.send_modal(CallBoardModal())
         except Exception as e:
             print(f"[ERROR] Failed to send CallBoardModal: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ モーダルの表示中にエラーが発生しました: {e}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ モーダルの表示中にエラーが発生しました: {e}", ephemeral=True)
+            except Exception:
+                pass
 
 
 class CallBoard(commands.Cog):
