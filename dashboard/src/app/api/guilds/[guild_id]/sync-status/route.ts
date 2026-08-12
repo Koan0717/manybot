@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getPool } from '@/lib/db';
+import { getPool, masterPool } from '@/lib/db';
 
 /**
  * GET /api/guilds/[guild_id]/sync-status?request_id=XXX
