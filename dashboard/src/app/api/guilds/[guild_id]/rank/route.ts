@@ -16,18 +16,19 @@ export async function GET(
       [guildId]
     );
 
-    // Fetch bot setting for ENABLE_TC_RANK and exclusion settings
+    // Fetch bot setting for ENABLE_RANK, ENABLE_TC_RANK and exclusion settings
     const botSettingsResult = await pool.query(
-      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ENABLE_TC_RANK', 'ENABLE_EXCLUDE_RANK_ROLE', 'EXCLUDE_RANK_ROLE_IDS')",
+      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ENABLE_RANK', 'ENABLE_TC_RANK', 'ENABLE_EXCLUDE_RANK_ROLE', 'EXCLUDE_RANK_ROLE_IDS')",
       [guildId]
     );
 
+    let enableRank = true; // default
     let enableTcRank = true; // default
-    if (botSettingsResult.rows.length > 0) {
-      try {
-        enableTcRank = JSON.parse(botSettingsResult.rows[0].setting_value);
-      } catch (e) {
-        enableTcRank = botSettingsResult.rows[0].setting_value === 'true';
+    for (const row of botSettingsResult.rows) {
+      if (row.setting_key === 'ENABLE_RANK') {
+        try { enableRank = JSON.parse(row.setting_value); } catch { enableRank = row.setting_value === 'true'; }
+      } else if (row.setting_key === 'ENABLE_TC_RANK') {
+        try { enableTcRank = JSON.parse(row.setting_value); } catch { enableTcRank = row.setting_value === 'true'; }
       }
     }
 
@@ -43,6 +44,7 @@ export async function GET(
 
     return NextResponse.json({
       ...rankSettings,
+      ENABLE_RANK: enableRank,
       ENABLE_TC_RANK: enableTcRank,
       ENABLE_EXCLUDE_RANK_ROLE: rankSettings.enable_exclude_rank_role,
       EXCLUDE_RANK_ROLE_IDS: rankSettings.exclude_rank_role_ids?.map(String) || [],
@@ -62,6 +64,7 @@ export async function POST(
   try {
     const body = await request.json();
     const { 
+      ENABLE_RANK,
       ENABLE_TC_RANK, 
       ENABLE_EXCLUDE_RANK_ROLE,
       EXCLUDE_RANK_ROLE_IDS,
@@ -76,7 +79,7 @@ export async function POST(
     try {
       await client.query('BEGIN');
 
-      // Update bot_settings for ENABLE_TC_RANK and exclusion settings
+      // Update bot_settings for ENABLE_RANK, ENABLE_TC_RANK and exclusion settings
       const updateSetting = async (key: string, value: any) => {
         if (value !== undefined) {
           await client.query(
@@ -88,6 +91,7 @@ export async function POST(
         }
       };
 
+      await updateSetting('ENABLE_RANK', ENABLE_RANK !== undefined ? ENABLE_RANK : true);
       await updateSetting('ENABLE_TC_RANK', ENABLE_TC_RANK);
       
 

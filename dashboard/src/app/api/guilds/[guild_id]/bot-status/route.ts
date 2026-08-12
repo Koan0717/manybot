@@ -294,40 +294,45 @@ export async function GET(
         [guildId]
       );
       const botSettingsResult = await pool.query(
-        "SELECT setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key = 'ENABLE_TC_RANK'",
+        "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ENABLE_RANK', 'ENABLE_TC_RANK')",
         [guildId]
       );
       
+      let enableRank = true;
       let enableTcRank = true;
-      if (botSettingsResult.rows.length > 0) {
-        try {
-          enableTcRank = JSON.parse(botSettingsResult.rows[0].setting_value);
-        } catch {
-          enableTcRank = botSettingsResult.rows[0].setting_value === 'true';
+      for (const row of botSettingsResult.rows) {
+        if (row.setting_key === 'ENABLE_RANK') {
+          try { enableRank = JSON.parse(row.setting_value); } catch { enableRank = row.setting_value === 'true'; }
+        } else if (row.setting_key === 'ENABLE_TC_RANK') {
+          try { enableTcRank = JSON.parse(row.setting_value); } catch { enableTcRank = row.setting_value === 'true'; }
         }
       }
 
-      if (rRes.rows.length > 0 || botSettingsResult.rows.length > 0) {
+      if (!enableRank) {
+        modules['rank'] = {
+          configured: false,
+          summary: '機能オフ (ランク機能全体が無効化中)',
+        };
+      } else if (rRes.rows.length > 0 || botSettingsResult.rows.length > 0) {
         const row = rRes.rows[0];
         const wlCount = (row?.whitelist_channel_ids?.length || 0) + (row?.whitelist_category_ids?.length || 0);
         const blCount = (row?.blacklist_channel_ids?.length || 0) + (row?.blacklist_category_ids?.length || 0);
         const hasExcludes = row?.enable_exclude_rank_role;
         
         const details = [];
+        if (!enableTcRank) details.push('TC集計オフ');
         if (wlCount > 0) details.push(`許可対象:${wlCount}件`);
         if (blCount > 0) details.push(`除外対象:${blCount}件`);
         if (hasExcludes) details.push('除外ロール設定');
         
         modules['rank'] = {
-          configured: enableTcRank,
-          summary: enableTcRank
-            ? `稼働中 (XP集計・ランクアップ機能有効${details.length > 0 ? ` / ${details.join('・')}` : ''})`
-            : '機能オフ (無効化中)',
+          configured: true,
+          summary: `稼働中 (XP集計・ランク機能有効${details.length > 0 ? ` / ${details.join('・')}` : ''})`,
         };
       } else {
         modules['rank'] = {
-          configured: enableTcRank,
-          summary: enableTcRank ? '稼働中 (標準設定でXP集計・ランク機能有効)' : '機能オフ',
+          configured: true,
+          summary: '稼働中 (標準設定でXP集計・ランク機能有効)',
         };
       }
     } catch {
