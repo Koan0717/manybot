@@ -66,11 +66,11 @@ export async function POST(
       );
       
       // Also request the bot to spawn the panel
-      await pool.query(
-        `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, $2, $3)`,
+      const reqResult = await pool.query(
+        `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, $2, $3) RETURNING id`,
         [guildId, channel_id, panel_type || 'custom_ticket']
       );
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, sync_request_id: reqResult.rows[0]?.id ?? null });
     }
     else if (action === 'delete') {
       const { channel_id } = body;

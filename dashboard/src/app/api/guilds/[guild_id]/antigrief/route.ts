@@ -61,7 +61,20 @@ export async function POST(
       exempt_role_ids 
     } = body;
 
+    // テーブルが存在しない場合は自動作成（Botが未起動の新規サーバー対応）
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS panel_requests (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT,
+        channel_id BIGINT,
+        panel_type TEXT,
+        processed BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     const client = await pool.connect();
+    let requestId: number | null = null;
     try {
       await client.query('BEGIN');
 
@@ -89,8 +102,16 @@ export async function POST(
         ]
       );
 
+      // ボットのキャッシュ再読み込みをリクエスト（IPC経由）
+      const reqResult = await client.query(
+        `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
+         VALUES ($1, 0, 'reload_antigrief') RETURNING id`,
+        [guildId]
+      );
+      requestId = reqResult.rows[0]?.id ?? null;
+
       await client.query('COMMIT');
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, sync_request_id: requestId });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;

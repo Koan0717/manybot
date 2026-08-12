@@ -110,14 +110,14 @@ export async function POST(
       );
 
       // Request bot to reload the rank settings and bot_settings cache
-      await client.query(
+      const reqResult = await client.query(
         `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
-         VALUES ($1, $2, $3)`,
+         VALUES ($1, $2, $3) RETURNING id`,
         [guildId, 0, 'reload_rank_and_bot_settings']
       );
 
       await client.query('COMMIT');
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, sync_request_id: reqResult.rows[0]?.id ?? null });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;

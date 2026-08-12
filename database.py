@@ -1213,9 +1213,38 @@ async def setup_db():
 
         """)
 
+        await conn.execute("""
+
+            CREATE TABLE IF NOT EXISTS bot_heartbeat (
+
+                id INT PRIMARY KEY DEFAULT 1,
+
+                last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+                guild_count INT DEFAULT 0
+
+            )
+
+        """)
+
     for p in await get_all_configured_pools():
 
         await setup_db_schema(p)
+
+
+
+async def update_heartbeat(guild_count: int = 0):
+    """Botが生きていることをマスターDBに10秒毎に記録する(ダッシュボードの死活監視用)"""
+    p = await get_master_pool()
+    async with p.acquire() as conn:
+        await conn.execute(
+            '''
+            INSERT INTO bot_heartbeat (id, last_seen_at, guild_count)
+            VALUES (1, CURRENT_TIMESTAMP, $1)
+            ON CONFLICT (id) DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP, guild_count = $1
+            ''',
+            guild_count
+        )
 
 
 

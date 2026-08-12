@@ -118,13 +118,13 @@ export async function POST(
     );
 
     // Request bot to reload the evaluation settings cache
-    await pool.query(
+    const reqResult = await pool.query(
       `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
-       VALUES ($1, $2, $3)`,
+       VALUES ($1, $2, $3) RETURNING id`,
       [guildId, 0, 'reload_eval'] // channel_id=0 for system events
     );
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, sync_request_id: reqResult.rows[0]?.id ?? null });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

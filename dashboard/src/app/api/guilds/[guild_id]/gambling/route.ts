@@ -102,13 +102,13 @@ export async function POST(
       }
 
       // ボットのキャッシュ再読み込みをリクエスト（IPC経由）
-      await client.query(`
+      const reqResult = await client.query(`
         INSERT INTO panel_requests (guild_id, channel_id, panel_type)
-        VALUES ($1, 0, 'reload_bot_settings')
+        VALUES ($1, 0, 'reload_bot_settings') RETURNING id
       `, [guildId]);
 
       await client.query('COMMIT');
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, sync_request_id: reqResult.rows[0]?.id ?? null });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
