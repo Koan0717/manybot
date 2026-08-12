@@ -107,14 +107,14 @@ export async function POST(
         }
 
         // Request bot to reload bot_settings and role_room_prices cache
-        await client.query(
+        const reqResult = await client.query(
           `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
-           VALUES ($1, $2, $3)`,
+           VALUES ($1, $2, $3) RETURNING id`,
           [guildId, 0, 'reload_bot_and_role_prices']
         );
 
         await client.query('COMMIT');
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ success: true, sync_request_id: reqResult.rows[0]?.id ?? null });
       } catch (e) {
         await client.query('ROLLBACK');
         throw e;

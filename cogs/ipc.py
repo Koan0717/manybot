@@ -7,9 +7,23 @@ class IPC(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.check_panel_requests.start()
+        self.send_heartbeat.start()
 
     def cog_unload(self):
         self.check_panel_requests.cancel()
+        self.send_heartbeat.cancel()
+
+    @tasks.loop(seconds=10.0)
+    async def send_heartbeat(self):
+        """Botが生存していることをマスターDBに記録する(ダッシュボードの死活監視用)"""
+        try:
+            await database.update_heartbeat(len(self.bot.guilds))
+        except Exception as e:
+            print(f"[IPC ERROR] Failed to send heartbeat: {e}")
+
+    @send_heartbeat.before_loop
+    async def before_heartbeat(self):
+        await self.bot.wait_until_ready()
 
     @tasks.loop(seconds=5.0)
     async def check_panel_requests(self):
@@ -92,6 +106,20 @@ class IPC(commands.Cog):
                                 print(f"[IPC] Reloaded VC triggers: {len(self.bot.auto_vc_triggers)} triggers")
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload vc triggers: {e}")
+
+                        elif panel_type == "reload_antigrief":
+                            try:
+                                await self.bot.fetch_and_cache_antigrief_config(guild_id)
+                                print(f"[IPC] Reloaded antigrief settings for guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to reload antigrief settings: {e}")
+
+                        elif panel_type == "reload_vc_coins":
+                            try:
+                                await self.bot.fetch_and_cache_vc_coins_config(guild_id)
+                                print(f"[IPC] Reloaded vc_coins settings for guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to reload vc_coins settings: {e}")
 
                         elif panel_type.startswith("apply_room_access_deny:") or panel_type.startswith("apply_room_access_allow:"):
                             try:

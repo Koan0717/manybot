@@ -9,7 +9,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     const pool = await getPool(guildId);
     
     const res = await pool.query(
-        'SELECT is_enabled, whitelist_channels, blacklist_channels, whitelist_categories, blacklist_categories FROM vc_coins_settings WHERE guild_id = ',
+        'SELECT is_enabled, whitelist_channels, blacklist_channels, whitelist_categories, blacklist_categories FROM vc_coins_settings WHERE guild_id = $1',
         [guildId]
     );
 
@@ -60,11 +60,29 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     const b_cat = !is_whitelist ? categories : '[]';
 
     await pool.query(
-        'INSERT INTO vc_coins_settings (guild_id, whitelist_channels, blacklist_channels, whitelist_categories, blacklist_categories) VALUES (, , , , ) ON CONFLICT (guild_id) DO UPDATE SET whitelist_channels = EXCLUDED.whitelist_channels, blacklist_channels = EXCLUDED.blacklist_channels, whitelist_categories = EXCLUDED.whitelist_categories, blacklist_categories = EXCLUDED.blacklist_categories',
+        'INSERT INTO vc_coins_settings (guild_id, whitelist_channels, blacklist_channels, whitelist_categories, blacklist_categories) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (guild_id) DO UPDATE SET whitelist_channels = EXCLUDED.whitelist_channels, blacklist_channels = EXCLUDED.blacklist_channels, whitelist_categories = EXCLUDED.whitelist_categories, blacklist_categories = EXCLUDED.blacklist_categories',
         [guildId, w_ch, b_ch, w_cat, b_cat]
     );
 
-    return NextResponse.json({ success: true });
+    // テーブルが存在しない場合は自動作成（Botが未起動の新規サーバー対応）
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS panel_requests (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT,
+        channel_id BIGINT,
+        panel_type TEXT,
+        processed BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // vc_coins_settingsはBotが起動時キャッシュを持つため、保存時にリロードを要求する
+    const reqResult = await pool.query(
+        `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, 0, 'reload_vc_coins') RETURNING id`,
+        [guildId]
+    );
+
+    return NextResponse.json({ success: true, sync_request_id: reqResult.rows[0]?.id ?? null });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

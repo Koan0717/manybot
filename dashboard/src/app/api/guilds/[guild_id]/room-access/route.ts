@@ -96,8 +96,8 @@ export async function POST(
       }
 
       // Botのキャッシュ再読み込みをリクエスト
-      await client.query(
-        `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, 0, 'reload_bot_settings')`,
+      const reqResult = await client.query(
+        `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, 0, 'reload_bot_settings') RETURNING id`,
         [guildId]
       );
 
@@ -126,7 +126,7 @@ export async function POST(
       if (Object.keys(violatorBody).length > 0) await requestBulkApply(violatorBody, 'violator');
 
       await client.query('COMMIT');
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, sync_request_id: reqResult.rows[0]?.id ?? null });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;

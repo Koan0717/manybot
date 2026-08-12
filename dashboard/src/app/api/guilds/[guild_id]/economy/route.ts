@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     };
 
     const res = await pool.query(
-        'SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = ',
+        'SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1',
         [guildId]
     );
 
@@ -61,19 +61,19 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     for (const key of SETTINGS_KEYS) {
         if (body[key] !== undefined) {
             await pool.query(
-                'INSERT INTO bot_settings (guild_id, setting_key, setting_value) VALUES (, , ) ON CONFLICT (guild_id, setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value',
+                'INSERT INTO bot_settings (guild_id, setting_key, setting_value) VALUES ($1, $2, $3) ON CONFLICT (guild_id, setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value',
                 [guildId, key, String(body[key])]
             );
         }
     }
 
     // Tell the bot to reload settings via database IPC flag
-    await pool.query(
-        'INSERT INTO panel_requests (guild_id, channel_id, panel_type, processed) VALUES (, , , false)',
+    const reqResult = await pool.query(
+        'INSERT INTO panel_requests (guild_id, channel_id, panel_type, processed) VALUES ($1, $2, $3, false) RETURNING id',
         [guildId, 0, 'reload_bot_settings']
     );
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, sync_request_id: reqResult.rows[0]?.id ?? null });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
