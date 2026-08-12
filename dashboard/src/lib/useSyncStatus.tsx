@@ -151,8 +151,7 @@ export function SyncBadge({ state, botOnline, className = '' }: SyncBadgeProps) 
     if (botOnline === false) {
       return (
         <span
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
-            bg-zinc-800 border border-zinc-700 text-zinc-400 ${className}`}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 border border-zinc-700 text-zinc-400 ${className}`}
         >
           <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 flex-shrink-0" />
           Bot オフライン
@@ -165,8 +164,7 @@ export function SyncBadge({ state, botOnline, className = '' }: SyncBadgeProps) 
   if (state === 'pending') {
     return (
       <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
-          bg-amber-500/10 border border-amber-500/40 text-amber-300 ${className}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 border border-amber-500/40 text-amber-300 ${className}`}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
         Bot に反映中...
@@ -177,8 +175,7 @@ export function SyncBadge({ state, botOnline, className = '' }: SyncBadgeProps) 
   if (state === 'done') {
     return (
       <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
-          bg-emerald-500/10 border border-emerald-500/40 text-emerald-300 ${className}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 border border-emerald-500/40 text-emerald-300 ${className}`}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
         Bot に反映済み ✓
@@ -189,8 +186,7 @@ export function SyncBadge({ state, botOnline, className = '' }: SyncBadgeProps) 
   if (state === 'timeout') {
     return (
       <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
-          bg-red-500/10 border border-red-500/40 text-red-300 ${className}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 border border-red-500/40 text-red-300 ${className}`}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
         Bot 未応答 (30s)
@@ -201,8 +197,7 @@ export function SyncBadge({ state, botOnline, className = '' }: SyncBadgeProps) 
   if (state === 'bot_offline') {
     return (
       <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
-          bg-zinc-800 border border-zinc-700 text-zinc-400 ${className}`}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 border border-zinc-700 text-zinc-400 ${className}`}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 flex-shrink-0" />
         Bot オフライン
