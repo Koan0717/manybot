@@ -5,7 +5,7 @@ import Select from 'react-select';
 import { toast } from 'react-hot-toast';
 import { PhoneCall, Send, Save, Info, Hash, FolderKanban } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
-import { useSyncStatus, SyncBadge } from '@/lib/useSyncStatus';
+import { useSyncStatus, SyncBadge, SyncStatusCards } from '@/lib/useSyncStatus';
 
 export default function CallBoardSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -144,6 +144,8 @@ export default function CallBoardSettingsPage({ params }: { params: { guild_id: 
         />
         <SyncBadge state={sync.state} botOnline={sync.botOnline} className="mt-1" />
       </div>
+
+      <SyncStatusCards sync={sync} />
 
       <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl space-y-8">
         

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
+import { useSyncStatus, SyncStatusCards } from '@/lib/useSyncStatus';
 
 function StatusChip({
   label,
@@ -31,6 +32,7 @@ function StatusChip({
 
 export default function DatabaseSettings({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
+  const sync = useSyncStatus(guildId);
   const [databaseUrl, setDatabaseUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -96,6 +98,8 @@ export default function DatabaseSettings({ params }: { params: { guild_id: strin
           データベース設定
         </h1>
       </div>
+
+      <SyncStatusCards sync={sync} showSyncCard={false} />
 
       {/* ==== Status HUD strip ==== */}
       <div className="flex flex-wrap gap-3 mb-6">

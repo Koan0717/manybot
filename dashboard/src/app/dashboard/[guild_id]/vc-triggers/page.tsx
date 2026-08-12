@@ -6,7 +6,7 @@ import { Save, AlertCircle, Plus, Trash2, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Select from 'react-select';
 import PageHeader from '@/components/PageHeader';
-import { useSyncStatus, SyncBadge } from '@/lib/useSyncStatus';
+import { useSyncStatus, SyncBadge, SyncStatusCards } from '@/lib/useSyncStatus';
 
 interface DiscordChannel {
   id: string;
@@ -151,6 +151,8 @@ export default function VCTriggersPage() {
             </button>
           </div>
         </div>
+
+        <SyncStatusCards sync={sync} />
 
         {error && (
           <div className="bg-red-500/20 border border-red-500 text-red-500 p-4 rounded-lg flex items-center gap-2">

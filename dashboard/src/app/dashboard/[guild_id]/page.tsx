@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { toast } from 'react-hot-toast';
 import { SlidersHorizontal, ImageIcon } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import { useSyncStatus, SyncStatusCards, SyncBadge } from '@/lib/useSyncStatus';
 
 /**
  * Googleドライブの共有リンク等を、画像として直接表示できるURLに変換する。
@@ -256,6 +257,7 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const sync = useSyncStatus(guildId);
 
   // Settings state to hold the selected values for each key
   const [settings, setSettings] = useState<Record<string, any>>({});
@@ -293,6 +295,7 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
 
   const handleSave = async () => {
     setSaving(true);
+    sync.reset();
     
     const payload: Record<string, any> = {};
     for (const setting of ROLE_SETTINGS) {
@@ -319,6 +322,7 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
       const data = await res.json();
       if (data.success) {
         toast.success('設定を保存しました！');
+        sync.startPolling(data.sync_request_id ?? null);
       } else {
         toast.error('エラーが発生しました: ' + data.error);
       }
@@ -331,7 +335,12 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
 
   return (
     <div className="max-w-4xl mx-auto pb-32">
-      <PageHeader icon={SlidersHorizontal} title="基本・評価設定" subtitle="Botの基本動作と評価システムを設定します" />
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
+        <PageHeader icon={SlidersHorizontal} title="基本・評価設定" subtitle="Botの基本動作と評価システムを設定します" />
+        <SyncBadge state={sync.state} botOnline={sync.botOnline} className="mt-1" />
+      </div>
+
+      <SyncStatusCards sync={sync} />
       
       <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
         <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">ボットプロファイル設定</h2>

@@ -6,7 +6,7 @@ import { Save, AlertCircle, Coins, ListFilter, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Select from 'react-select';
 import { toast } from 'react-hot-toast';
-import { useSyncStatus, SyncBadge } from '@/lib/useSyncStatus';
+import { useSyncStatus, SyncBadge, SyncStatusCards } from '@/lib/useSyncStatus';
 
 interface DiscordChannel {
   id: string;
@@ -134,6 +134,8 @@ export default function VCCoinsSettingsPage() {
           </button>
         </div>
       </div>
+
+      <SyncStatusCards sync={sync} />
 
       {error && (
         <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-lg flex items-center space-x-3">

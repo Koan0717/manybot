@@ -4,7 +4,7 @@ import Select from 'react-select';
 import { toast } from 'react-hot-toast';
 import { ShieldAlert } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
-import { useSyncStatus, SyncBadge } from '@/lib/useSyncStatus';
+import { useSyncStatus, SyncBadge, SyncStatusCards } from '@/lib/useSyncStatus';
 
 export default function AntigriefSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -99,6 +99,8 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
         <PageHeader icon={ShieldAlert} title="荒らし対策設定" subtitle="不審な操作からサーバーを自動で守ります" />
         <SyncBadge state={sync.state} botOnline={sync.botOnline} className="mt-1" />
       </div>
+
+      <SyncStatusCards sync={sync} />
 
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">
