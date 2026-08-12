@@ -322,6 +322,34 @@ async def on_guild_join(guild: discord.Guild):
     except Exception as e:
         print(f"[ERROR] Failed to auto-sync commands to new guild {guild.name} ({guild.id}): {e}")
 
+@bot.event
+async def on_ready():
+    # on_readyは再接続のたびに複数回呼ばれ得るため、プロセス起動中は一度だけ実行する
+    if getattr(bot, "_all_guilds_synced", False):
+        return
+    bot._all_guilds_synced = True
+
+    print(f"[OK] Bot is ready! Logged in as {bot.user} (ID: {bot.user.id})")
+
+    # setup_hook時点では未参加guildの一覧が取得できないため、
+    # ここで改めて【現在参加している全サーバー】にコマンドを同期する。
+    # (以前は起動時に固定の1サーバーのみへ同期しており、それ以外のサーバーは
+    #  新規参加時にしかコマンドが更新されず、後からコマンドを追加・変更しても
+    #  反映されないままになる不具合があった)
+    guild_count = len(bot.guilds)
+    print(f"[OK] Syncing slash commands to all {guild_count} joined guilds...")
+    synced_count = 0
+    for guild in bot.guilds:
+        try:
+            bot.tree.copy_global_to(guild=guild)
+            await bot.tree.sync(guild=guild)
+            synced_count += 1
+        except Exception as e:
+            print(f"[ERROR] Failed to sync commands to guild {guild.name} ({guild.id}): {e}")
+        await asyncio.sleep(1)  # レート制限回避のため1秒間隔
+
+    print(f"[OK] Synced commands to {synced_count}/{guild_count} guilds. Persistent views are ready.")
+
 # --- 中央集権イベント (メインハンドラ) ---
 @bot.event
 async def on_message(message):
