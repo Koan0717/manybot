@@ -1,12 +1,15 @@
 'use client';
 import { useState, useEffect } from 'react';
-import Select from 'react-select';
 import { toast } from 'react-hot-toast';
-import { ShoppingBag } from 'lucide-react';
+import { ShoppingBag, Plus, Trash2, Edit3, Send } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import ChannelSelect from '@/components/ChannelSelect';
+import RoleSelect from '@/components/RoleSelect';
+import { useSyncStatus, SyncStatusCards } from '@/lib/useSyncStatus';
 
 export default function ShopSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
+  const sync = useSyncStatus(guildId);
   
   const [items, setItems] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
@@ -64,6 +67,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
       });
       if (res.ok) {
         setItems(prev => prev.filter(i => i.item_id !== itemId));
+        toast.success('アイテムを削除しました');
       } else {
         toast.error('削除に失敗しました');
       }
@@ -96,7 +100,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
 
   const saveItem = async () => {
     if (!formData.name || formData.price <= 0) {
-      toast('アイテム名と価格を正しく入力してください');
+      toast.error('アイテム名と有効な価格を入力してください');
       return;
     }
     setSaving(true);
@@ -125,6 +129,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
         } else {
           setItems(prev => [...prev, { ...payloadItem, item_id: data.item_id }]);
         }
+        toast.success('アイテムを保存しました！');
         setIsModalOpen(false);
       } else {
         toast.error('保存に失敗しました');
@@ -138,11 +143,11 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
 
   const sendShopPanel = async () => {
     if (!selectedChannelId) {
-      toast.success('送信先のチャンネルを選択してください');
+      toast.error('送信先のチャンネルを選択してください');
       return;
     }
     
-    const selectedChannel = channels.find(c => c.id === selectedChannelId);
+    const selectedChannel = channels.find(c => String(c.id) === String(selectedChannelId));
     
     setSendingPanel(true);
     try {
@@ -153,7 +158,7 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
       });
       
       if (res.ok) {
-        toast.success('ショップパネルを送信しました！');
+        toast.success('ショップパネルを正常に送信しました！');
         setSelectedChannelId('');
       } else {
         const data = await res.json();
@@ -166,38 +171,21 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
     }
   };
 
-  const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}`, color: r.color }));
-  const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
-
-  const customStyles = {
-    control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white' }),
-    menu: (base: any) => ({ ...base, backgroundColor: '#27272a', zIndex: 9999 }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isFocused ? '#3f3f46' : '#27272a',
-      color: state.data.color ? `#${state.data.color.toString(16).padStart(6, '0')}` : 'white',
-      ':active': { backgroundColor: '#52525b' }
-    }),
-    multiValue: (base: any) => ({ ...base, backgroundColor: '#3f3f46' }),
-    multiValueLabel: (base: any, state: any) => ({
-      ...base,
-      color: state.data.color ? `#${state.data.color.toString(16).padStart(6, '0')}` : 'white'
-    })
-  };
-
-  if (loading) return <div className="text-zinc-400">読み込み中...</div>;
+  if (loading) return <div className="text-zinc-400 p-8">読み込み中...</div>;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto pb-24 space-y-6">
       <div className="flex justify-between items-center gap-4 flex-wrap mb-2">
         <PageHeader icon={ShoppingBag} title="ショップ設定" subtitle="コインで交換できるアイテムを管理します" />
         <button 
           onClick={() => openModal()}
-          className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-red-900/20 transition-all hover:-translate-y-0.5 -mt-8"
+          className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 text-white px-5 py-2.5 rounded-lg font-bold shadow-lg shadow-red-900/20 transition-all hover:-translate-y-0.5 -mt-8 flex items-center gap-1.5"
         >
-          ＋ 新規アイテム追加
+          <Plus className="w-4 h-4" /> 新規アイテム追加
         </button>
       </div>
+
+      <SyncStatusCards sync={sync} />
 
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">
@@ -205,13 +193,19 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
         </div>
       )}
 
-      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl">
+      {/* アイテム一覧 */}
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl space-y-4">
+        <h3 className="font-mecha text-base font-bold text-white border-b border-zinc-800 pb-3 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-red-500"></span>
+          販売アイテム一覧 ({items.length}件)
+        </h3>
+
         {items.length === 0 ? (
-          <p className="text-zinc-400 text-center py-8">現在販売されているアイテムはありません。</p>
+          <p className="text-zinc-400 text-center py-10 font-tech">現在販売されているアイテムはありません。</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-zinc-300">
-              <thead className="bg-zinc-900/50 text-xs uppercase text-zinc-400 border-b border-zinc-700">
+              <thead className="bg-zinc-900/80 text-xs uppercase text-zinc-400 border-b border-zinc-700 font-tech">
                 <tr>
                   <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">アイテム名</th>
@@ -221,21 +215,59 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
                   <th className="px-4 py-3 text-right">操作</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-zinc-800/60 font-tech">
                 {items.map(item => (
-                  <tr key={item.item_id} className="border-b border-zinc-800 hover:bg-zinc-800/50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-zinc-500">{item.item_id}</td>
+                  <tr key={item.item_id} className="hover:bg-zinc-800/40 transition-colors">
+                    <td className="px-4 py-3 font-mono text-zinc-500">#{item.item_id}</td>
                     <td className="px-4 py-3 font-bold text-white">{item.name}</td>
-                    <td className="px-4 py-3 text-yellow-400">{item.price} 通貨</td>
+                    <td className="px-4 py-3 text-yellow-400 font-mono font-bold">{item.price} 通貨</td>
                     <td className="px-4 py-3">
-                      {item.target_role_ids?.length ? item.target_role_ids.length + '個のロール' : 'なし (全員)'}
+                      {item.target_role_ids && item.target_role_ids.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {item.target_role_ids.map((id: any) => {
+                            const r = roles.find(role => String(role.id) === String(id));
+                            return r ? (
+                              <span key={id} className="bg-zinc-800 text-zinc-300 text-xs px-2 py-0.5 rounded border border-zinc-700">
+                                @{r.name}
+                              </span>
+                            ) : null;
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-500 text-xs">全員購入可</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      {item.reward_role_ids?.length ? item.reward_role_ids.length + '個のロール' : 'なし'}
+                      {item.reward_role_ids && item.reward_role_ids.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {item.reward_role_ids.map((id: any) => {
+                            const r = roles.find(role => String(role.id) === String(id));
+                            return r ? (
+                              <span key={id} className="bg-red-950/60 text-red-300 text-xs px-2 py-0.5 rounded border border-red-800/60">
+                                @{r.name}
+                              </span>
+                            ) : null;
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-500 text-xs">付与なし</span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-right space-x-3">
-                      <button onClick={() => openModal(item)} className="text-blue-400 hover:text-blue-300">編集</button>
-                      <button onClick={() => handleDelete(item.item_id)} className="text-red-500 hover:text-red-400">削除</button>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => openModal(item)}
+                          className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white px-2.5 py-1.5 rounded text-xs transition-colors flex items-center gap-1 border border-zinc-700"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" /> 編集
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.item_id)}
+                          className="bg-red-950/60 hover:bg-red-900/80 text-red-400 hover:text-red-200 px-2.5 py-1.5 rounded text-xs transition-colors flex items-center gap-1 border border-red-800/60"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" /> 削除
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -245,152 +277,172 @@ export default function ShopSettingsPage({ params }: { params: { guild_id: strin
         )}
       </div>
 
-      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mt-8 mb-12">
-        <h2 className="text-xl font-bold text-white mb-4">ショップパネルの設置</h2>
-        <p className="text-zinc-400 mb-6 text-sm">
-          指定したチャンネルに、ユーザーがショップを利用するためのパネル（ボタン付きメッセージ）を送信します。
+      {/* ショップパネルの設置 (ChannelSelect モーダル対応) */}
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl space-y-4">
+        <h3 className="font-mecha text-base font-bold text-white border-b border-zinc-800 pb-3 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+          ショップパネルの設置
+        </h3>
+        <p className="text-zinc-400 text-sm font-tech">
+          指定したチャンネルに、ユーザーがショップを利用するためのパネル（購入ボタン付きメッセージ）を送信します。
         </p>
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
-          <div className="flex-1 w-full">
-            <label className="block text-sm font-medium text-zinc-400 mb-2">送信先チャンネル</label>
-            <Select
-              options={channelOptions}
-              value={channelOptions.find(c => c.value === selectedChannelId) || null}
-              onChange={(selected: any) => setSelectedChannelId(selected ? selected.value : '')}
-              placeholder="チャンネルを検索・選択..."
-              isClearable
-              styles={{
-                ...customStyles,
-                control: (base: any) => ({ ...base, backgroundColor: '#18181b', borderColor: '#3f3f46', color: 'white', padding: '2px' })
-              }}
-              noOptionsMessage={() => "チャンネルが見つかりません"}
+
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end pt-2">
+          <div className="flex-1 w-full space-y-1.5">
+            <label className="block text-xs font-tech text-zinc-400 uppercase tracking-wider">
+              送信先チャンネル
+            </label>
+            <ChannelSelect
+              label="ショップパネル送信先チャンネル"
+              placeholder="🔍 チャンネルを選択または検索..."
+              value={selectedChannelId}
+              onChange={(id) => setSelectedChannelId(id)}
+              channels={channels}
+              multiple={false}
             />
           </div>
           <button
             onClick={sendShopPanel}
             disabled={sendingPanel || !selectedChannelId}
-            className="w-full sm:w-auto bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-lg font-bold shadow-lg transition-all"
+            className="w-full sm:w-auto mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-lg font-bold shadow-lg transition-all flex items-center justify-center gap-2 h-11"
           >
+            <Send className="w-4 h-4" />
             {sendingPanel ? '送信中...' : 'パネルを送信'}
           </button>
         </div>
       </div>
 
-      {/* Modal */}
+      {/* アイテム編集/追加モーダル */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-zinc-900 rounded-lg shadow-2xl border border-zinc-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-zinc-900 rounded-xl shadow-2xl border border-zinc-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div className="p-6">
-              <h2 className="text-2xl font-bold text-white mb-6 border-b border-zinc-800 pb-2">
+              <h2 className="text-xl font-bold text-white mb-6 border-b border-zinc-800 pb-3 font-mecha flex items-center gap-2">
+                <span className="text-red-500">●</span>
                 {editingItem ? 'アイテムを編集' : '新規アイテム追加'}
               </h2>
 
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">アイテム名 <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-tech text-zinc-400 mb-1.5 uppercase tracking-wider">
+                    アイテム名 <span className="text-red-500">*</span>
+                  </label>
                   <input 
                     type="text" 
                     value={formData.name} 
                     onChange={e => setFormData({...formData, name: e.target.value})}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500" 
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 font-tech" 
                     placeholder="例: カラー変更権"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">価格 (通貨) <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-tech text-zinc-400 mb-1.5 uppercase tracking-wider">
+                    価格 (通貨) <span className="text-red-500">*</span>
+                  </label>
                   <input 
                     type="number" 
                     value={formData.price} 
                     onChange={e => setFormData({...formData, price: Number(e.target.value)})}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500" 
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 font-tech" 
+                    placeholder="1000"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">使用説明・備考</label>
+                  <label className="block text-xs font-tech text-zinc-400 mb-1.5 uppercase tracking-wider">
+                    使用説明・備考
+                  </label>
                   <textarea 
                     value={formData.usage} 
                     onChange={e => setFormData({...formData, usage: e.target.value})}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500 h-24" 
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 h-24 font-tech" 
                     placeholder="購入時の説明や使い方"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">購入可能条件 (対象ロール)</label>
-                  <p className="text-xs text-zinc-500 mb-2">指定したロールを持っている人だけが買えるようにします。未指定の場合は全員が買えます。</p>
-                  <Select
-                    isMulti
-                    options={roleOptions}
-                    value={roleOptions.filter(o => formData.target_role_ids.includes(o.value))}
-                    onChange={(selected: any) => setFormData({...formData, target_role_ids: selected.map((s: any) => s.value)})}
-                    styles={customStyles}
-                    placeholder="ロールを選択..."
+                  <label className="block text-xs font-tech text-zinc-400 mb-1.5 uppercase tracking-wider">
+                    購入可能条件 (対象ロール)
+                  </label>
+                  <p className="text-xs text-zinc-500 mb-2 font-tech">指定したロールを持っている人だけが買えるようにします。未指定の場合は全員が買えます。</p>
+                  <RoleSelect
+                    label="購入可能条件 (対象ロール)"
+                    placeholder="未指定（全員購入可能）"
+                    value={formData.target_role_ids}
+                    onChange={(ids) => setFormData({ ...formData, target_role_ids: ids })}
+                    roles={roles}
+                    multiple={true}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">付与するロール</label>
-                  <p className="text-xs text-zinc-500 mb-2">購入時に自動的に付与されるロールを設定します。</p>
-                  <Select
-                    isMulti
-                    options={roleOptions}
-                    value={roleOptions.filter(o => formData.reward_role_ids.includes(o.value))}
-                    onChange={(selected: any) => setFormData({...formData, reward_role_ids: selected.map((s: any) => s.value)})}
-                    styles={customStyles}
-                    placeholder="ロールを選択..."
+                  <label className="block text-xs font-tech text-zinc-400 mb-1.5 uppercase tracking-wider">
+                    付与するロール
+                  </label>
+                  <p className="text-xs text-zinc-500 mb-2 font-tech">購入時に自動的に付与されるロールを設定します。</p>
+                  <RoleSelect
+                    label="付与するロール"
+                    placeholder="未指定（ロール付与なし）"
+                    value={formData.reward_role_ids}
+                    onChange={(ids) => setFormData({ ...formData, reward_role_ids: ids })}
+                    roles={roles}
+                    multiple={true}
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-zinc-400 mb-1">ロール有効期限 (日数)</label>
+                    <label className="block text-xs font-tech text-zinc-400 mb-1.5 uppercase tracking-wider">
+                      ロール有効期限 (日数)
+                    </label>
                     <input 
                       type="number" 
                       value={formData.duration_days} 
                       onChange={e => setFormData({...formData, duration_days: e.target.value})}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500" 
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 font-tech" 
                       placeholder="無期限の場合は空欄"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm text-zinc-400 mb-1">評価期限延長 (日数)</label>
+                    <label className="block text-xs font-tech text-zinc-400 mb-1.5 uppercase tracking-wider">
+                      評価期限延長 (日数)
+                    </label>
                     <input 
                       type="number" 
                       value={formData.extend_days} 
                       onChange={e => setFormData({...formData, extend_days: e.target.value})}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500" 
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 font-tech" 
                       placeholder="延長しない場合は空欄"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="flex items-center space-x-3 cursor-pointer">
+                <div className="pt-2">
+                  <label className="flex items-center space-x-3 cursor-pointer bg-zinc-800/40 p-3 rounded-lg border border-zinc-800">
                     <input 
                       type="checkbox" 
                       checked={formData.is_eval_extend}
                       onChange={e => setFormData({...formData, is_eval_extend: e.target.checked})}
-                      className="form-checkbox h-5 w-5 text-red-600 bg-zinc-800 border-zinc-700 rounded focus:ring-red-500 focus:ring-offset-zinc-900" 
+                      className="form-checkbox h-4 w-4 text-red-600 bg-zinc-800 border-zinc-700 rounded focus:ring-red-500" 
                     />
-                    <span className="text-sm text-white">このアイテムは「評価期限の延長」専用アイテムとして扱う</span>
+                    <span className="text-sm text-white font-tech">このアイテムは「評価期限の延長」専用アイテムとして扱う</span>
                   </label>
                 </div>
               </div>
 
-              <div className="mt-8 flex justify-end space-x-3">
+              <div className="mt-8 flex justify-end space-x-3 pt-4 border-t border-zinc-800">
                 <button 
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded text-zinc-400 hover:text-white transition-colors"
+                  className="px-4 py-2 rounded-lg text-zinc-400 hover:text-white transition-colors text-sm font-tech"
                 >
                   キャンセル
                 </button>
                 <button 
                   onClick={saveItem}
                   disabled={saving}
-                  className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-6 py-2 rounded font-bold shadow transition-colors"
+                  className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-bold shadow transition-colors text-sm"
                 >
                   {saving ? '保存中...' : '保存する'}
                 </button>
