@@ -3909,3 +3909,178 @@ async def save_call_board_settings(guild_id: int, panel_channel_id: int, board_c
         ''', guild_id, panel_channel_id, board_channel_id, vc_category_id)
 
 
+
+# --- 以下、他セッションによるdatabase.py書き換え時に誤って削除されていた関数を復元 ---
+
+async def get_expired_evaluation_periods() -> list:
+    pools = await get_all_configured_pools()
+    now = get_now_naive()
+    all_expired = []
+    for p in pools:
+        try:
+            async with p.acquire() as conn:
+                rows = await conn.fetch('''
+                    SELECT guild_id, user_id, start_time, end_time
+                    FROM evaluation_periods
+                    WHERE end_time < $1
+                ''', now)
+                all_expired.extend([dict(row) for row in rows])
+        except Exception as e:
+            print(f'[DB Error] Failed to fetch expired evaluation periods: {e}')
+    return all_expired
+
+
+async def get_interviewer_stats(guild_id: int, interviewer_id: int) -> int:
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow('SELECT total_handled FROM interviewer_stats WHERE guild_id = $1 AND interviewer_id = $2', guild_id, interviewer_id)
+        return row['total_handled'] if row else 0
+
+
+async def increment_interviewer_stats(guild_id: int, interviewer_id: int) -> int:
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow('''
+            INSERT INTO interviewer_stats (guild_id, interviewer_id, total_handled)
+            VALUES ($1, $2, 1)
+            ON CONFLICT (guild_id, interviewer_id)
+            DO UPDATE SET total_handled = interviewer_stats.total_handled + 1
+            RETURNING total_handled
+        ''', guild_id, interviewer_id)
+        return row['total_handled']
+
+
+async def set_interviewer_stats(guild_id: int, interviewer_id: int, total: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO interviewer_stats (guild_id, interviewer_id, total_handled)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (guild_id, interviewer_id)
+            DO UPDATE SET total_handled = $3
+        ''', guild_id, interviewer_id, total)
+
+
+async def get_all_interviewer_stats(guild_id: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch('SELECT interviewer_id, total_handled FROM interviewer_stats WHERE guild_id = $1 ORDER BY total_handled DESC', guild_id)
+        return [{"interviewer_id": str(r['interviewer_id']), "total_handled": r['total_handled']} for r in rows]
+
+
+async def update_available_commands(commands_to_sync: list):
+    p = await get_master_pool()
+    async with p.acquire() as conn:
+        for cmd in commands_to_sync:
+            await conn.execute('''
+                INSERT INTO available_commands (command_name, description, category)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (command_name) DO UPDATE
+                SET description = EXCLUDED.description, category = EXCLUDED.category
+            ''', cmd['name'], cmd['description'], cmd['category'])
+
+
+async def is_command_enabled(guild_id: int, command_name: str) -> bool:
+    if guild_id is None:
+        return True
+
+    pool = await get_pool(guild_id)
+    if not pool:
+        return True
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow('''
+            SELECT is_enabled FROM command_settings
+            WHERE guild_id = $1 AND (command_name = $2 OR command_name = $3)
+            ORDER BY is_enabled ASC LIMIT 1
+        ''', guild_id, command_name, f'/{command_name}')
+
+        if row is not None:
+            return row['is_enabled']
+
+        return True
+
+
+# --- 自己紹介ロール設定 ---
+
+async def get_self_intro_role_settings(guild_id: int) -> dict:
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            'SELECT channel_id, welcome_channel_id, role_id, template, is_enabled FROM self_intro_role_settings WHERE guild_id = $1',
+            guild_id
+        )
+        if row:
+            return {
+                "channel_id": row['channel_id'],
+                "welcome_channel_id": row['welcome_channel_id'],
+                "role_id": row['role_id'],
+                "template": row['template'],
+                "is_enabled": row['is_enabled'],
+            }
+        return {"channel_id": None, "welcome_channel_id": None, "role_id": None, "template": None, "is_enabled": False}
+
+
+async def save_self_intro_role_settings(guild_id: int, channel_id, welcome_channel_id, role_id, template: str, is_enabled: bool):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO self_intro_role_settings (guild_id, channel_id, welcome_channel_id, role_id, template, is_enabled)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (guild_id) DO UPDATE
+            SET channel_id = $2, welcome_channel_id = $3, role_id = $4, template = $5, is_enabled = $6
+        ''', guild_id, channel_id, welcome_channel_id, role_id, template, is_enabled)
+
+
+async def save_self_intro_welcome_message(guild_id: int, user_id: int, message_id: int, channel_id: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO self_intro_welcome_messages (guild_id, user_id, message_id, channel_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id, user_id) DO UPDATE
+            SET message_id = $3, channel_id = $4
+        ''', guild_id, user_id, message_id, channel_id)
+
+
+async def ensure_user(guild_id: int, user_id: int):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        await conn.execute(
+            '''
+            INSERT INTO users (guild_id, user_id) VALUES ($1, $2)
+            ON CONFLICT (guild_id, user_id) DO NOTHING
+            ''',
+            guild_id, user_id
+        )
+
+
+async def get_top_users(guild_id: int, mode: str, limit: int = 10) -> list[dict]:
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        if mode == "tc":
+            rows = await conn.fetch('''
+                SELECT user_id, tc_level as level, tc_xp as xp
+                FROM users
+                WHERE guild_id = $1
+                ORDER BY tc_level DESC, tc_xp DESC
+                LIMIT $2
+            ''', guild_id, limit)
+        else:
+            rows = await conn.fetch('''
+                SELECT user_id, vc_level as level, vc_xp as xp
+                FROM users
+                WHERE guild_id = $1
+                ORDER BY vc_level DESC, vc_xp DESC
+                LIMIT $2
+            ''', guild_id, limit)
+        return [{"user_id": r["user_id"], "level": r["level"], "xp": r["xp"]} for r in rows]
+
+
+async def remove_evaluation_period(guild_id: int, user_id: int):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        await conn.execute(
+            'DELETE FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2',
+            guild_id, user_id
+        )
