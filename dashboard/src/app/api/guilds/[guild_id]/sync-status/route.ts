@@ -16,15 +16,26 @@ export async function GET(
   const requestId = requestIdStr && !isNaN(Number(requestIdStr)) ? Number(requestIdStr) : null;
 
   // 1. データベース疎通確認 & レイテンシー測定
-  let dbStatus: { ok: boolean; latencyMs?: number; error?: string } = { ok: false };
+  let dbStatus: { ok: boolean; latencyMs?: number; isDedicated?: boolean; error?: string } = { ok: false };
   let pool;
   try {
     const dbStart = Date.now();
     pool = await getPool(guildId);
     await pool.query('SELECT 1');
+    
+    let isDedicated = false;
+    try {
+      const dedicatedRes = await masterPool.query(
+        'SELECT database_url FROM guild_databases WHERE guild_id = $1',
+        [guildId]
+      );
+      isDedicated = dedicatedRes.rows.length > 0 && !!dedicatedRes.rows[0].database_url;
+    } catch {}
+
     dbStatus = {
       ok: true,
       latencyMs: Date.now() - dbStart,
+      isDedicated,
     };
   } catch (e: any) {
     dbStatus = {

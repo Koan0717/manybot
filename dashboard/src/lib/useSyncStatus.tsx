@@ -13,6 +13,7 @@ export type SyncState =
 export interface DbStatus {
   ok: boolean;
   latencyMs?: number;
+  isDedicated?: boolean;
   error?: string;
 }
 
@@ -192,7 +193,9 @@ export function SyncStatusCards({ sync, className = '', showSyncCard = true }: S
           <Database className="w-4 h-4 text-zinc-400" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-tech text-xs text-zinc-500">Supabase (Database)</div>
+          <div className="font-tech text-xs text-zinc-500 flex items-center gap-1.5">
+            {dbStatus?.isDedicated ? 'Supabase (サーバー専用DB)' : 'Supabase (共有DB)'}
+          </div>
           {loading ? (
             <div className="text-sm text-zinc-500 flex items-center gap-1.5 font-tech">
               <Loader2 className="w-3.5 h-3.5 animate-spin" /> 確認中...
