@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import asyncpg
 
 import datetime
@@ -26,7 +27,7 @@ def get_now_naive() -> datetime.datetime:
 
 
 
-# 隰暦ｽ･驍ｯ螢ｹ繝ｻ郢晢ｽｼ郢晢ｽｫ郢ｧ蜑・ｽｿ譎・亜邵ｺ蜷ｶ・玖棔逕ｻ辟・
+# 隰暦ｽ･驍ｯ螢ｹ繝ｻ郢晢ｽｼ郢晢ｽｫ郢ｧ蜑・譎・邵ｺ蜷ｶE陞溽判辟・
 
 # -- NEW POOL LOGIC --
 
@@ -240,14 +241,14 @@ async def get_pool(guild_id: int = None):
 
 class _ResilientConn:
     """
-    setup_db_schema() 縺ｯ謨ｰ蜊∝九・ CREATE TABLE / ALTER TABLE 繧帝・分縺ｫ螳溯｡後☆繧九′縲・
-    騾比ｸｭ縺ｮ1譁・′萓句､悶ｒ謚輔￡繧九→(蝙倶ｸ堺ｸ閾ｴ繝ｻ繝ｭ繝・け繝ｻ讓ｩ髯舌お繝ｩ繝ｼ縺ｪ縺ｩ)縲∝ｾ檎ｶ壹・
-    繝・・繝悶Ν菴懈・繧・き繝ｩ繝霑ｽ蜉繝槭う繧ｰ繝ｬ繝ｼ繧ｷ繝ｧ繝ｳ縺御ｸ蛻・ｮ溯｡後＆繧後★縺ｫ髢｢謨ｰ蜈ｨ菴薙′
-    縺昴％縺ｧ豁｢縺ｾ縺｣縺ｦ縺励∪縺・撫鬘後′縺ゅ▲縺溘・
+    setup_db_schema() 縺ｯ謨ｰ蜊∝畿 CREATE TABLE / ALTER TABLE 繧帝・縺ｫ螳溯｡後☆繧九′縲・
+    騾比ｸｭ縺ｮ1譁・萓句､悶ｒ謚輔￡繧九→(蝙倶ｸ堺ｸ閾ｴ繝ｻ繝ｭ繝・繝ｻ讓ｩ髯舌お繝ｩ繝ｼ縺ｪ縺ｩ)縲∝ｾ檎ｶ哘
+    繝・E繝悶Ν菴廢繧・繝ｩ繝霑ｽ蜉繝槭う繧ｰ繝ｬ繝ｼ繧ｷ繝ｧ繝ｳ縺御ｸ蛻・陦後＆繧後★縺ｫ髢｢謨ｰ蜈ｨ菴薙′
+    縺昴％縺ｧ豁｢縺ｾ縺｣縺ｦ縺励∪縺・鬘後′縺ゅ▲縺溘・
 
-    縺薙・繝ｩ繝・ヱ繝ｼ縺ｯ conn.execute() 縺ｮ蜻ｼ縺ｳ蜃ｺ縺励□縺代ｒ讓ｪ蜿悶ｊ縺励∝､ｱ謨励＠縺ｦ繧・
-    隴ｦ蜻翫ｒ蜃ｺ縺励※谺｡縺ｮ譁・∈騾ｲ繧√ｋ繧医≧縺ｫ縺吶ｋ縲Ｔetup_db_schema() 譛ｬ菴薙・SQL縺ｯ
-    荳蛻・､画峩縺帙★縲∝ｮ牙・諤ｧ縺縺代ｒ蠎穂ｸ翫￡縺吶ｋ縲・
+    縺摘繝ｩ繝・繝ｼ縺ｯ conn.execute() 縺ｮ蜻ｼ縺ｳ蜃ｺ縺励□縺代ｒ讓ｪ蜿悶ｊ縺励∝､ｱ謨励＠縺ｦ繧・
+    隴ｦ蜻翫ｒ蜃ｺ縺励※谺｡縺ｮ譁・騾ｲ繧√ｋ繧医≧縺ｫ縺吶ｋ縲Ｔetup_db_schema() 譛ｬ菴摘SQL縺ｯ
+    荳蛻・譖ｴ縺帙★縲∝ｮ右諤ｧ縺縺代ｒ蠎穂ｸ翫￡縺吶ｋ縲・
     """
 
     def __init__(self, conn):
@@ -441,14 +442,14 @@ async def setup_db_schema(p):
 
             await conn.execute('ALTER TABLE anonymous_chats ADD COLUMN IF NOT EXISTS panel_channel_id BIGINT')
             await conn.execute('ALTER TABLE anonymous_chats ADD COLUMN IF NOT EXISTS dest_channel_id BIGINT')
-            # 繝繝・す繝･繝懊・繝・Next.js)蛛ｴ縺碁℃蜴ｻ縺ｫ channel_id/guild_id 縺ｨ縺・≧蛻･繧ｹ繧ｭ繝ｼ繝槭〒
-            # 縺薙・繝・・繝悶Ν繧貞・縺ｫ菴懊▲縺ｦ縺励∪縺｣縺ｦ縺・◆繧ｱ繝ｼ繧ｹ縺後≠繧翫√◎縺ｮ蝣ｴ蜷・
-            # panel_channel_id 縺ｫ縺ｯ荳諢丞宛邏・′莉倥＞縺ｦ縺・↑縺・◆繧・
+            # 繝繝・繝･繝廢繝・Next.js)蛛ｴ縺碁℃蜴ｻ縺ｫ channel_id/guild_id 縺ｨ縺・蛻･繧ｹ繧ｭ繝ｼ繝槭〒
+            # 縺摘繝・E繝悶Ν繧脱縺ｫ菴懊▲縺ｦ縺励∪縺｣縺ｦ縺・繧ｱ繝ｼ繧ｹ縺後≠繧翫√◎縺ｮ蝣ｴ蜷・
+            # panel_channel_id 縺ｫ縺ｯ荳諢丞宛邏・莉倥＞縺ｦ縺・縺・繧・
             # INSERT ... ON CONFLICT (panel_channel_id) 縺悟､ｱ謨励☆繧九ゅ％縺薙〒陬懷ｼｷ縺吶ｋ縲・
             try:
                 await conn.execute('ALTER TABLE anonymous_chats ADD CONSTRAINT anonymous_chats_panel_channel_id_key UNIQUE (panel_channel_id)')
             except Exception:
-                pass  # 譌｢縺ｫ蛻ｶ邏・′縺ゅｋ蝣ｴ蜷医・縺昴・縺ｾ縺ｾ辟｡隕・
+                pass  # 譌｢縺ｫ蛻ｶ邏・縺ゅｋ蝣ｴ蜷�E縺戲縺ｾ縺ｾ辟｡隕・
 
         except Exception as e:
 
@@ -574,19 +575,19 @@ async def setup_db_schema(p):
 
             INSERT INTO room_prices (room_type, duration, price) VALUES
 
-            ('陞ｳ・ｿ', 12, 10000),
+            ('陞ｳE', 12, 10000),
 
-            ('陞ｳ・ｿ', 24, 15000),
+            ('陞ｳE', 24, 15000),
 
-            ('鬯ｮ蛟｡・ｴ螢ｼ・ｮ・ｿ', 12, 150000),
+            ('鬯ｮ蛟｡E螢ｼEE', 12, 150000),
 
-            ('鬯ｮ蛟｡・ｴ螢ｼ・ｮ・ｿ', 24, 250000),
+            ('鬯ｮ蛟｡E螢ｼEE', 24, 250000),
 
-            ('郢ｧ・ｫ郢ｧ・ｹ郢ｧ・ｿ郢晢｣ｰVC', 24, 30000),
+            ('郢ｧE郢ｧE郢ｧE郢晢｣ｰVC', 24, 30000),
 
-            ('郢ｧ・ｲ郢晢ｽｼ郢晢｣ｰVC', 12, 10000),
+            ('郢ｧE郢晢ｽｼ郢晢｣ｰVC', 12, 10000),
 
-            ('郢ｧ・ｲ郢晢ｽｼ郢晢｣ｰVC', 24, 15000),
+            ('郢ｧE郢晢ｽｼ郢晢｣ｰVC', 24, 15000),
 
             ('髮会ｽｭ陷雁楓C', 12, 10000),
 
@@ -660,7 +661,7 @@ async def setup_db_schema(p):
 
         try:
 
-            await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_label TEXT DEFAULT '郢昶・縺鍋ｹ昴・繝ｨ郢ｧ蜑・ｽｽ諛医・邵ｺ蜷ｶ・・")
+            await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_label TEXT DEFAULT '郢戲縺鍋ｹ戲繝ｨ郢ｧ蜑・諛�E邵ｺ蜷ｶEE")
 
             await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_emoji TEXT")
 
@@ -1228,8 +1229,8 @@ async def get_user(guild_id: int, user_id: int):
         try:
             row = await conn.fetchrow('SELECT balance, chinchiro_count, chinchiro_last_date, tc_xp, tc_level, vc_xp, vc_level, evaluation_vc_time, initial_issued, chinchiro_daily_bet, event_points FROM users WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
         except asyncpg.exceptions.UndefinedColumnError:
-            # 繧ｫ繝ｩ繝縺悟ｭ伜惠縺励↑縺・ｴ蜷医∬・蜍慕噪縺ｫ霑ｽ蜉縺励※蜀崎ｩｦ陦・
-            print("[Auto-Recovery] users 繝・・繝悶Ν縺ｫ荳崎ｶｳ繧ｫ繝ｩ繝繧定ｿｽ蜉荳ｭ...")
+            # 繧ｫ繝ｩ繝縺悟ｭ伜惠縺励↑縺・蜷医・蜍慕噪縺ｫ霑ｽ蜉縺励※蜀崎ｩｦ陦・
+            print("[Auto-Recovery] users 繝・E繝悶Ν縺ｫ荳崎ｶｳ繧ｫ繝ｩ繝繧定ｿｽ蜉荳ｭ...")
             for col_sql in [
                 'ALTER TABLE users ADD COLUMN IF NOT EXISTS evaluation_vc_time INTEGER DEFAULT 0',
                 'ALTER TABLE users ADD COLUMN IF NOT EXISTS initial_issued BOOLEAN DEFAULT FALSE',
@@ -1600,7 +1601,7 @@ async def reset_user_balance(guild_id: int, user_id: int):
 
 
 
-# --- 髫ｧ遨ゑｽｾ・｡隴帶ｻ・ｿ｣驍ゑｽ｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- 髫ｧ遨ゑｽｾE隴帶ｻ・驍ゑｽ｡騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def add_evaluation_period(guild_id: int, user_id: int, start_time: datetime.datetime, end_time: datetime.datetime):
 
@@ -1700,7 +1701,7 @@ async def update_evaluation_period_end(guild_id: int, user_id: int, new_end_time
 
 
 
-# --- VC闖ｴ諛医・郢晏現ﾎ懃ｹｧ・ｬ郢晢ｽｼ驍ゑｽ｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- VC闖ｴ諛�E郢晏現ﾎ懃ｹｧE郢晢ｽｼ驍ゑｽ｡騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def add_auto_vc_trigger(channel_id: int):
 
@@ -1746,7 +1747,7 @@ async def get_auto_vc_triggers() -> list[int]:
 
 
 
-# --- VC闖ｴ諛医・郢晏現ﾎ懃ｹｧ・ｬ郢晢ｽｼ髫ｪ・ｭ陞ｳ螟ゑｽｮ・｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- VC闖ｴ諛�E郢晏現ﾎ懃ｹｧE郢晢ｽｼ髫ｪE陞ｳ螟ゑｽｮE騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def save_auto_vc_config(channel_id: int, base_name: str, allow_rename: bool, include_owner_name: bool, use_numbering: bool, allow_limit_change: bool, show_panel: bool, is_invite_only: bool = False, invite_visible_role_ids: list = None, allowed_role_ids: list = None):
 
@@ -1865,7 +1866,7 @@ async def get_all_auto_vc_configs() -> list[dict]:
 
 
 
-# --- 邵ｺ髮∵牒邵ｺ繝ｻ邊狗ｹｧ荳岩雷郢昜ｻ｣繝ｭ郢晢ｽｫ驍ゑｽ｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- 邵ｺ髮∵牒邵ｺ繝ｻ邊狗ｹｧ荳岩雷郢昜ｻ｣繝ｭ郢晢ｽｫ驍ゑｽ｡騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def add_inquiry_panel(channel_id: int, mention_role_ids: list[int]):
 
@@ -1919,7 +1920,7 @@ async def remove_inquiry_panel(channel_id: int):
 
 
 
-# --- Bot髫ｪ・ｭ陞ｳ螢ｼ竄ｬ・､驍ゑｽ｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- Bot髫ｪE陞ｳ螢ｼ竄ｬE驍ゑｽ｡騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def save_setting(guild_id: int, key: str, value):
 
@@ -2059,7 +2060,7 @@ async def remove_level_role_reward(guild_id: int, level_type: str, level: int, r
 
 
 
-# --- 鬩幢ｽｨ陞ｻ蛟ｶ・ｾ・｡隴ｬ・ｼ驍ゑｽ｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- 鬩幢ｽｨ陞ｻ蛟ｶEE隴ｬE驍ゑｽ｡騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def get_all_room_prices() -> list[dict]:
 
@@ -2193,7 +2194,7 @@ async def delete_role_room_price(role_key: str, room_type: str, duration: int):
 
 
 
-# --- 陋ｹ・ｿ陷ｷ髦ｪ繝｡郢晢ｽ｣郢昴・繝ｨ驍ゑｽ｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- 陋ｹE陷ｷ髦ｪ繝｡郢晢ｽ｣郢戲繝ｨ驍ゑｽ｡騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def add_anonymous_chat(panel_channel_id: int, dest_channel_id: int):
 
@@ -2249,9 +2250,9 @@ async def get_panel_channel_by_dest(dest_channel_id: int) -> list[int]:
 
 
 
-# --- 郢ｧ・ｫ郢ｧ・ｹ郢ｧ・ｿ郢晢｣ｰ郢昶・縺鍋ｹ昴・繝ｨ郢昜ｻ｣繝ｭ郢晢ｽｫ驍ゑｽ｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- 郢ｧE郢ｧE郢ｧE郢晢｣ｰ郢戲縺鍋ｹ戲繝ｨ郢昜ｻ｣繝ｭ郢晢ｽｫ驍ゑｽ｡騾・E逡鷹ｫ｢E隰ｨE ---
 
-async def save_custom_ticket_panel(guild_id: int, channel_id: int, panel_title: str, panel_description: str, button_label: str = "郢昶・縺鍋ｹ昴・繝ｨ郢ｧ蜑・ｽｽ諛医・邵ｺ蜷ｶ・・, button_emoji: str = None, mention_role_ids: list[int] = None, target_role_ids: list[int] = None, ticket_prefix: str = "ticket", panel_type: str = "custom_ticket"):
+async def save_custom_ticket_panel(guild_id: int, channel_id: int, panel_title: str, panel_description: str, button_label: str = "繝√こ繝�繝医ｒ菴懈�舌☆繧�", button_emoji: str = None, mention_role_ids: list[int] = None, target_role_ids: list[int] = None, ticket_prefix: str = "ticket", panel_type: str = "custom_ticket"):
 
     mention_role_ids = mention_role_ids or []
 
@@ -2463,7 +2464,7 @@ async def remove_log_channel(guild_id: int, log_type: str):
 
 
 
-# --- 髢ｾ・ｪ陝ｾ・ｱ驍擾ｽｹ闔我ｹ昴・髫ｧ遨ゑｽｾ・｡髫ｪ・ｭ陞ｳ螟ゑｽｮ・｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- 髢ｾE陝ｾE驍擾ｽｹ闔我ｹ戲髫ｧ遨ゑｽｾE髫ｪE陞ｳ螟ゑｽｮE騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def get_evaluation_settings(guild_id: int) -> dict:
 
@@ -2553,7 +2554,7 @@ async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], s
 
 
 
-# --- 郢晢ｽｩ郢晢ｽｳ郢ｧ・ｯ陝・ｽｾ髮趣ｽ｡髫ｪ・ｭ陞ｳ螟ゑｽｮ・｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- 郢晢ｽｩ郢晢ｽｳ郢ｧE陝・髮趣ｽ｡髫ｪE陞ｳ螟ゑｽｮE騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def get_rank_settings(guild_id: int) -> dict:
 
@@ -2653,7 +2654,7 @@ async def set_rank_settings(guild_id: int, whitelist_ids: list[int], blacklist_i
 
 
 
-# --- VC郢ｧ・ｳ郢ｧ・､郢晢ｽｳ陝・ｽｾ髮趣ｽ｡髫ｪ・ｭ陞ｳ螟ゑｽｮ・｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- VC郢ｧE郢ｧE郢晢ｽｳ陝・髮趣ｽ｡髫ｪE陞ｳ螟ゑｽｮE騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def get_vc_coins_settings(guild_id: int) -> dict:
 
@@ -2751,7 +2752,7 @@ async def set_vc_coins_settings(guild_id: int, whitelist_ids: list[int], blackli
 
 
 
-# --- VC雋頑ｧｫ諠隴弱ｋ菫｣驍ゑｽ｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- VC雋頑ｧｫ諠隴弱ｋ菫｣驍ゑｽ｡騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def add_vc_duration(guild_id: int, user_id: int, category_id: int, seconds: int):
 
@@ -2795,7 +2796,7 @@ async def get_vc_duration_for_categories(user_id: int, category_ids: list[int]) 
 
 
 
-# --- 陝ｶ・ｸ髫ｪ・ｭ郢昴・ﾎｦ郢晏干ﾎ樒ｹ晢ｽｼ郢昴・Sticky Template)驍ゑｽ｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- 陝ｶE髫ｪE郢戲ﾎｦ郢晏干ﾎ樒ｹ晢ｽｼ郢戲Sticky Template)驍ゑｽ｡騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def get_sticky_template(channel_id: int) -> dict:
 
@@ -3095,7 +3096,7 @@ async def add_reaction_role(message_id: int, emoji: str, role_id: int):
 
             
 
-            default_guild_id = 1111621213446053898 # 隴鯉ｽ｢陝・･繝ｻ郢昴・繝ｻ郢ｧ・ｿ郢ｧ蝣､・ｧ・ｻ髯ｦ蠕娯・郢ｧ荵昴Ι郢晁ｼ斐°郢晢ｽｫ郢晏現縺礼ｹ晢ｽｼ郢晁・繝ｻID
+            default_guild_id = 1111621213446053898 # 隴鯉ｽ｢陝・繝ｻ郢戲繝ｻ郢ｧE郢ｧ蝣､EE髯ｦ蠕窪郢ｧ荵昴Ι郢晁ｼ斐°郢晢ｽｫ郢晏現縺礼ｹ晢ｽｼ郢戲繝ｻID
 
             
 
@@ -3267,7 +3268,7 @@ async def get_interviewer_count(interviewer_id: int) -> int:
 
 
 
-# --- 髣募・・臥ｸｺ諤懶ｽｯ・ｾ驕ｲ蜀ｶ・ｨ・ｭ陞ｳ螟ゑｽｮ・｡騾・・逡鷹ｫ｢・｢隰ｨ・ｰ ---
+# --- 髣髭E邵ｺ諤懶ｽｯE驕ｲ蜀ｶEE陞ｳ螟ゑｽｮE騾・E逡鷹ｫ｢E隰ｨE ---
 
 async def get_antigrief_settings(guild_id: int) -> dict:
 
@@ -3423,7 +3424,7 @@ async def clear_antigrief_settings_field(guild_id: int, field_name: str):
 
 
 
-# --- 闕ｳ讎翫・陷ｷ莠包ｽｿ・ｮ雎・ｽ｣繝ｻ螢ｹﾎ帷ｹ晢ｽｳ郢ｧ・ｯ陝・ｽｾ髮趣ｽ｡髫ｪ・ｭ陞ｳ螢ｹ繝ｻ隴厄ｽｴ隴・ｽｰ騾包ｽｨ鬮｢・｢隰ｨ・ｰ ---
+# --- 闕ｳ讎界陷ｷ莠包ｽｿE雎・繝ｻ螢ｹﾎ帷ｹ晢ｽｳ郢ｧE陝・髮趣ｽ｡髫ｪE陞ｳ螢ｹ繝ｻ隴厄ｽｴ隴・騾包ｽｨ鬮｢E隰ｨE ---
 
 async def update_rank_settings_list(guild_id: int, field_type: str, item_id: int, action: str):
 
@@ -3603,7 +3604,7 @@ async def clear_vc_coins_settings_field(guild_id: int, field_name: str):
 
 
 
-# 郢ｧ・ｷ郢晢ｽｧ郢昴・繝ｻ髫ｪ・ｭ陞ｳ繝ｻ
+# 郢ｧE郢晢ｽｧ郢戲繝ｻ髫ｪE陞ｳ繝ｻ
 
 async def get_shop_settings(guild_id: int):
 
@@ -3679,7 +3680,7 @@ async def set_shop_settings(guild_id: int, employee_role_id: int, manager_role_i
 
 
 
-# 郢ｧ・ｷ郢晢ｽｧ郢昴・繝ｻ陜繝ｻ蛻鬮｢・｢鬨ｾ・｣
+# 郢ｧE郢晢ｽｧ郢戲繝ｻ陜繝ｻ蛻鬮｢E鬨ｾE
 
 async def get_shop_items(guild_id: int):
 
@@ -3904,6 +3905,15 @@ async def save_call_board_settings(guild_id: int, panel_channel_id: int, board_c
         await conn.execute('''
             INSERT INTO call_board_settings (guild_id, panel_channel_id, board_channel_id, vc_category_id)
             VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id) DO UPDATE SET
+                panel_channel_id = $2,
+                board_channel_id = $3,
+                vc_category_id = $4
+        ''', guild_id, panel_channel_id, board_channel_id, vc_category_id)
+
+
+async def add_shop_item(guild_id: int, name: str, usage: str, price: int, target_role_ids: list = None, reward_role_ids: list = None, duration_days: int = None, is_eval_extend: bool = False, extend_days: int = None) -> int:
+    if target_role_ids is None: target_role_ids = []
     if reward_role_ids is None: reward_role_ids = []
 
     p = await get_pool(guild_id)
@@ -4109,7 +4119,7 @@ async def save_call_board_settings(guild_id: int, panel_channel_id: int, board_c
         ''', guild_id, panel_channel_id, board_channel_id, vc_category_id)
 
 
-# --- 莉･荳九∽ｻ悶そ繝・す繝ｧ繝ｳ縺ｫ繧医ｋdatabase.py譖ｸ縺肴鋤縺域凾縺ｫ隱､縺｣縺ｦ蜑企勁縺輔ｌ縺ｦ縺・◆髢｢謨ｰ繧貞ｾｩ蜈・---
+# --- 莉･荳九∽ｻ悶そ繝・繝ｧ繝ｳ縺ｫ繧医ｋdatabase.py譖ｸ縺肴鋤縺域凾縺ｫ隱､縺｣縺ｦ蜑企勁縺輔ｌ縺ｦ縺・髢｢謨ｰ繧貞ｾｩ蜈・---
 
 async def get_expired_evaluation_periods() -> list:
     pools = await get_all_configured_pools()
@@ -4283,16 +4293,14 @@ async def remove_evaluation_period(guild_id: int, user_id: int):
             'DELETE FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2',
             guild_id, user_id
         )
-# Bot Heartbeat・・ot逕溷ｭ倡｢ｺ隱咲畑・・
-# 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+
+# ------------------------------------------------------------
+# Bot Heartbeat
+# ------------------------------------------------------------
 
 async def update_heartbeat(guild_id: int):
-    """Bot 縺檎ｨｼ蜒阪＠縺ｦ縺・ｋ縺薙→繧堤､ｺ縺吶ワ繝ｼ繝医ン繝ｼ繝医ｒ bot_heartbeat 繝・・繝悶Ν縺ｫ upsert 縺吶ｋ縲・
-    ipc.py 縺ｮ heartbeat 繧ｿ繧ｹ繧ｯ縺九ｉ30遘偵＃縺ｨ縺ｫ蜻ｼ縺ｳ蜃ｺ縺輔ｌ繧九・
-    """
     pool = await get_pool(guild_id)
     async with pool.acquire() as conn:
-        # 繝・・繝悶Ν縺悟ｭ伜惠縺励↑縺・ｴ蜷医・閾ｪ蜍穂ｽ懈・
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS bot_heartbeat (
                 guild_id BIGINT PRIMARY KEY,
@@ -4307,9 +4315,6 @@ async def update_heartbeat(guild_id: int):
 
 
 async def get_heartbeat(guild_id: int) -> dict | None:
-    """bot_heartbeat 繝・・繝悶Ν縺九ｉ謖・ｮ壹し繝ｼ繝舌・縺ｮ last_seen_at 繧貞叙蠕励☆繧九・
-    繝・・繝悶Ν縺悟ｭ伜惠縺励↑縺・ｴ蜷医ｄ陦後′縺ｪ縺・ｴ蜷医・ None 繧定ｿ斐☆縲・
-    """
     pool = await get_pool(guild_id)
     async with pool.acquire() as conn:
         try:
@@ -4321,5 +4326,17 @@ async def get_heartbeat(guild_id: int) -> dict | None:
                 return {"last_seen_at": row['last_seen_at']}
             return None
         except Exception:
-            # 繝・・繝悶Ν縺悟ｭ伜惠縺励↑縺・ｴ蜷医↑縺ｩ
             return None
+
+
+async def delete_user_data(guild_id: int, user_id: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        try:
+            await conn.execute('DELETE FROM users WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+            await conn.execute('DELETE FROM user_items WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+            await conn.execute('DELETE FROM user_vc_durations WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+            await conn.execute('DELETE FROM self_intro_welcome_messages WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+            print(f"[UserData Cleanup] Successfully deleted data for user {user_id} in guild {guild_id} upon leave.")
+        except Exception as e:
+            print(f"[UserData Cleanup] Error deleting user data for user {user_id} in guild {guild_id}: {e}")
