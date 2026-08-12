@@ -7,9 +7,11 @@ class IPC(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.check_panel_requests.start()
+        self.heartbeat.start()
 
     def cog_unload(self):
         self.check_panel_requests.cancel()
+        self.heartbeat.cancel()
 
     @tasks.loop(seconds=5.0)
     async def check_panel_requests(self):
@@ -92,6 +94,21 @@ class IPC(commands.Cog):
                                 print(f"[IPC] Reloaded VC triggers: {len(self.bot.auto_vc_triggers)} triggers")
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload vc triggers: {e}")
+
+                        elif panel_type == "reload_antigrief":
+                            try:
+                                self.bot.bot_settings = await database.load_settings()
+                                print(f"[IPC] Reloaded antigrief settings for guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to reload antigrief settings: {e}")
+
+                        elif panel_type == "reload_call_board":
+                            try:
+                                # call_board_settings はBotキャッシュなし（都度DBから読む設計）なので、
+                                # 読み込みが必要なキャッシュがあればここでリロードする。
+                                print(f"[IPC] Processed reload_call_board for guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to process reload_call_board: {e}")
 
                         elif panel_type.startswith("apply_room_access_deny:") or panel_type.startswith("apply_room_access_allow:"):
                             try:
@@ -272,6 +289,23 @@ class IPC(commands.Cog):
     @check_panel_requests.before_loop
     async def before_check(self):
         await self.bot.wait_until_ready()
+
+    @tasks.loop(seconds=30.0)
+    async def heartbeat(self):
+        """30秒ごとに各サーバーのBot生存時刻をDBに記録する。"""
+        try:
+            for guild in self.bot.guilds:
+                try:
+                    await database.update_heartbeat(guild.id)
+                except Exception as e:
+                    print(f"[IPC] Heartbeat update error for guild {guild.id}: {e}")
+        except Exception as e:
+            print(f"[IPC] Heartbeat task error: {e}")
+
+    @heartbeat.before_loop
+    async def before_heartbeat(self):
+        await self.bot.wait_until_ready()
+
 
 async def setup(bot):
     await bot.add_cog(IPC(bot))

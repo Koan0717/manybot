@@ -26,7 +26,7 @@ def get_now_naive() -> datetime.datetime:
 
 
 
-# 謗･邯壹・繝ｼ繝ｫ繧剃ｿ晄戟縺吶ｋ螟画焚
+# 謗･邯壹・繝ｼ繝ｫ繧剁E��晁E��縺吶�E�螟画焁E
 
 # -- NEW POOL LOGIC --
 
@@ -82,7 +82,7 @@ async def get_all_configured_pools():
 
             except Exception as e:
 
-                print(f"❌ [DB Error] Supabase (専用DB) への接続に失敗しました ({url}): {e}")
+                print(f"❁E[DB Error] Supabase (専用DB) への接続に失敗しました ({url}): {e}")
 
         return all_pools
 
@@ -232,7 +232,7 @@ async def get_pool(guild_id: int = None):
 
             except Exception as e:
 
-                print(f"❌ [DB Error] Supabase (専用DB) への接続に失敗しました (ギルドID: {guild_id}): {e}")
+                print(f"❁E[DB Error] Supabase (専用DB) への接続に失敗しました (ギルドID: {guild_id}): {e}")
 
     return await get_master_pool()
 
@@ -240,14 +240,14 @@ async def get_pool(guild_id: int = None):
 
 class _ResilientConn:
     """
-    setup_db_schema() は数十個の CREATE TABLE / ALTER TABLE を順番に実行するが、
-    途中の1文が例外を投げると(型不一致・ロック・権限エラーなど)、後続の
-    テーブル作成やカラム追加マイグレーションが一切実行されずに関数全体が
-    そこで止まってしまう問題があった。
+    setup_db_schema() は数十個�E CREATE TABLE / ALTER TABLE を頁E��に実行するが、E
+    途中の1斁E��例外を投げると(型不一致・ロチE��・権限エラーなど)、後続�E
+    チE�Eブル作�EめE��ラム追加マイグレーションが一刁E��行されずに関数全体が
+    そこで止まってしまぁE��題があった、E
 
-    このラッパーは conn.execute() の呼び出しだけを横取りし、失敗しても
-    警告を出して次の文へ進めるようにする。setup_db_schema() 本体のSQLは
-    一切変更せず、安全性だけを底上げする。
+    こ�EラチE��ーは conn.execute() の呼び出しだけを横取りし、失敗してめE
+    警告を出して次の斁E��進めるようにする。setup_db_schema() 本体�ESQLは
+    一刁E��更せず、安�E性だけを底上げする、E
     """
 
     def __init__(self, conn):
@@ -441,14 +441,14 @@ async def setup_db_schema(p):
 
             await conn.execute('ALTER TABLE anonymous_chats ADD COLUMN IF NOT EXISTS panel_channel_id BIGINT')
             await conn.execute('ALTER TABLE anonymous_chats ADD COLUMN IF NOT EXISTS dest_channel_id BIGINT')
-            # ダッシュボード(Next.js)側が過去に channel_id/guild_id という別スキーマで
-            # このテーブルを先に作ってしまっていたケースがあり、その場合
-            # panel_channel_id には一意制約が付いていないため
-            # INSERT ... ON CONFLICT (panel_channel_id) が失敗する。ここで補強する。
+            # ダチE��ュボ�EチENext.js)側が過去に channel_id/guild_id とぁE��別スキーマで
+            # こ�EチE�Eブルを�Eに作ってしまってぁE��ケースがあり、その場吁E
+            # panel_channel_id には一意制紁E��付いてぁE��ぁE��めE
+            # INSERT ... ON CONFLICT (panel_channel_id) が失敗する。ここで補強する、E
             try:
                 await conn.execute('ALTER TABLE anonymous_chats ADD CONSTRAINT anonymous_chats_panel_channel_id_key UNIQUE (panel_channel_id)')
             except Exception:
-                pass  # 既に制約がある場合はそのまま無視
+                pass  # 既に制紁E��ある場合�Eそ�Eまま無要E
 
         except Exception as e:
 
@@ -574,19 +574,19 @@ async def setup_db_schema(p):
 
             INSERT INTO room_prices (room_type, duration, price) VALUES
 
-            ('螳ｿ', 12, 10000),
+            ('螳�E�', 12, 10000),
 
-            ('螳ｿ', 24, 15000),
+            ('螳�E�', 24, 15000),
 
-            ('鬮倡ｴ壼ｮｿ', 12, 150000),
+            ('鬮倡�E�壼�E��E�', 12, 150000),
 
-            ('鬮倡ｴ壼ｮｿ', 24, 250000),
+            ('鬮倡�E�壼�E��E�', 24, 250000),
 
-            ('繧ｫ繧ｹ繧ｿ繝VC', 24, 30000),
+            ('繧�E�繧�E�繧�E�繝VC', 24, 30000),
 
-            ('繧ｲ繝ｼ繝VC', 12, 10000),
+            ('繧�E�繝ｼ繝VC', 12, 10000),
 
-            ('繧ｲ繝ｼ繝VC', 24, 15000),
+            ('繧�E�繝ｼ繝VC', 24, 15000),
 
             ('雉ｭ蜊啖C', 12, 10000),
 
@@ -660,7 +660,7 @@ async def setup_db_schema(p):
 
         try:
 
-            await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_label TEXT DEFAULT '繝√こ繝・ヨ繧剃ｽ懈・縺吶ｋ'")
+            await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_label TEXT DEFAULT '繝�Eこ繝�Eヨ繧剁E��懈�E縺吶�E�E")
 
             await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_emoji TEXT")
 
@@ -1228,8 +1228,8 @@ async def get_user(guild_id: int, user_id: int):
         try:
             row = await conn.fetchrow('SELECT balance, chinchiro_count, chinchiro_last_date, tc_xp, tc_level, vc_xp, vc_level, evaluation_vc_time, initial_issued, chinchiro_daily_bet, event_points FROM users WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
         except asyncpg.exceptions.UndefinedColumnError:
-            # カラムが存在しない場合、自動的に追加して再試行
-            print("[Auto-Recovery] users テーブルに不足カラムを追加中...")
+            # カラムが存在しなぁE��合、�E動的に追加して再試衁E
+            print("[Auto-Recovery] users チE�Eブルに不足カラムを追加中...")
             for col_sql in [
                 'ALTER TABLE users ADD COLUMN IF NOT EXISTS evaluation_vc_time INTEGER DEFAULT 0',
                 'ALTER TABLE users ADD COLUMN IF NOT EXISTS initial_issued BOOLEAN DEFAULT FALSE',
@@ -1600,7 +1600,7 @@ async def reset_user_balance(guild_id: int, user_id: int):
 
 
 
-# --- 隧穂ｾ｡譛滄俣邂｡逅・畑髢｢謨ｰ ---
+# --- 隧穂ｾ�E�譛滁E��邂｡送E�E畑髢�E�謨�E� ---
 
 async def add_evaluation_period(guild_id: int, user_id: int, start_time: datetime.datetime, end_time: datetime.datetime):
 
@@ -1700,7 +1700,7 @@ async def update_evaluation_period_end(guild_id: int, user_id: int, new_end_time
 
 
 
-# --- VC菴懈・繝医Μ繧ｬ繝ｼ邂｡逅・畑髢｢謨ｰ ---
+# --- VC菴懈�E繝医Μ繧�E�繝ｼ邂｡送E�E畑髢�E�謨�E� ---
 
 async def add_auto_vc_trigger(channel_id: int):
 
@@ -1746,7 +1746,7 @@ async def get_auto_vc_triggers() -> list[int]:
 
 
 
-# --- VC菴懈・繝医Μ繧ｬ繝ｼ險ｭ螳夂ｮ｡逅・畑髢｢謨ｰ ---
+# --- VC菴懈�E繝医Μ繧�E�繝ｼ險�E�螳夂ｮ�E�送E�E畑髢�E�謨�E� ---
 
 async def save_auto_vc_config(channel_id: int, base_name: str, allow_rename: bool, include_owner_name: bool, use_numbering: bool, allow_limit_change: bool, show_panel: bool, is_invite_only: bool = False, invite_visible_role_ids: list = None, allowed_role_ids: list = None):
 
@@ -1865,7 +1865,7 @@ async def get_all_auto_vc_configs() -> list[dict]:
 
 
 
-# --- 縺雁撫縺・粋繧上○繝代ロ繝ｫ邂｡逅・畑髢｢謨ｰ ---
+# --- 縺雁撫縺・粋繧上○繝代ロ繝ｫ邂｡送E�E畑髢�E�謨�E� ---
 
 async def add_inquiry_panel(channel_id: int, mention_role_ids: list[int]):
 
@@ -1919,7 +1919,7 @@ async def remove_inquiry_panel(channel_id: int):
 
 
 
-# --- Bot險ｭ螳壼€､邂｡逅・畑髢｢謨ｰ ---
+# --- Bot險�E�螳壼€�E�邂｡送E�E畑髢�E�謨�E� ---
 
 async def save_setting(guild_id: int, key: str, value):
 
@@ -2059,7 +2059,7 @@ async def remove_level_role_reward(guild_id: int, level_type: str, level: int, r
 
 
 
-# --- 驛ｨ螻倶ｾ｡譬ｼ邂｡逅・畑髢｢謨ｰ ---
+# --- 驛ｨ螻倶�E��E�譬�E�邂｡送E�E畑髢�E�謨�E� ---
 
 async def get_all_room_prices() -> list[dict]:
 
@@ -2193,7 +2193,7 @@ async def delete_role_room_price(role_key: str, room_type: str, duration: int):
 
 
 
-# --- 蛹ｿ蜷阪メ繝｣繝・ヨ邂｡逅・畑髢｢謨ｰ ---
+# --- 蛹�E�蜷阪メ繝｣繝�Eヨ邂｡送E�E畑髢�E�謨�E� ---
 
 async def add_anonymous_chat(panel_channel_id: int, dest_channel_id: int):
 
@@ -2249,9 +2249,9 @@ async def get_panel_channel_by_dest(dest_channel_id: int) -> list[int]:
 
 
 
-# --- 繧ｫ繧ｹ繧ｿ繝繝√こ繝・ヨ繝代ロ繝ｫ邂｡逅・畑髢｢謨ｰ ---
+# --- 繧�E�繧�E�繧�E�繝繝�Eこ繝�Eヨ繝代ロ繝ｫ邂｡送E�E畑髢�E�謨�E� ---
 
-async def save_custom_ticket_panel(guild_id: int, channel_id: int, panel_title: str, panel_description: str, button_label: str = "繝√こ繝・ヨ繧剃ｽ懈・縺吶ｋ", button_emoji: str = None, mention_role_ids: list[int] = None, target_role_ids: list[int] = None, ticket_prefix: str = "ticket", panel_type: str = "custom_ticket"):
+async def save_custom_ticket_panel(guild_id: int, channel_id: int, panel_title: str, panel_description: str, button_label: str = "繝�Eこ繝�Eヨ繧剁E��懈�E縺吶�E�E, button_emoji: str = None, mention_role_ids: list[int] = None, target_role_ids: list[int] = None, ticket_prefix: str = "ticket", panel_type: str = "custom_ticket"):
 
     mention_role_ids = mention_role_ids or []
 
@@ -2463,7 +2463,7 @@ async def remove_log_channel(guild_id: int, log_type: str):
 
 
 
-# --- 閾ｪ蟾ｱ邏ｹ莉九・隧穂ｾ｡險ｭ螳夂ｮ｡逅・畑髢｢謨ｰ ---
+# --- 閾�E�蟾�E�邏ｹ莉九�E隧穂ｾ�E�險�E�螳夂ｮ�E�送E�E畑髢�E�謨�E� ---
 
 async def get_evaluation_settings(guild_id: int) -> dict:
 
@@ -2553,7 +2553,7 @@ async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], s
 
 
 
-# --- 繝ｩ繝ｳ繧ｯ蟇ｾ雎｡險ｭ螳夂ｮ｡逅・畑髢｢謨ｰ ---
+# --- 繝ｩ繝ｳ繧�E�蟁E��雎｡險�E�螳夂ｮ�E�送E�E畑髢�E�謨�E� ---
 
 async def get_rank_settings(guild_id: int) -> dict:
 
@@ -2653,7 +2653,7 @@ async def set_rank_settings(guild_id: int, whitelist_ids: list[int], blacklist_i
 
 
 
-# --- VC繧ｳ繧､繝ｳ蟇ｾ雎｡險ｭ螳夂ｮ｡逅・畑髢｢謨ｰ ---
+# --- VC繧�E�繧�E�繝ｳ蟁E��雎｡險�E�螳夂ｮ�E�送E�E畑髢�E�謨�E� ---
 
 async def get_vc_coins_settings(guild_id: int) -> dict:
 
@@ -2751,7 +2751,7 @@ async def set_vc_coins_settings(guild_id: int, whitelist_ids: list[int], blackli
 
 
 
-# --- VC貊槫惠譎る俣邂｡逅・畑髢｢謨ｰ ---
+# --- VC貊槫惠譎る俣邂｡送E�E畑髢�E�謨�E� ---
 
 async def add_vc_duration(guild_id: int, user_id: int, category_id: int, seconds: int):
 
@@ -2795,7 +2795,7 @@ async def get_vc_duration_for_categories(user_id: int, category_ids: list[int]) 
 
 
 
-# --- 蟶ｸ險ｭ繝・Φ繝励Ξ繝ｼ繝・Sticky Template)邂｡逅・畑髢｢謨ｰ ---
+# --- 蟶�E�險�E�繝�EΦ繝励Ξ繝ｼ繝�ESticky Template)邂｡送E�E畑髢�E�謨�E� ---
 
 async def get_sticky_template(channel_id: int) -> dict:
 
@@ -3095,7 +3095,7 @@ async def add_reaction_role(message_id: int, emoji: str, role_id: int):
 
             
 
-            default_guild_id = 1111621213446053898 # 譌｢蟄倥・繝・・繧ｿ繧堤ｧｻ陦後☆繧九ョ繝輔か繝ｫ繝医し繝ｼ繝舌・ID
+            default_guild_id = 1111621213446053898 # 譌｢蟁E��・繝�E・繧�E�繧堤�E��E�陦後�E繧九ョ繝輔か繝ｫ繝医し繝ｼ繝�E・ID
 
             
 
@@ -3267,7 +3267,7 @@ async def get_interviewer_count(interviewer_id: int) -> int:
 
 
 
-# --- 闕偵ｉ縺怜ｯｾ遲冶ｨｭ螳夂ｮ｡逅・畑髢｢謨ｰ ---
+# --- 闕�E�E�縺怜ｯ�E�遲冶�E��E�螳夂ｮ�E�送E�E畑髢�E�謨�E� ---
 
 async def get_antigrief_settings(guild_id: int) -> dict:
 
@@ -3423,7 +3423,7 @@ async def clear_antigrief_settings_field(guild_id: int, field_name: str):
 
 
 
-# --- 荳榊・蜷井ｿｮ豁｣・壹Λ繝ｳ繧ｯ蟇ｾ雎｡險ｭ螳壹・譖ｴ譁ｰ逕ｨ髢｢謨ｰ ---
+# --- 荳榊�E蜷井ｿ�E�豁E��・壹Λ繝ｳ繧�E�蟁E��雎｡險�E�螳壹・譖ｴ譁E��逕ｨ髢�E�謨�E� ---
 
 async def update_rank_settings_list(guild_id: int, field_type: str, item_id: int, action: str):
 
@@ -3603,7 +3603,7 @@ async def clear_vc_coins_settings_field(guild_id: int, field_name: str):
 
 
 
-# 繧ｷ繝ｧ繝・・險ｭ螳・
+# 繧�E�繝ｧ繝�E・險�E�螳・
 
 async def get_shop_settings(guild_id: int):
 
@@ -3679,7 +3679,7 @@ async def set_shop_settings(guild_id: int, employee_role_id: int, manager_role_i
 
 
 
-# 繧ｷ繝ｧ繝・・蝠・刀髢｢騾｣
+# 繧�E�繝ｧ繝�E・蝠・刀髢�E�騾�E�
 
 async def get_shop_items(guild_id: int):
 
@@ -3904,13 +3904,212 @@ async def save_call_board_settings(guild_id: int, panel_channel_id: int, board_c
         await conn.execute('''
             INSERT INTO call_board_settings (guild_id, panel_channel_id, board_channel_id, vc_category_id)
             VALUES ($1, $2, $3, $4)
+    if reward_role_ids is None: reward_role_ids = []
+
+    p = await get_pool(guild_id)
+
+    async with p.acquire() as conn:
+
+        row = await conn.fetchrow('''
+
+            INSERT INTO shop_items (guild_id, name, usage, price, target_role_ids, reward_role_ids, duration_days, is_eval_extend, extend_days)
+
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+
+            RETURNING item_id
+
+        ''', guild_id, name, usage, price, target_role_ids, reward_role_ids, duration_days, is_eval_extend, extend_days)
+
+        return dict(row)["item_id"] if row else None
+
+
+
+async def update_shop_item(item_id: int, name: str, usage: str, price: int, target_role_ids: list = None, reward_role_ids: list = None, duration_days: int = None, is_eval_extend: bool = False, extend_days: int = None):
+
+    if target_role_ids is None: target_role_ids = []
+
+    if reward_role_ids is None: reward_role_ids = []
+
+    p = await get_pool()
+
+    async with p.acquire() as conn:
+
+        await conn.execute('''
+
+            UPDATE shop_items SET name = $1, usage = $2, price = $3, target_role_ids = $4, reward_role_ids = $5, duration_days = $6, is_eval_extend = $7, extend_days = $8 WHERE item_id = $9
+
+        ''', name, usage, price, target_role_ids, reward_role_ids, duration_days, is_eval_extend, extend_days, item_id)
+
+
+
+async def delete_shop_item(item_id: int):
+
+    p = await get_pool()
+
+    async with p.acquire() as conn:
+
+        await conn.execute('DELETE FROM shop_items WHERE item_id = $1', item_id)
+
+
+
+async def add_user_item(user_id: int, item_id: int, expire_at: datetime.datetime = None):
+
+    p = await get_pool()
+
+    async with p.acquire() as conn:
+
+        await conn.execute('''
+
+            INSERT INTO user_items (user_id, item_id, expire_at, role_removed) 
+
+            VALUES ($1, $2, $3, FALSE)
+
+        ''', user_id, item_id, expire_at)
+
+
+
+async def get_user_items(user_id: int):
+
+    p = await get_pool()
+
+    async with p.acquire() as conn:
+
+        rows = await conn.fetch('SELECT * FROM user_items WHERE user_id = $1', user_id)
+
+        return [dict(r) for r in rows]
+
+
+
+async def get_expired_user_items():
+
+    all_expired = []
+
+    for p in await get_all_configured_pools():
+
+        try:
+
+            rows = await p.fetch("SELECT id, user_id, item_id FROM user_items WHERE expire_at < $1 AND role_removed = FALSE", get_now_naive())
+
+            all_expired.extend([dict(row) for row in rows])
+
+        except Exception:
+
+            pass
+
+    return all_expired
+
+
+
+async def mark_user_item_role_removed(user_item_id: int):
+    for p in await get_all_configured_pools():
+        try:
+            await p.execute("UPDATE user_items SET role_removed = TRUE WHERE id = $1", user_item_id)
+        except Exception:
+            pass
+
+
+async def add_level_coin_reward(guild_id: int, level_type: str, level: int, coins: int, condition_role_id: int = None):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO level_coin_rewards (guild_id, level_type, level, coins, condition_role_id)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (guild_id, level_type, level, condition_role_id)
+            DO UPDATE SET coins = EXCLUDED.coins
+        ''', guild_id, level_type, level, coins, condition_role_id)
+
+
+async def get_level_coin_rewards(guild_id: int, level_type: str = None) -> list[dict]:
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        if level_type:
+            rows = await conn.fetch('''
+                SELECT level_type, level, coins, condition_role_id 
+                FROM level_coin_rewards 
+                WHERE guild_id = $1 AND level_type = $2 
+                ORDER BY level ASC
+            ''', guild_id, level_type)
+        else:
+            rows = await conn.fetch('''
+                SELECT level_type, level, coins, condition_role_id 
+                FROM level_coin_rewards 
+                WHERE guild_id = $1
+                ORDER BY level_type ASC, level ASC
+            ''', guild_id)
+        return [{"level_type": r["level_type"], "level": r["level"], "coins": r["coins"], "condition_role_id": r["condition_role_id"]} for r in rows]
+
+
+async def remove_level_coin_reward(guild_id: int, level_type: str, level: int, condition_role_id: int = None):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        await conn.execute('''
+            DELETE FROM level_coin_rewards 
+            WHERE guild_id = $1 AND level_type = $2 AND level = $3 AND condition_role_id IS NOT DISTINCT FROM $4
+        ''', guild_id, level_type, level, condition_role_id)
+
+
+async def save_self_intro_welcome_message(guild_id: int, user_id: int, message_id: int, channel_id: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO self_intro_welcome_messages (guild_id, user_id, message_id, channel_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id, user_id) DO UPDATE
+            SET message_id = $3, channel_id = $4
+        ''', guild_id, user_id, message_id, channel_id)
+
+
+
+async def get_self_intro_welcome_message(guild_id: int, user_id: int) -> dict:
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            'SELECT message_id, channel_id FROM self_intro_welcome_messages WHERE guild_id = $1 AND user_id = $2',
+            guild_id, user_id
+        )
+        if row:
+            return {"message_id": row['message_id'], "channel_id": row['channel_id']}
+        return None
+
+
+
+async def delete_self_intro_welcome_message(guild_id: int, user_id: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute(
+            'DELETE FROM self_intro_welcome_messages WHERE guild_id = $1 AND user_id = $2',
+            guild_id, user_id
+        )
+
+
+async def get_call_board_settings(guild_id: int) -> dict:
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            'SELECT panel_channel_id, board_channel_id, vc_category_id FROM call_board_settings WHERE guild_id = $1',
+            guild_id
+        )
+        if row:
+            return {
+                "panel_channel_id": str(row['panel_channel_id']) if row['panel_channel_id'] else "",
+                "board_channel_id": str(row['board_channel_id']) if row['board_channel_id'] else "",
+                "vc_category_id": str(row['vc_category_id']) if row['vc_category_id'] else ""
+            }
+        return {"panel_channel_id": "", "board_channel_id": "", "vc_category_id": ""}
+
+
+async def save_call_board_settings(guild_id: int, panel_channel_id: int, board_channel_id: int, vc_category_id: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO call_board_settings (guild_id, panel_channel_id, board_channel_id, vc_category_id)
+            VALUES ($1, $2, $3, $4)
             ON CONFLICT (guild_id) DO UPDATE
             SET panel_channel_id = $2, board_channel_id = $3, vc_category_id = $4
         ''', guild_id, panel_channel_id, board_channel_id, vc_category_id)
 
 
-
-# --- 以下、他セッションによるdatabase.py書き換え時に誤って削除されていた関数を復元 ---
+# --- 以下、他セチE��ョンによるdatabase.py書き換え時に誤って削除されてぁE��関数を復允E---
 
 async def get_expired_evaluation_periods() -> list:
     pools = await get_all_configured_pools()
@@ -4001,7 +4200,7 @@ async def is_command_enabled(guild_id: int, command_name: str) -> bool:
         return True
 
 
-# --- 自己紹介ロール設定 ---
+# --- 自己紹介ロール設宁E---
 
 async def get_self_intro_role_settings(guild_id: int) -> dict:
     pool = await get_pool(guild_id)
@@ -4084,3 +4283,43 @@ async def remove_evaluation_period(guild_id: int, user_id: int):
             'DELETE FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2',
             guild_id, user_id
         )
+# Bot Heartbeat�E�Eot生存確認用�E�E
+# ──────────────────────────────────────────
+
+async def update_heartbeat(guild_id: int):
+    """Bot が稼働してぁE��ことを示すハートビートを bot_heartbeat チE�Eブルに upsert する、E
+    ipc.py の heartbeat タスクから30秒ごとに呼び出される、E
+    """
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        # チE�Eブルが存在しなぁE��合�E自動作�E
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS bot_heartbeat (
+                guild_id BIGINT PRIMARY KEY,
+                last_seen_at TIMESTAMP NOT NULL
+            )
+        ''')
+        await conn.execute('''
+            INSERT INTO bot_heartbeat (guild_id, last_seen_at)
+            VALUES ($1, $2)
+            ON CONFLICT (guild_id) DO UPDATE SET last_seen_at = $2
+        ''', guild_id, get_now_naive())
+
+
+async def get_heartbeat(guild_id: int) -> dict | None:
+    """bot_heartbeat チE�Eブルから持E��サーバ�Eの last_seen_at を取得する、E
+    チE�Eブルが存在しなぁE��合や行がなぁE��合�E None を返す、E
+    """
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        try:
+            row = await conn.fetchrow(
+                'SELECT last_seen_at FROM bot_heartbeat WHERE guild_id = $1',
+                guild_id
+            )
+            if row:
+                return {"last_seen_at": row['last_seen_at']}
+            return None
+        except Exception:
+            # チE�Eブルが存在しなぁE��合など
+            return None

@@ -154,12 +154,13 @@ export async function POST(
     await pool.query('COMMIT');
     
     // IPCでBotに再読み込みを通知
-    await pool.query(
-      "INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, $2, $3)",
+    const reqResult = await pool.query(
+      "INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, $2, $3) RETURNING id",
       [guildId, 0, "reload_vc_triggers"]
     );
+    const sync_request_id: number | null = reqResult.rows[0]?.id ?? null;
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, sync_request_id });
   } catch (error: any) {
     console.error("POST vc-triggers error:", error);
     const pool = await getPool(params.guild_id);

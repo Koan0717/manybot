@@ -83,6 +83,18 @@ export async function POST(
       );
     }
 
+    if (action === 'save') {
+      // IPCでBotに設定再読み込みを通知
+      const reqResult = await pool.query(
+        `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
+         VALUES ($1, 0, 'reload_call_board')
+         RETURNING id`,
+        [guildId]
+      );
+      const sync_request_id: number | null = reqResult.rows[0]?.id ?? null;
+      return NextResponse.json({ success: true, sync_request_id });
+    }
+
     if (action === 'deploy') {
       if (!panelCh) {
         return NextResponse.json({ error: 'パネル設置チャンネルが指定されていません。' }, { status: 400 });
@@ -141,10 +153,10 @@ export async function POST(
         );
       }
 
-      return NextResponse.json({ success: true, message: 'パネルを正常に設置しました！' });
+      return NextResponse.json({ success: true, message: 'パネルを正常に設置しました！', sync_request_id: null });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, sync_request_id: null });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
