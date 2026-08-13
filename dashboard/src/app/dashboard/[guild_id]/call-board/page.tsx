@@ -5,6 +5,7 @@ import Select from 'react-select';
 import { toast } from 'react-hot-toast';
 import { PhoneCall, Send, Save, Info, Hash, FolderKanban } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import { useSyncStatus, SyncBadge, SyncStatusCards } from '@/lib/useSyncStatus';
 
 export default function CallBoardSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -14,6 +15,7 @@ export default function CallBoardSettingsPage({ params }: { params: { guild_id: 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deploying, setDeploying] = useState(false);
+  const sync = useSyncStatus(guildId);
 
   const [formData, setFormData] = useState({
     panel_channel_id: '',
@@ -50,6 +52,7 @@ export default function CallBoardSettingsPage({ params }: { params: { guild_id: 
 
   const handleSave = async () => {
     setSaving(true);
+    sync.reset();
     try {
       const res = await fetch(`/api/guilds/${guildId}/call-board`, {
         method: 'POST',
@@ -62,6 +65,7 @@ export default function CallBoardSettingsPage({ params }: { params: { guild_id: 
       const data = await res.json();
       if (res.ok && data.success) {
         toast.success('通話募集掲示板の設定を保存しました！');
+        sync.startPolling(data.sync_request_id ?? null);
       } else {
         toast.error(`保存に失敗しました: ${data.error || '不明なエラー'}`);
       }
@@ -132,13 +136,18 @@ export default function CallBoardSettingsPage({ params }: { params: { guild_id: 
 
   return (
     <div className="max-w-4xl mx-auto pb-24">
-      <PageHeader
-        icon={PhoneCall}
-        title="通話募集掲示板設定"
-        subtitle="通話募集パネルの設置、募集掲載チャンネル、マッチング時作成VCカテゴリを設定します"
-        guildId={guildId}
-        healthKey="call-board"
-      />
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-0">
+        <PageHeader
+          icon={PhoneCall}
+          title="通話募集掲示板設定"
+          subtitle="通話募集パネルの設置、募集掲載チャンネル、マッチング時作成VCカテゴリを設定します"
+          guildId={guildId}
+          healthKey="call-board"
+        />
+        <SyncBadge state={sync.state} botOnline={sync.botOnline} className="mt-1" />
+      </div>
+
+      <SyncStatusCards sync={sync} />
 
       <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl space-y-8">
         

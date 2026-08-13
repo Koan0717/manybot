@@ -6,6 +6,7 @@ import { Save, AlertCircle, Plus, Trash2, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Select from 'react-select';
 import PageHeader from '@/components/PageHeader';
+import { useSyncStatus, SyncBadge, SyncStatusCards } from '@/lib/useSyncStatus';
 
 interface DiscordChannel {
   id: string;
@@ -43,6 +44,7 @@ export default function VCTriggersPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const sync = useSyncStatus(guildId);
 
   useEffect(() => {
     Promise.all([
@@ -65,6 +67,7 @@ export default function VCTriggersPage() {
     setSaving(true);
     setError(null);
     setSuccessMessage(null);
+    sync.reset();
     
     // channel_idが未設定のものを除外
     const validTriggers = triggers.filter(t => t.channel_id && t.channel_id.trim() !== '');
@@ -87,8 +90,10 @@ export default function VCTriggersPage() {
         throw new Error(errMsg);
       }
       
+      const data = await res.json();
       setSuccessMessage('設定を保存しました。Botに変更が反映されます。');
       setTimeout(() => setSuccessMessage(null), 3000);
+      sync.startPolling(data.sync_request_id ?? null);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -134,15 +139,20 @@ export default function VCTriggersPage() {
     <div className="max-w-4xl mx-auto pb-20 space-y-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <PageHeader icon={Zap} title="VCトリガー設定" subtitle="入室をトリガーに自動で個人 VC を作成する仕組みを設定します" guildId={guildId} healthKey="vc-triggers" />
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="mecha-btn-sheen font-mecha flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-800 hover:from-indigo-500 hover:to-indigo-700 text-white px-4 py-2 rounded-lg font-medium shadow-lg shadow-indigo-900/20 transition-all disabled:opacity-50 -mt-8"
-          >
-            <Save className="w-5 h-5" />
-            {saving ? '保存中...' : '保存'}
-          </button>
+          <div className="flex items-center gap-3 -mt-8">
+            <SyncBadge state={sync.state} botOnline={sync.botOnline} />
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="mecha-btn-sheen font-mecha flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-800 hover:from-indigo-500 hover:to-indigo-700 text-white px-4 py-2 rounded-lg font-medium shadow-lg shadow-indigo-900/20 transition-all disabled:opacity-50"
+            >
+              <Save className="w-5 h-5" />
+              {saving ? '保存中...' : '保存'}
+            </button>
+          </div>
         </div>
+
+        <SyncStatusCards sync={sync} />
 
         {error && (
           <div className="bg-red-500/20 border border-red-500 text-red-500 p-4 rounded-lg flex items-center gap-2">

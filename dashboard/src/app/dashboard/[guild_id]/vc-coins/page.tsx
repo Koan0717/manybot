@@ -6,6 +6,7 @@ import { Save, AlertCircle, Coins, ListFilter, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Select from 'react-select';
 import { toast } from 'react-hot-toast';
+import { useSyncStatus, SyncBadge, SyncStatusCards } from '@/lib/useSyncStatus';
 
 interface DiscordChannel {
   id: string;
@@ -37,6 +38,7 @@ export default function VCCoinsSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sync = useSyncStatus(guildId);
 
   useEffect(() => {
     Promise.all([
@@ -62,6 +64,7 @@ export default function VCCoinsSettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     setError(null);
+    sync.reset();
     try {
       const res = await fetch(`/api/guilds/${guildId}/settings`, {
         method: 'POST',
@@ -69,7 +72,9 @@ export default function VCCoinsSettingsPage() {
         body: JSON.stringify(settings),
       });
       if (!res.ok) throw new Error('保存に失敗しました');
+      const data = await res.json();
       toast.success('設定を保存しました！');
+      sync.startPolling(data.sync_request_id ?? null);
     } catch (err) {
       console.error(err);
       setError('設定の保存に失敗しました');
@@ -117,15 +122,20 @@ export default function VCCoinsSettingsPage() {
         <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-600">
           VCコイン獲得制限
         </h1>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center space-x-2 px-6 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-lg shadow-lg shadow-indigo-500/25 transition-all disabled:opacity-50"
-        >
-          <Save size={20} />
-          <span>{saving ? '保存中...' : '設定を保存'}</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <SyncBadge state={sync.state} botOnline={sync.botOnline} />
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center space-x-2 px-6 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-lg shadow-lg shadow-indigo-500/25 transition-all disabled:opacity-50"
+          >
+            <Save size={20} />
+            <span>{saving ? '保存中...' : '設定を保存'}</span>
+          </button>
+        </div>
       </div>
+
+      <SyncStatusCards sync={sync} />
 
       {error && (
         <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-lg flex items-center space-x-3">

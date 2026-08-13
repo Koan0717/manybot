@@ -4,6 +4,7 @@ import Select from 'react-select';
 import { toast } from 'react-hot-toast';
 import { ShieldAlert } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import { useSyncStatus, SyncBadge, SyncStatusCards } from '@/lib/useSyncStatus';
 
 export default function AntigriefSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -20,6 +21,7 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sync = useSyncStatus(guildId);
 
   useEffect(() => {
     Promise.all([
@@ -50,6 +52,7 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
   const handleSave = async () => {
     setSaving(true);
     setError(null);
+    sync.reset();
     try {
       const res = await fetch(`/api/guilds/${guildId}/antigrief`, {
         method: 'POST',
@@ -57,7 +60,9 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
         body: JSON.stringify(settings)
       });
       if (!res.ok) throw new Error('保存に失敗しました');
+      const data = await res.json();
       toast.success('保存しました');
+      sync.startPolling(data.sync_request_id ?? null);
     } catch (err) {
       console.error(err);
       setError('設定の保存に失敗しました');
@@ -90,7 +95,12 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
 
   return (
     <div className="max-w-4xl mx-auto pb-20">
-      <PageHeader icon={ShieldAlert} title="荒らし対策設定" subtitle="不審な操作からサーバーを自動で守ります" guildId={guildId} healthKey="antigrief" />
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
+        <PageHeader icon={ShieldAlert} title="荒らし対策設定" subtitle="不審な操作からサーバーを自動で守ります" guildId={guildId} healthKey="antigrief" />
+        <SyncBadge state={sync.state} botOnline={sync.botOnline} className="mt-1" />
+      </div>
+
+      <SyncStatusCards sync={sync} />
 
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">

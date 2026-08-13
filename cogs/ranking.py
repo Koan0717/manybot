@@ -415,6 +415,31 @@ class Ranking(commands.Cog):
                         self.bot.vc_join_times = {}
                     self.bot.vc_join_times[user_id] = now_aware
 
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member):
+        """サーバーからメンバーが退出した際、通貨やランク等のデータを削除しセッションをクリアする"""
+        if member.bot:
+            return
+        guild_id = member.guild.id
+        user_id = member.id
+
+        # メモリ上のセッションキャッシュをクリア
+        if hasattr(self.bot, "vc_sessions"):
+            self.bot.vc_sessions.pop(user_id, None)
+        if hasattr(self.bot, "eval_vc_sessions"):
+            self.bot.eval_vc_sessions.pop(user_id, None)
+        if hasattr(self.bot, "vc_join_times"):
+            self.bot.vc_join_times.pop(user_id, None)
+        if hasattr(self.bot, "tc_xp_cooldowns"):
+            self.bot.tc_xp_cooldowns.pop(user_id, None)
+
+        # データベースから通貨・XP・インベントリ等のユーザーデータを削除
+        try:
+            await database.delete_user_data(guild_id, user_id)
+        except Exception as e:
+            print(f"[Ranking Cog] Error in on_member_remove cleanup for user {user_id}: {e}")
+
 async def setup(bot):
     cog = Ranking(bot)
     await bot.add_cog(cog)

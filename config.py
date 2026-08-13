@@ -230,6 +230,9 @@ def is_xp_enabled(bot, channel):
     try:
         if not channel or not channel.guild:
             return False
+        enable_rank = get_setting(bot, 'ENABLE_RANK', channel.guild.id)
+        if enable_rank is not None and str(enable_rank).lower() == 'false':
+            return False
         cfg = bot.get_rank_config(channel.guild.id)
         whitelist = cfg.get("whitelist", set())
         blacklist = cfg.get("blacklist", set())

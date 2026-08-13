@@ -90,7 +90,17 @@ export async function POST(
       );
 
       await client.query('COMMIT');
-      return NextResponse.json({ success: true });
+
+      // IPCでBotに設定再読み込みを通知
+      const reqResult = await client.query(
+        `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
+         VALUES ($1, 0, 'reload_antigrief')
+         RETURNING id`,
+        [guildId]
+      );
+
+      const sync_request_id: number | null = reqResult.rows[0]?.id ?? null;
+      return NextResponse.json({ success: true, sync_request_id });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
