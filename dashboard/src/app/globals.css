@@ -10,6 +10,8 @@
   --mecha-red: #ff2b3d;
   --mecha-cyan: #22d3ee;
   --mecha-amber: #ffb020;
+  --mecha-purple: #a855f7;
+  --mecha-violet: #8b5cf6;
 }
 
 html {
@@ -205,3 +207,70 @@ body {
 .mecha-btn-sheen:hover::before {
   animation: mecha-sheen 0.9s ease-in-out;
 }
+
+/* Purple Mecha Theme Utilities */
+.mecha-grid-bg-purple {
+  background-image:
+    linear-gradient(rgba(168, 85, 247, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(168, 85, 247, 0.08) 1px, transparent 1px);
+  background-size: 26px 26px;
+  background-position: -1px -1px;
+}
+
+.mecha-corners-purple {
+  position: relative;
+}
+.mecha-corners-purple::before,
+.mecha-corners-purple::after,
+.mecha-corners-purple > .mecha-corner-tr,
+.mecha-corners-purple > .mecha-corner-bl {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  z-index: 20;
+}
+.mecha-corners-purple::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid var(--mecha-purple);
+  border-left: 2px solid var(--mecha-purple);
+}
+.mecha-corners-purple::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid var(--mecha-purple);
+  border-right: 2px solid var(--mecha-purple);
+}
+
+.mecha-hazard-purple {
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(168, 85, 247, 0.85) 0px,
+    rgba(168, 85, 247, 0.85) 10px,
+    rgba(15, 15, 20, 0.9) 10px,
+    rgba(15, 15, 20, 0.9) 20px
+  );
+}
+
+.mecha-scan-wrap-purple {
+  position: relative;
+  overflow: hidden;
+}
+.mecha-scan-wrap-purple::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.15), transparent);
+  animation: mecha-scan 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.mecha-input-purple:focus {
+  box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.6), 0 0 14px 0 rgba(168, 85, 247, 0.25);
+}
+
