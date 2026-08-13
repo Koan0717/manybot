@@ -97,14 +97,33 @@ export async function middleware(request: NextRequest) {
 
     const role = payload.role as string;
     const guildId = payload.guild_id as string | undefined;
+    const botId = payload.bot_id as string | undefined;
 
-    // Check guild specific restrictions
-    if (guildId) {
-      // Sub-accounts can only access their specific guild
+    // Dedicated Bot Sub-Account restriction
+    if (botId && guildId) {
+      const allowedBotPrefix = `/dashboard/bot/${botId}/${guildId}`;
+      const isAllowedPage = pathname === allowedBotPrefix || pathname.startsWith(allowedBotPrefix + '/') || pathname.startsWith(allowedBotPrefix + '?');
+      
+      const isAllowedApi =
+        pathname.startsWith('/api/auth') ||
+        pathname.startsWith(`/api/guilds/${guildId}`) ||
+        pathname.startsWith(`/api/bots/${botId}`);
+
+      if (pathname.startsWith('/api/')) {
+        if (!isAllowedApi) {
+          return NextResponse.json({ error: 'このBot専用ダッシュボード以外のアクセス権限がありません' }, { status: 403 });
+        }
+      } else {
+        if (!isAllowedPage) {
+          return NextResponse.redirect(new URL(allowedBotPrefix, request.url));
+        }
+      }
+    } else if (guildId) {
+      // Standard Guild Sub-accounts can only access their specific guild
       const dashboardGuildMatch = pathname.match(/^\/dashboard\/([^\/]+)/);
       const apiGuildMatch = pathname.match(/^\/api\/guilds\/([^\/]+)/);
 
-      if (dashboardGuildMatch && dashboardGuildMatch[1] !== guildId) {
+      if (dashboardGuildMatch && dashboardGuildMatch[1] !== guildId && !pathname.startsWith('/dashboard/bot/')) {
         return NextResponse.redirect(new URL(`/dashboard/${guildId}`, request.url));
       }
 
@@ -134,8 +153,7 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL(`/dashboard/${guildId}`, request.url));
       }
     } else {
-      // Admin account: prevent access to unauthorized roles
-      // No strict path locks, but we can do it if needed. Admin has access to all.
+      // Admin account: full access
     }
 
   } catch (err) {

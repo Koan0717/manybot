@@ -12,8 +12,9 @@ const jwtSecret = new TextEncoder().encode(jwtSecretStr);
 
 export interface SessionPayload {
   username: string;
-  role: 'admin' | 'shop' | 'gambling' | 'subadmin';
+  role: 'admin' | 'shop' | 'gambling' | 'subadmin' | 'botadmin';
   guild_id?: string;
+  bot_id?: string;
   iat?: number;
   exp?: number;
 }
@@ -57,8 +58,9 @@ export async function validateCredentials(username: string, password: string): P
       if (match) {
         return {
           username: user.username,
-          role: user.role as 'admin' | 'shop' | 'gambling' | 'subadmin',
+          role: user.role as 'admin' | 'shop' | 'gambling' | 'subadmin' | 'botadmin',
           guild_id: user.guild_id,
+          bot_id: user.bot_id,
         };
       }
     }

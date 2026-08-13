@@ -38,6 +38,13 @@ import {
   ExternalLink,
   ShieldCheck,
   History,
+  Users,
+  Key,
+  Trash2,
+  Lock,
+  Eye,
+  EyeOff,
+  UserCheck,
 } from 'lucide-react';
 
 interface StatusData {
@@ -77,6 +84,85 @@ export default function BotGuildDashboardPage({
   const [panelColor, setPanelColor] = useState('#2ECC71');
   const [panelSending, setPanelSending] = useState(false);
 
+  // Dedicated Accounts State
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newRole, setNewRole] = useState('botadmin');
+  const [creatingAccount, setCreatingAccount] = useState(false);
+  const [deletingAccountId, setDeletingAccountId] = useState<number | null>(null);
+  const [showPasswordMap, setShowPasswordMap] = useState<Record<number, boolean>>({});
+
+  const fetchAccounts = useCallback(async () => {
+    setAccountsLoading(true);
+    try {
+      const res = await fetch(`/api/bots/${bot_id}/${guild_id}/accounts`);
+      if (res.ok) {
+        const json = await res.json();
+        setAccounts(Array.isArray(json) ? json : []);
+      }
+    } catch {
+      setAccounts([]);
+    } finally {
+      setAccountsLoading(false);
+    }
+  }, [bot_id, guild_id]);
+
+  const handleCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUsername.trim() || !newPassword.trim()) {
+      toast.error('ユーザー名とパスワードを入力してください');
+      return;
+    }
+    setCreatingAccount(true);
+    try {
+      const res = await fetch(`/api/bots/${bot_id}/${guild_id}/accounts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: newUsername.trim(),
+          password: newPassword.trim(),
+          role: newRole,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        toast.success(`専用アカウント「${json.username}」を作成しました！`);
+        setNewUsername('');
+        setNewPassword('');
+        fetchAccounts();
+      } else {
+        toast.error(json.error || 'アカウント作成に失敗しました');
+      }
+    } catch (err: any) {
+      toast.error(`作成エラー: ${err.message}`);
+    } finally {
+      setCreatingAccount(false);
+    }
+  };
+
+  const handleDeleteAccount = async (id: number, uname: string) => {
+    if (!confirm(`専用アカウント「${uname}」を削除しますか？\nこのアカウントではログインできなくなります。`)) return;
+    setDeletingAccountId(id);
+    try {
+      const res = await fetch(`/api/bots/${bot_id}/${guild_id}/accounts?id=${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        toast.success(`アカウント「${uname}」を削除しました`);
+        fetchAccounts();
+      } else {
+        const json = await res.json();
+        toast.error(json.error || '削除に失敗しました');
+      }
+    } catch (err: any) {
+      toast.error(`削除エラー: ${err.message}`);
+    } finally {
+      setDeletingAccountId(null);
+    }
+  };
+
   const fetchData = useCallback(
     async (isManual = false) => {
       if (isManual) setRefreshing(true);
@@ -104,6 +190,12 @@ export default function BotGuildDashboardPage({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (currentTab === 'accounts' || currentTab === 'overview') {
+      fetchAccounts();
+    }
+  }, [currentTab, fetchAccounts]);
 
   const handleSaveSettings = async () => {
     setSaving(true);
@@ -300,14 +392,14 @@ export default function BotGuildDashboardPage({
             <div className="mecha-clip-sm bg-neutral-900/80 border border-purple-900/40 p-4 shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-tech text-xs text-zinc-400 flex items-center gap-1.5">
-                  <Coins className="w-3.5 h-3.5 text-purple-400" /> ベル・両替レート
+                  <Coins className="w-3.5 h-3.5 text-purple-400" /> ゼニー・両替レート
                 </span>
                 <span className="font-tech text-[10px] px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/60 text-purple-300">
-                  {settings.manybot_per_ticket || 500} ベル/枚
+                  {settings.manybot_per_ticket || 500} ゼニー/枚
                 </span>
               </div>
               <div className="font-mecha text-lg font-bold text-white">100 マイル = 1 枚</div>
-              <div className="font-tech text-[11px] text-zinc-500 mt-1">Manybot通貨連携完了</div>
+              <div className="font-tech text-[11px] text-zinc-500 mt-1">Manybot通貨 (ゼニー) 連携</div>
             </div>
 
             <div className="mecha-clip-sm bg-neutral-900/80 border border-purple-900/40 p-4 shadow-sm">
@@ -374,9 +466,9 @@ export default function BotGuildDashboardPage({
                 {
                   tab: 'economy-exchange',
                   icon: Coins,
-                  title: '🔔 通貨・両替・売却 (/両替, /売却)',
-                  desc: '重複生物のベル売却額（レア度別・色違い5倍）、マイル/ベル両替レート',
-                  badge: 'ベル連携',
+                  title: '🪙 通貨・両替・売却 (/両替, /売却)',
+                  desc: '重複生物のゼニー売却額（レア度別・色違い5倍）、マイル/ゼニー両替レート',
+                  badge: 'ゼニー連携',
                 },
                 {
                   tab: 'missions',
@@ -405,6 +497,13 @@ export default function BotGuildDashboardPage({
                   title: '🎮 総合操作パネル (/パネル設置)',
                   desc: '全機能がボタン操作できる【総合操作パネル】の指定チャンネル送信',
                   badge: '即時送信',
+                },
+                {
+                  tab: 'accounts',
+                  icon: Users,
+                  title: '👤 専用アカウント設定',
+                  desc: 'このBot専用のログインID・パスワード作成＆限定アクセス権限管理',
+                  badge: '限定アクセス',
                 },
               ].map((item) => {
                 const Icon = item.icon;
@@ -767,17 +866,17 @@ export default function BotGuildDashboardPage({
         </div>
       )}
 
-      {/* 8. TAB: 🔔 通貨・両替・売却設定 */}
+      {/* 8. TAB: 🪙 通貨・両替・売却設定 */}
       {currentTab === 'economy-exchange' && (
         <div className="mecha-corners-purple bg-neutral-900/80 border border-purple-900/40 mecha-clip p-6 md:p-8 space-y-6">
           <div className="flex items-center justify-between pb-4 border-b border-purple-900/30">
             <div>
               <h2 className="font-mecha text-xl font-bold text-white flex items-center gap-2">
                 <Coins className="w-5 h-5 text-purple-400" />
-                🔔 通貨・両替・売却設定 (/両替, /売却)
+                🪙 通貨・両替・売却設定 (/両替, /売却)
               </h2>
               <p className="font-tech text-xs text-zinc-400 mt-1">
-                重複して捕まえた生き物の売却換金額（レア度別）および、Manybot 鯖内通貨「ベル」と図鑑チケットの両替レートを設定します。
+                重複して捕まえた生き物の売却換金額（レア度別）および、Manybot 鯖内通貨「ゼニー」と図鑑チケットの両替レートを設定します。
               </p>
             </div>
             <button
@@ -793,14 +892,14 @@ export default function BotGuildDashboardPage({
             <div className="space-y-4 p-4 bg-black/40 border border-purple-900/40 rounded-lg">
               <h3 className="font-mecha font-bold text-sm text-purple-300">🔀 両替レート設定 (/両替)</h3>
               <div className="space-y-2">
-                <label className="font-tech text-xs text-zinc-400">1チケットあたりのベル換算額</label>
+                <label className="font-tech text-xs text-zinc-400">1チケットあたりのゼニー換算額</label>
                 <input
                   type="number"
                   value={settings.manybot_per_ticket ?? 500}
                   onChange={(e) => updateSetting('manybot_per_ticket', parseInt(e.target.value, 10))}
                   className="w-full bg-black/60 border border-purple-900/60 rounded p-2.5 text-xs text-white font-tech mecha-input-purple outline-none"
                 />
-                <p className="font-tech text-[10px] text-zinc-500">デフォルト: **500 ベル** = チケット1枚</p>
+                <p className="font-tech text-[10px] text-zinc-500">デフォルト: **500 ゼニー** = チケット1枚</p>
               </div>
             </div>
 
@@ -1261,6 +1360,178 @@ export default function BotGuildDashboardPage({
             <p className="font-tech text-xs text-zinc-400">
               全テーブル（`doumori_users`, `doumori_inventory`, `doumori_collection`, `doumori_miles`, `doumori_daily_missions`, `doumori_mission_logs`, `doumori_mile_logs`, `doumori_settings`）が正常に稼働しています。
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* 14. TAB: 👤 専用アカウント設定 (限定アクセス) */}
+      {currentTab === 'accounts' && (
+        <div className="mecha-corners-purple bg-neutral-900/80 border border-purple-900/40 mecha-clip p-6 md:p-8 space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-purple-900/30">
+            <div>
+              <h2 className="font-mecha text-xl font-bold text-white flex items-center gap-2">
+                <Users className="w-5 h-5 text-purple-400" />
+                👤 専用アカウント設定（限定アクセス管理）
+              </h2>
+              <p className="font-tech text-xs text-zinc-400 mt-1">
+                このBot（Guild: {guild_id}）専用のログインアカウントを作成・管理します。
+              </p>
+            </div>
+          </div>
+
+          {/* Purple Alert Notice Box */}
+          <div className="p-4 bg-purple-950/40 border border-purple-800/60 rounded-lg flex items-start gap-3 shadow-inner">
+            <Lock className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+            <div className="font-tech text-xs text-purple-200 space-y-1">
+              <strong className="text-purple-300 font-bold block text-sm">🔒 専用アカウントのアクセス制限仕様</strong>
+              <p className="leading-relaxed">
+                ここで発行したIDとパスワードでダッシュボードにログインすると、<strong className="text-white underline">このBot・このサーバーのダッシュボード画面しか見れなくなります</strong>。
+              </p>
+              <p className="text-purple-400 text-[11px]">
+                ※ サーバー一覧（/）や他のBot、他のサーバーの管理画面には一切アクセスできず、自動的にこのBot専用画面に固定されます。
+              </p>
+            </div>
+          </div>
+
+          {/* Create New Account Form */}
+          <form onSubmit={handleCreateAccount} className="p-5 bg-black/50 border border-purple-900/40 rounded-lg space-y-4">
+            <h3 className="font-mecha font-bold text-sm text-purple-300 flex items-center gap-2">
+              <Key className="w-4 h-4 text-purple-400" />
+              新規専用アカウント作成
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="font-tech text-xs text-zinc-400">ユーザー名 (ログインID)</label>
+                <input
+                  type="text"
+                  placeholder="例: doumori_admin"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  className="w-full bg-black/60 border border-purple-900/60 rounded p-2.5 text-xs text-white font-tech mecha-input-purple outline-none"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-tech text-xs text-zinc-400">パスワード</label>
+                <input
+                  type="password"
+                  placeholder="パスワードを入力"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full bg-black/60 border border-purple-900/60 rounded p-2.5 text-xs text-white font-mono mecha-input-purple outline-none"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-tech text-xs text-zinc-400">権限種別</label>
+                <select
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value)}
+                  className="w-full bg-black/60 border border-purple-900/60 rounded p-2.5 text-xs text-white font-tech mecha-input-purple outline-none"
+                >
+                  <option value="botadmin">専用Bot管理者 (フル設定・操作)</option>
+                  <option value="subadmin">副管理者 (設定・ログ閲覧)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                disabled={creatingAccount}
+                className="mecha-btn-sheen mecha-clip-sm bg-gradient-to-r from-purple-700 via-indigo-600 to-purple-800 hover:from-purple-600 hover:to-indigo-700 text-white font-mecha font-bold py-2.5 px-6 border border-purple-400/40 text-xs shadow-lg shadow-purple-900/40 flex items-center gap-2 disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {creatingAccount ? '作成中...' : '⚡ 専用アカウントを発行'}
+              </button>
+            </div>
+          </form>
+
+          {/* Accounts List Table */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-mecha font-bold text-sm text-purple-300 flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-purple-400" />
+                登録済み専用アカウント一覧 ({accounts.length} 件)
+              </h3>
+              <button
+                onClick={fetchAccounts}
+                disabled={accountsLoading}
+                className="font-tech text-xs text-purple-400 hover:text-purple-200 flex items-center gap-1"
+              >
+                <RefreshCw className={`w-3 h-3 ${accountsLoading ? 'animate-spin' : ''}`} /> 再読み込み
+              </button>
+            </div>
+
+            <div className="overflow-x-auto bg-black/40 border border-purple-900/40 rounded-lg">
+              <table className="w-full text-left font-tech text-xs">
+                <thead className="bg-purple-950/60 border-b border-purple-900/40 text-purple-300">
+                  <tr>
+                    <th className="p-3">ユーザー名</th>
+                    <th className="p-3">パスワード</th>
+                    <th className="p-3">権限</th>
+                    <th className="p-3">作成日時</th>
+                    <th className="p-3 text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-purple-900/20 text-zinc-300">
+                  {accounts && accounts.length > 0 ? (
+                    accounts.map((acc) => {
+                      const isShown = !!showPasswordMap[acc.id];
+                      return (
+                        <tr key={acc.id} className="hover:bg-purple-950/20">
+                          <td className="p-3 font-bold text-white flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-purple-400" />
+                            {acc.username}
+                          </td>
+                          <td className="p-3 font-mono text-purple-300">
+                            <div className="flex items-center gap-2">
+                              <span>{isShown ? acc.password : '••••••••'}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowPasswordMap((prev) => ({ ...prev, [acc.id]: !prev[acc.id] }))
+                                }
+                                className="text-zinc-500 hover:text-purple-300"
+                              >
+                                {isShown ? <EyeOff size={13} /> : <Eye size={13} />}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-tech text-[10px] px-2 py-0.5 rounded bg-purple-950/80 border border-purple-700 text-purple-300">
+                              {acc.role}
+                            </span>
+                          </td>
+                          <td className="p-3 text-zinc-500">
+                            {new Date(acc.created_at).toLocaleString('ja-JP')}
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              onClick={() => handleDeleteAccount(acc.id, acc.username)}
+                              disabled={deletingAccountId === acc.id}
+                              className="px-2.5 py-1 bg-red-950/60 hover:bg-red-900/80 border border-red-800/80 text-red-300 hover:text-white rounded transition-colors text-[11px] inline-flex items-center gap-1"
+                            >
+                              <Trash2 size={12} />
+                              {deletingAccountId === acc.id ? '削除中...' : '削除'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="p-6 text-center text-zinc-500">
+                        {accountsLoading ? '読み込み中...' : '専用アカウントはまだ作成されていません。上のフォームから発行できます。'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

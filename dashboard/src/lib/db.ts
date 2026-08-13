@@ -25,8 +25,10 @@ export async function initDb() {
         password VARCHAR(255) NOT NULL,
         role VARCHAR(50) NOT NULL,
         guild_id VARCHAR(50) NOT NULL,
+        bot_id VARCHAR(50),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE dashboard_users ADD COLUMN IF NOT EXISTS bot_id VARCHAR(50);
     `);
   } catch (error) {
     console.error('Failed to initialize dashboard_users table:', error);

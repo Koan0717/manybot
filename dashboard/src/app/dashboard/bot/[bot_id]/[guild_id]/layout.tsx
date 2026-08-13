@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   Bot,
   Activity,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -108,9 +109,9 @@ export default function BotDashboardLayout({
       ],
     },
     {
-      section: '🔔 経済・両替・ミッション',
+      section: '🪙 経済・両替・ミッション',
       items: [
-        { label: '通貨・両替・売却 (/両替, /売却)', tabKey: 'economy-exchange', icon: Coins, badge: 'ベル連携' },
+        { label: '通貨・両替・売却 (/両替, /売却)', tabKey: 'economy-exchange', icon: Coins, badge: 'ゼニー連携' },
         { label: 'ミッション報告＆承認 (/ミッション報告)', tabKey: 'missions', icon: Camera, badge: 'ワンタップ' },
       ],
     },
@@ -123,9 +124,10 @@ export default function BotDashboardLayout({
       ],
     },
     {
-      section: '🗄️ システム＆DB',
+      section: '🗄️ システム＆アカウント',
       items: [
         { label: 'データベース接続＆ヘルス', tabKey: 'database-health', icon: Database },
+        { label: '専用アカウント設定', tabKey: 'accounts', icon: Users, badge: '限定アクセス' },
       ],
     },
   ];

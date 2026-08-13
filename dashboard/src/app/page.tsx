@@ -88,8 +88,12 @@ export default function Home() {
       .then(res => res.json())
       .then(authData => {
         if (authData.authenticated && authData.user && authData.user.guild_id) {
-          // It's a sub-account bound to a specific guild, redirect them immediately
-          router.push(`/dashboard/${authData.user.guild_id}`);
+          // It's a sub-account bound to a specific guild / bot, redirect them immediately
+          if (authData.user.bot_id) {
+            router.push(`/dashboard/bot/${authData.user.bot_id}/${authData.user.guild_id}`);
+          } else {
+            router.push(`/dashboard/${authData.user.guild_id}`);
+          }
           return;
         }
 
