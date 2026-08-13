@@ -131,7 +131,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
 
   return (
     <div className="max-w-5xl mx-auto pb-12">
-      <PageHeader icon={LayoutPanelTop} title="その他パネル設定" subtitle="任意ロールパネル（リアクションでロールを付与・剥奪）をチャンネルに送信して設置します" />
+      <PageHeader icon={LayoutPanelTop} title="その他パネル設定" subtitle="任意ロールパネル（リアクションでロールを付与・剥奪）をチャンネルに送信して設置します" guildId={guildId} healthKey="other-panels" />
 
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">

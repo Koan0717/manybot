@@ -98,7 +98,7 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <PageHeader icon={UserPlus} title="条件ロール付与設定" subtitle="入室時の自己紹介テンプレートに応じて自動でロールを付与します" />
+      <PageHeader icon={UserPlus} title="条件ロール付与設定" subtitle="入室時の自己紹介テンプレートに応じて自動でロールを付与します" guildId={guildId} healthKey="self-intro-role" />
 
       {/* 有効/無効 */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">

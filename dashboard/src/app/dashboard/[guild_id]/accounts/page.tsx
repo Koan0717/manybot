@@ -119,7 +119,7 @@ export default function AccountsPage({ params }: { params: { guild_id: string } 
 
   return (
     <div className="max-w-4xl mx-auto">
-      <PageHeader icon={Users} title="アカウント設定" subtitle="サブアカウント（サーバーごとの管理者）を発行・管理します" />
+      <PageHeader icon={Users} title="アカウント設定" subtitle="サブアカウント（サーバーごとの管理者）を発行・管理します" guildId={guildId} healthKey="accounts" />
       
       {error && (
         <div className="bg-red-900/50 text-red-200 p-4 rounded mb-6 border border-red-700">

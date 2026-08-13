@@ -71,7 +71,7 @@ export default function InterviewerPage({ params }: { params: { guild_id: string
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <PageHeader icon={UserCheck} title="面接官設定" subtitle="手動での入界手続きの自動検知と、面接官ごとの対応人数を管理します" />
+      <PageHeader icon={UserCheck} title="面接官設定" subtitle="手動での入界手続きの自動検知と、面接官ごとの対応人数を管理します" guildId={guildId} healthKey="interviewer" />
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
         <h2 className="text-lg font-bold mb-4">自動検知設定</h2>

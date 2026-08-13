@@ -98,7 +98,7 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
 
   return (
     <div className="max-w-4xl mx-auto pb-20">
-      <PageHeader icon={Trophy} title="ランク・経験値設定" subtitle="発言や活動に応じた経験値・ランクを設定します" />
+      <PageHeader icon={Trophy} title="ランク・経験値設定" subtitle="発言や活動に応じた経験値・ランクを設定します" guildId={guildId} healthKey="rank" />
 
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">

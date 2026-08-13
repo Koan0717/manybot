@@ -216,7 +216,7 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
 
   return (
     <div className="max-w-5xl mx-auto pb-20">
-      <PageHeader icon={DoorOpen} title="VCルーム・宿設定" subtitle="宿泊VCの種類・価格・入室条件を管理します" />
+      <PageHeader icon={DoorOpen} title="VCルーム・宿設定" subtitle="宿泊VCの種類・価格・入室条件を管理します" guildId={guildId} healthKey="rooms" />
 
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">

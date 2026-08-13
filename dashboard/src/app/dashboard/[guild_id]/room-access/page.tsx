@@ -190,7 +190,7 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Header */}
-      <PageHeader icon={Shield} title="評価落ちVCアクセス制御" />
+      <PageHeader icon={Shield} title="評価落ちVCアクセス制御" guildId={guildId} healthKey="room-access" />
       <p className="text-zinc-400 text-sm -mt-6">
         「評価落ちロール」「違反者ロール」が付与されているメンバーが、各VCチャンネルを利用できるかどうかを設定します。
         <br />

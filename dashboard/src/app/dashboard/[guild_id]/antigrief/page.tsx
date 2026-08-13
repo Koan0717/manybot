@@ -90,7 +90,7 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
 
   return (
     <div className="max-w-4xl mx-auto pb-20">
-      <PageHeader icon={ShieldAlert} title="荒らし対策設定" subtitle="不審な操作からサーバーを自動で守ります" />
+      <PageHeader icon={ShieldAlert} title="荒らし対策設定" subtitle="不審な操作からサーバーを自動で守ります" guildId={guildId} healthKey="antigrief" />
 
       {error && (
         <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded mb-6">

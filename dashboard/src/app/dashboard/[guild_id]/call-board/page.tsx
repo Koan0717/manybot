@@ -136,6 +136,8 @@ export default function CallBoardSettingsPage({ params }: { params: { guild_id: 
         icon={PhoneCall}
         title="通話募集掲示板設定"
         subtitle="通話募集パネルの設置、募集掲載チャンネル、マッチング時作成VCカテゴリを設定します"
+        guildId={guildId}
+        healthKey="call-board"
       />
 
       <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl space-y-8">

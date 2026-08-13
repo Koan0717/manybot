@@ -172,7 +172,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
   return (
     <div className="max-w-5xl mx-auto">
       <div className="flex justify-between items-center gap-4 flex-wrap mb-2">
-        <PageHeader icon={Ticket} title="カスタムチケット設定" subtitle="問い合わせ用のチケットパネルを管理します" />
+        <PageHeader icon={Ticket} title="カスタムチケット設定" subtitle="問い合わせ用のチケットパネルを管理します" guildId={guildId} healthKey="tickets" />
         <button 
           onClick={() => openModal()}
           className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-red-900/20 transition-all hover:-translate-y-0.5 -mt-8"

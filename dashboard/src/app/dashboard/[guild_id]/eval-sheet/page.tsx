@@ -148,7 +148,7 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-8 animate-fade-in">
-      <PageHeader icon={ClipboardCheck} title="評価関連設定" subtitle="自己紹介での評価シートの自動作成や、通貨がマイナスになった際のペナルティなどを設定します" />
+      <PageHeader icon={ClipboardCheck} title="評価関連設定" subtitle="自己紹介での評価シートの自動作成や、通貨がマイナスになった際のペナルティなどを設定します" guildId={guildId} healthKey="eval-sheet" />
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6 shadow-xl">
         <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">

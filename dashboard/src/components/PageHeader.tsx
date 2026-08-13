@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import HealthBadge from './HealthBadge';
 
 interface PageHeaderProps {
   icon: LucideIcon;
@@ -8,6 +9,10 @@ interface PageHeaderProps {
   eyebrow?: string;
   /** Accent color tone, matches the mecha HUD palette used across the dashboard */
   tone?: 'red' | 'cyan' | 'amber';
+  /** 指定すると、リアルタイム動作確認バッジ(HealthBadge)をタイトル横に表示する */
+  guildId?: string;
+  /** /api/guilds/[guild_id]/health のレスポンスキー (例: 'vc-triggers') */
+  healthKey?: string;
 }
 
 const TONE_STYLES = {
@@ -46,6 +51,8 @@ export default function PageHeader({
   subtitle,
   eyebrow = 'System // Module Configuration',
   tone = 'red',
+  guildId,
+  healthKey,
 }: PageHeaderProps) {
   const t = TONE_STYLES[tone];
   return (
@@ -56,7 +63,7 @@ export default function PageHeader({
           {eyebrow}
         </span>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <div
           className={`w-11 h-11 mecha-clip-sm ${t.iconBg} border ${t.iconBorder} flex items-center justify-center flex-shrink-0`}
         >
@@ -66,6 +73,11 @@ export default function PageHeader({
           <h1 className="font-mecha text-2xl md:text-3xl font-black text-white tracking-tight truncate">{title}</h1>
           {subtitle && <p className="font-tech text-xs text-zinc-500 mt-1">{subtitle}</p>}
         </div>
+        {guildId && healthKey && (
+          <div className="ml-auto">
+            <HealthBadge guildId={guildId} featureKey={healthKey} />
+          </div>
+        )}
       </div>
     </div>
   );

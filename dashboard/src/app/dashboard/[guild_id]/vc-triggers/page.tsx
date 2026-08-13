@@ -133,7 +133,7 @@ export default function VCTriggersPage() {
   return (
     <div className="max-w-4xl mx-auto pb-20 space-y-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <PageHeader icon={Zap} title="VCトリガー設定" subtitle="入室をトリガーに自動で個人 VC を作成する仕組みを設定します" />
+          <PageHeader icon={Zap} title="VCトリガー設定" subtitle="入室をトリガーに自動で個人 VC を作成する仕組みを設定します" guildId={guildId} healthKey="vc-triggers" />
           <button
             onClick={handleSave}
             disabled={saving}
