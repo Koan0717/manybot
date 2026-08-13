@@ -31,6 +31,40 @@ export async function initDb() {
   } catch (error) {
     console.error('Failed to initialize dashboard_users table:', error);
   }
+
+  try {
+    await masterPool.query(`
+      CREATE TABLE IF NOT EXISTS registered_bots (
+        id SERIAL PRIMARY KEY,
+        bot_id VARCHAR(50) UNIQUE NOT NULL,
+        bot_name VARCHAR(255) NOT NULL,
+        token TEXT NOT NULL,
+        github_repo VARCHAR(500),
+        render_deploy_hook_url TEXT,
+        database_url TEXT,
+        webhook_secret TEXT,
+        last_deploy_at TIMESTAMP WITH TIME ZONE,
+        last_commit_sha VARCHAR(100),
+        last_commit_message TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS github_deploy_logs (
+        id SERIAL PRIMARY KEY,
+        bot_id VARCHAR(50) NOT NULL,
+        event_type VARCHAR(50) DEFAULT 'push',
+        commit_sha VARCHAR(100),
+        commit_message TEXT,
+        branch VARCHAR(255),
+        pusher VARCHAR(255),
+        deploy_triggered BOOLEAN DEFAULT FALSE,
+        received_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  } catch (error) {
+    console.error('Failed to initialize registered_bots table:', error);
+  }
 }
 
 // Automatically try to initialize on startup
