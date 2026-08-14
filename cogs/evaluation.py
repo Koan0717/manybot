@@ -195,6 +195,20 @@ class EvaluatorSheetGroup(app_commands.Group):
         
         await interaction.followup.send(f"✅ {user.mention} への評価を登録しました。", ephemeral=True)
 
+    @app_commands.command(name="作成", description="【評価員専用】指定したユーザーの評価シート（スレッド）を手動作成します")
+    @app_commands.describe(user="評価シートを作成する対象ユーザー")
+    async def manual_create_sheet(self, interaction: discord.Interaction, user: discord.Member):
+        bot = self.bot
+        tier = get_evaluator_tier(bot, interaction.user)
+        if tier == 0:
+            return await interaction.response.send_message("このコマンドを実行する権限がありません（評価員ロールが必要です）。", ephemeral=True)
+
+        await interaction.response.defer(ephemeral=True)
+        success, msg = await create_evaluation_thread_for_user(
+            bot, interaction.guild, user, message_url=None, force=True
+        )
+        await interaction.followup.send(msg, ephemeral=True)
+
 # --- Cogの定義 ---
 class Evaluation(commands.Cog):
     def __init__(self, bot):
@@ -377,141 +391,158 @@ class Evaluation(commands.Cog):
             return
 
         self_intro_ids = {int(cid) for cid in cfg.get("self_intro_channel_ids", [])}
-        forum_ids = {int(fid) for fid in cfg.get("forum_channel_ids", [])}
+        if not self_intro_ids:
+            return
+
+        # 通常チャンネルおよびスレッド/フォーラムスレッドの親IDも判定
+        checked_channel_ids = {message.channel.id}
+        if getattr(message.channel, "parent_id", None):
+            checked_channel_ids.add(message.channel.parent_id)
 
         # 自己紹介チャンネルへの投稿か確認
-        if not self_intro_ids or message.channel.id not in self_intro_ids:
+        if not (checked_channel_ids & self_intro_ids):
             return
 
         print(f"[Evaluation] Self-intro message detected from {message.author.display_name} in channel {message.channel.id}")
 
-        if not forum_ids:
-            print(f"[Evaluation Warning] Self-intro detected in guild {guild.id}, but no evaluation forum channels configured.")
-            return
+        # 評価スレッド作成共通関数を呼び出し
+        success, msg = await create_evaluation_thread_for_user(
+            self.bot, guild, message.author, message_url=message.jump_url, force=False
+        )
+        if not success:
+            print(f"[Evaluation Auto Error] {msg}")
+            try:
+                await message.channel.send(
+                    f"⚠️ {message.author.mention} 評価シート（スレッド）の自動作成に失敗しました。\n理由: `{msg}`\n※管理者はダッシュボードのフォーラム設定やBotの権限を確認してください。",
+                    delete_after=25
+                )
+            except Exception:
+                pass
 
-        # 新規メンバーロールのチェック（設定されている場合のみ適用。未設定なら全員対象）
-        human_role = get_role_by_setting(self.bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
-        # human_role がサーバーに実在し、かつユーザーが持っていない場合（管理者・権限保持者によるテストは許可）
-        if human_role and (human_role not in message.author.roles) and not message.author.guild_permissions.administrator:
-            print(f"[Evaluation Info] {message.author.display_name} does not have new member role ({human_role.name}), skipping.")
-            return
 
-        # アクティブスレッドを Discord API から取得（キャッシュより確実）
+async def create_evaluation_thread_for_user(bot, guild: discord.Guild, user: discord.Member, message_url: str = None, force: bool = False) -> tuple[bool, str]:
+    """
+    指定ユーザーの評価シートスレッドを作成する共通関数。
+    (成功フラグ, メッセージ/エラー理由) を返す。
+    """
+    try:
+        if hasattr(bot, "fetch_and_cache_evaluation_config"):
+            cfg = await bot.fetch_and_cache_evaluation_config(guild.id)
+        else:
+            cfg = bot.get_evaluation_config(guild.id)
+    except Exception as e:
+        cfg = bot.get_evaluation_config(guild.id)
+
+    if not cfg.get("is_enabled", True) and not force:
+        return False, "評価機能が無効化されています。"
+
+    forum_ids = [int(fid) for fid in cfg.get("forum_channel_ids", [])]
+    if not forum_ids:
+        return False, "評価フォーラムチャンネルが設定されていません。ダッシュボードの「評価関連設定」でフォーラムを指定してください。"
+
+    # アクティブスレッドを取得
+    try:
+        active_threads = await guild.active_threads()
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch active threads: {e}")
+        active_threads = list(guild.threads)
+
+    # 評価期間の取得または自動生成
+    period = await database.get_evaluation_period(guild.id, user.id)
+    if not period:
+        now = datetime.datetime.now(JST)
+        if now.hour == 23:
+            start_time = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            start_time = now
+        end_time = start_time + datetime.timedelta(days=14)
         try:
-            active_threads = await guild.active_threads()
-        except Exception as e:
-            print(f"[ERROR] Failed to fetch active threads: {e}")
-            active_threads = list(guild.threads)
+            await database.add_evaluation_period(guild.id, user.id, start_time, end_time)
+            period = await database.get_evaluation_period(guild.id, user.id)
+            print(f"[Evaluation] Auto-started evaluation period for {user.display_name}: {start_time} to {end_time}")
+        except Exception as pe:
+            print(f"[Evaluation Error] Failed to auto-create evaluation period: {pe}")
 
-        for forum_id in forum_ids:
-            forum_channel = self.bot.get_channel(forum_id)
-            if forum_channel is None:
-                try:
-                    forum_channel = await self.bot.fetch_channel(forum_id)
-                except Exception as e:
-                    print(f"[ERROR] Failed to fetch forum channel {forum_id}: {e}")
-                    try:
-                        await message.channel.send(f"⚠️ {message.author.mention} エラー: フォーラムチャンネル(ID: {forum_id})にアクセスできません。Discord側でボットに「チャンネルを見る」「スレッドの作成」権限を付与してください！", delete_after=15)
-                    except:
-                        pass
-                    continue
+    if period:
+        start_str = format_evaluation_datetime(period['start_time'])
+        end_str = format_evaluation_datetime(period['end_time'])
+        content_lines = [
+            f"**対象者:** {user.mention}",
+            f"**評価期間:** {start_str} ～ {end_str}",
+        ]
+    else:
+        content_lines = [
+            f"**対象者:** {user.mention}",
+        ]
+    if message_url:
+        content_lines.append(f"\n**自己紹介へのリンク:**\n{message_url}")
 
-            if not isinstance(forum_channel, discord.ForumChannel):
-                print(f"[Evaluation Warning] Channel {forum_id} is not a ForumChannel (type: {type(forum_channel)}).")
+    content_thread = "\n".join(content_lines)
+    thread_name = f"{user.display_name}_{user.name}"
+
+    created_any = False
+    target_suffix = f"_{user.name.lower()}"
+    user_id_str = str(user.id)
+
+    last_error = None
+    for forum_id in forum_ids:
+        forum_channel = bot.get_channel(forum_id)
+        if forum_channel is None:
+            try:
+                forum_channel = await bot.fetch_channel(forum_id)
+            except Exception as e:
+                last_error = f"フォーラムチャンネル(ID: {forum_id})を取得できません: {e}"
                 continue
 
-            # 重複チェック: スレッド名が "_username" で終わるもの、またはユーザーIDを含むものを探す
-            target_suffix = f"_{message.author.name.lower()}"
-            user_id_str = str(message.author.id)
+        if not isinstance(forum_channel, discord.ForumChannel):
+            last_error = f"指定チャンネル(ID: {forum_id})はフォーラムチャンネルではありません。"
+            continue
 
+        # 重複チェック（手動強制作成時はスキップ）
+        if not force:
             duplicate = any(
                 thread.parent_id == forum_id and (
                     thread.name.lower().endswith(target_suffix) or user_id_str in thread.name
                 )
                 for thread in active_threads
             )
-
-            # アクティブになければアーカイブ済みスレッドも検索
-            if not duplicate:
-                try:
-                    async for archived_thread in forum_channel.archived_threads(limit=100):
-                        if archived_thread.name.lower().endswith(target_suffix) or user_id_str in archived_thread.name:
-                            duplicate = True
-                            break
-                except Exception as e:
-                    print(f"[Evaluation] Could not check archived threads for forum {forum_id}: {e}")
-
             if duplicate:
-                print(f"[Evaluation Thread] Already exists for {message.author.display_name} in forum {forum_id}, skipping.")
-                continue
+                print(f"[Evaluation Thread] Already exists for {user.display_name} in forum {forum_id}, skipping.")
+                return True, f"{user.display_name} のアクティブな評価スレッドが既に存在します。"
 
-            # 評価期間データの取得または自動生成
-            period = await database.get_evaluation_period(guild.id, message.author.id)
-            if not period:
-                # 評価期間未設定の場合は新規作成
-                now = datetime.datetime.now(JST)
-                if now.hour == 23:
-                    start_time = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-                else:
-                    start_time = now
-                end_time = start_time + datetime.timedelta(days=14)
-                try:
-                    await database.add_evaluation_period(guild.id, message.author.id, start_time, end_time)
-                    period = await database.get_evaluation_period(guild.id, message.author.id)
-                    print(f"[Evaluation] Auto-started evaluation period for {message.author.display_name}: {start_time} to {end_time}")
-                except Exception as pe:
-                    print(f"[Evaluation Error] Failed to auto-create evaluation period: {pe}")
-
-            if period:
-                start_str = format_evaluation_datetime(period['start_time'])
-                end_str = format_evaluation_datetime(period['end_time'])
-                content_thread = (
-                    f"**対象者:** {message.author.mention}\n"
-                    f"**評価期間:** {start_str} ～ {end_str}\n\n"
-                    f"**自己紹介へのリンク:**\n{message.jump_url}"
-                )
+        thread_kwargs = {
+            "name": thread_name,
+            "content": content_thread,
+            "reason": f"Created evaluation thread for {user.display_name}"
+        }
+        if hasattr(forum_channel, "available_tags") and forum_channel.available_tags:
+            pref_tag = next((t for t in forum_channel.available_tags if any(k in t.name for k in ["評価", "審査", "進行", "対象", "新規"])), None)
+            if pref_tag:
+                thread_kwargs["applied_tags"] = [pref_tag]
             else:
-                content_thread = (
-                    f"**対象者:** {message.author.mention}\n"
-                    f"**自己紹介へのリンク:**\n{message.jump_url}"
-                )
-                
-            thread_name = f"{message.author.display_name}_{message.author.name}"
-            
-            # フォーラムのタグ必須設定に対応
-            thread_kwargs = {
-                "name": thread_name,
-                "content": content_thread,
-                "reason": f"Auto created evaluation thread for {message.author.display_name}"
-            }
-            if hasattr(forum_channel, "available_tags") and forum_channel.available_tags:
-                # 「評価中」「審査中」「進行中」等のタグがあれば優先して付与
-                pref_tag = next((t for t in forum_channel.available_tags if any(k in t.name for k in ["評価", "審査", "進行", "対象", "新規"])), None)
-                if pref_tag:
-                    thread_kwargs["applied_tags"] = [pref_tag]
-                else:
-                    thread_kwargs["applied_tags"] = [forum_channel.available_tags[0]]
+                thread_kwargs["applied_tags"] = [forum_channel.available_tags[0]]
 
-            try:
-                created_thread = await forum_channel.create_thread(**thread_kwargs)
-                print(f"[Evaluation Thread] Successfully created for {message.author.display_name} in forum {forum_id} (Thread ID: {created_thread.thread.id if hasattr(created_thread, 'thread') else created_thread.id})")
-            except Exception as e:
-                # タグエラー等の場合はapplied_tags無しで再試行
-                if "applied_tags" in thread_kwargs:
-                    try:
-                        thread_kwargs.pop("applied_tags", None)
-                        await forum_channel.create_thread(**thread_kwargs)
-                        print(f"[Evaluation Thread] Successfully created (fallback) for {message.author.display_name} in forum {forum_id}")
-                        continue
-                    except Exception as re_e:
-                        e = re_e
-
-                print(f"[ERROR] Failed to create forum thread in forum {forum_id}: {e}")
+        try:
+            created_thread = await forum_channel.create_thread(**thread_kwargs)
+            print(f"[Evaluation Thread] Successfully created for {user.display_name} in forum {forum_id} (ID: {getattr(created_thread, 'id', 'N/A')})")
+            created_any = True
+        except Exception as e:
+            if "applied_tags" in thread_kwargs:
                 try:
-                    await message.channel.send(f"⚠️ {message.author.mention} 評価シート（スレッド）の自動生成に失敗しました。\nエラー: `{e}`\nフォーラムの「タグ必須」設定やボットの権限（スレッド作成権限など）を確認してください。", delete_after=20)
-                except:
-                    pass
+                    thread_kwargs.pop("applied_tags", None)
+                    created_thread = await forum_channel.create_thread(**thread_kwargs)
+                    print(f"[Evaluation Thread] Successfully created (fallback) for {user.display_name} in forum {forum_id}")
+                    created_any = True
+                    continue
+                except Exception as re_e:
+                    e = re_e
+            last_error = f"フォーラムスレッド作成に失敗しました: {e}"
+
+    if created_any:
+        return True, f"✅ {user.mention} の評価シートスレッドを作成しました。"
+    return False, last_error or "スレッドを作成できませんでした。"
 
 
 async def setup(bot):
     await bot.add_cog(Evaluation(bot))
+
