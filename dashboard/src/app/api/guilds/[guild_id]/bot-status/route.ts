@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getPool, masterPool } from '@/lib/db';
+import { ensureAllSchemas } from '@/lib/migrations';
 
 /**
  * GET /api/guilds/[guild_id]/bot-status
@@ -29,6 +30,11 @@ export async function GET(
     await pool.query('SELECT 1');
     dbStatus.latencyMs = Date.now() - dbStart;
     dbStatus.ok = true;
+
+    // スキーマの自動補完
+    try {
+      await ensureAllSchemas(pool);
+    } catch {}
 
     // 専用DBかチェック
     try {
