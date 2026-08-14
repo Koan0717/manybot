@@ -150,10 +150,26 @@ export async function ensureEvaluationPeriodsSchema(pool: any) {
         end_time TIMESTAMP
       )
     `);
-    try { await pool.query('ALTER TABLE evaluation_periods RENAME COLUMN start_date TO start_time'); } catch {}
-    try { await pool.query('ALTER TABLE evaluation_periods RENAME COLUMN end_date TO end_time'); } catch {}
-    try { await pool.query('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS start_time TIMESTAMP'); } catch {}
-    try { await pool.query('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS end_time TIMESTAMP'); } catch {}
+    const renames = [
+      'ALTER TABLE evaluation_periods RENAME COLUMN start_date TO start_time',
+      'ALTER TABLE evaluation_periods RENAME COLUMN end_date TO end_time',
+      'ALTER TABLE evaluation_periods RENAME COLUMN member_id TO user_id',
+      'ALTER TABLE evaluation_periods RENAME COLUMN target_user_id TO user_id',
+      'ALTER TABLE evaluation_periods RENAME COLUMN target_id TO user_id',
+      'ALTER TABLE evaluation_periods RENAME COLUMN server_id TO guild_id',
+    ];
+    for (const sql of renames) {
+      try { await pool.query(sql); } catch {}
+    }
+    const cols = [
+      'ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS guild_id BIGINT',
+      'ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS user_id BIGINT',
+      'ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS start_time TIMESTAMP',
+      'ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS end_time TIMESTAMP',
+    ];
+    for (const sql of cols) {
+      try { await pool.query(sql); } catch {}
+    }
   } catch (e) {
     console.error('Failed to ensure evaluation_periods schema:', e);
   }

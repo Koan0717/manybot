@@ -749,20 +749,39 @@ async def setup_db_schema(p):
 
             await conn.execute("ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS allowed_role_ids BIGINT[] DEFAULT '{}'")
 
-            # evaluation_periods カラム移行 (start_date/end_date -> start_time/end_time)
+            # evaluation_periods カラム移行 (start_date/end_date -> start_time/end_time, member_id/target_id -> user_id)
+            eval_period_renames = [
+                ("start_date", "start_time"),
+                ("end_date", "end_time"),
+                ("member_id", "user_id"),
+                ("target_user_id", "user_id"),
+                ("target_id", "user_id"),
+                ("server_id", "guild_id"),
+            ]
+            for old_col, new_col in eval_period_renames:
+                try:
+                    await conn.execute(f'ALTER TABLE evaluation_periods RENAME COLUMN {old_col} TO {new_col}')
+                except Exception:
+                    pass
+
             try:
-                await conn.execute('ALTER TABLE evaluation_periods RENAME COLUMN start_date TO start_time')
-            except Exception:
-                pass
-            try:
-                await conn.execute('ALTER TABLE evaluation_periods RENAME COLUMN end_date TO end_time')
-            except Exception:
-                pass
-            try:
+                await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS guild_id BIGINT')
+                await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS user_id BIGINT')
                 await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS start_time TIMESTAMP')
                 await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS end_time TIMESTAMP')
             except Exception:
                 pass
+
+            # user_evaluations カラム移行
+            eval_user_renames = [
+                ("user_id", "target_user_id"),
+                ("member_id", "target_user_id"),
+            ]
+            for old_col, new_col in eval_user_renames:
+                try:
+                    await conn.execute(f'ALTER TABLE user_evaluations RENAME COLUMN {old_col} TO {new_col}')
+                except Exception:
+                    pass
 
         except Exception as e:
 
@@ -1643,15 +1662,22 @@ async def ensure_evaluation_periods_schema(conn):
                 end_time TIMESTAMP
             )
         ''')
+        renames = [
+            ("start_date", "start_time"),
+            ("end_date", "end_time"),
+            ("member_id", "user_id"),
+            ("target_user_id", "user_id"),
+            ("target_id", "user_id"),
+            ("server_id", "guild_id"),
+        ]
+        for old_col, new_col in renames:
+            try:
+                await conn.execute(f'ALTER TABLE evaluation_periods RENAME COLUMN {old_col} TO {new_col}')
+            except Exception:
+                pass
         try:
-            await conn.execute('ALTER TABLE evaluation_periods RENAME COLUMN start_date TO start_time')
-        except Exception:
-            pass
-        try:
-            await conn.execute('ALTER TABLE evaluation_periods RENAME COLUMN end_date TO end_time')
-        except Exception:
-            pass
-        try:
+            await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS guild_id BIGINT')
+            await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS user_id BIGINT')
             await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS start_time TIMESTAMP')
             await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS end_time TIMESTAMP')
         except Exception:
