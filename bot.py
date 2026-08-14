@@ -49,6 +49,22 @@ class EconomyBot(commands.Bot):
             }
         return self.evaluation_settings[guild_id]
 
+    async def fetch_and_cache_evaluation_config(self, guild_id: int) -> dict:
+        data = await database.get_evaluation_settings(guild_id)
+        if data:
+            self.evaluation_settings[guild_id] = {
+                "is_enabled": data.get("is_enabled", True),
+                "forum_channel_ids": set(data.get("forum_channel_ids", [])),
+                "self_intro_channel_ids": set(data.get("self_intro_channel_ids", []))
+            }
+        else:
+            self.evaluation_settings[guild_id] = {
+                "is_enabled": True,
+                "forum_channel_ids": set(),
+                "self_intro_channel_ids": set()
+            }
+        return self.evaluation_settings[guild_id]
+
     def get_rank_config(self, guild_id: int) -> dict:
         if guild_id not in self.rank_settings_cache:
             return {"whitelist": set(), "blacklist": set(), "categories": set(), "blacklist_categories": set(), "enable_exclude_rank_role": False, "exclude_rank_role_ids": set()}

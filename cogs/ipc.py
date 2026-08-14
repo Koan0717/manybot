@@ -34,17 +34,22 @@ class IPC(commands.Cog):
                         # ... Reload logic ...
                         if panel_type == "reload_eval":
                             try:
-                                db_eval_settings = await database.get_all_evaluation_settings()
-                                for s in db_eval_settings:
-                                    if s["guild_id"] == guild_id:
-                                        self.bot.evaluation_settings[guild_id] = {
-                                            "is_enabled": s.get("is_enabled", True),
-                                            "forum_channel_ids": set(s["forum_channel_ids"]),
-                                            "self_intro_channel_ids": set(s["self_intro_channel_ids"])
-                                        }
-                                print(f"[IPC] Reloaded evaluation settings for guild {guild_id}")
+                                s = await database.get_evaluation_settings(guild_id)
+                                if s:
+                                    self.bot.evaluation_settings[guild_id] = {
+                                        "is_enabled": s.get("is_enabled", True),
+                                        "forum_channel_ids": set(s.get("forum_channel_ids", [])),
+                                        "self_intro_channel_ids": set(s.get("self_intro_channel_ids", []))
+                                    }
+                                else:
+                                    self.bot.evaluation_settings[guild_id] = {
+                                        "is_enabled": True,
+                                        "forum_channel_ids": set(),
+                                        "self_intro_channel_ids": set()
+                                    }
+                                print(f"[IPC] Reloaded evaluation settings for guild {guild_id}: {self.bot.evaluation_settings[guild_id]}")
                             except Exception as e:
-                                print(f"[IPC ERROR] Failed to reload evaluation settings: {e}")
+                                print(f"[IPC ERROR] Failed to reload evaluation settings for guild {guild_id}: {e}")
                         
                         elif panel_type == "reload_bot_settings":
                             try:
