@@ -16,6 +16,7 @@ interface DiscordChannel {
 }
 
 interface VCCoinsSettings {
+  is_enabled: boolean;
   is_whitelist_mode: boolean;
   channels: string[];
   categories: string[];
@@ -28,6 +29,7 @@ export default function VCCoinsSettingsPage() {
   const guildId = params.guild_id as string;
   
   const [settings, setSettings] = useState<VCCoinsSettings>({
+    is_enabled: false,
     is_whitelist_mode: true,
     channels: [],
     categories: [],
@@ -42,10 +44,11 @@ export default function VCCoinsSettingsPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/guilds/${guildId}/settings`).then(res => res.ok ? res.json() : {}),
+      fetch(`/api/guilds/${guildId}/vc-coins`).then(res => res.ok ? res.json() : {}),
       fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : [])
     ]).then(([settingsData, channelsData]: [any, any]) => {
       setSettings({
+        is_enabled: settingsData.is_enabled ?? false,
         is_whitelist_mode: settingsData.is_whitelist_mode ?? true,
         channels: settingsData.channels || [],
         categories: settingsData.categories || [],
@@ -66,7 +69,7 @@ export default function VCCoinsSettingsPage() {
     setError(null);
     sync.reset();
     try {
-      const res = await fetch(`/api/guilds/${guildId}/settings`, {
+      const res = await fetch(`/api/guilds/${guildId}/vc-coins`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
@@ -151,7 +154,26 @@ export default function VCCoinsSettingsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* ON / OFF トグルスイッチ */}
+      <div className="bg-gray-800/50 border border-indigo-500/20 p-6 rounded-xl flex items-center justify-between shadow-lg">
+        <div>
+          <h2 className="text-xl font-semibold text-white">VCコイン獲得制限の有効化</h2>
+          <p className="text-sm text-gray-400 mt-1">
+            {settings.is_enabled 
+              ? '【有効】指定されたホワイトリスト/ブラックリストのルールに基づいてVCコインが獲得できます。' 
+              : '【無効】獲得制限は適用されず、すべてのVCチャンネルでVCコインを獲得できます。'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setSettings(prev => ({ ...prev, is_enabled: !prev.is_enabled }))}
+          className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.is_enabled ? 'bg-indigo-600' : 'bg-gray-700'}`}
+        >
+          <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.is_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+        </button>
+      </div>
+
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 transition-opacity duration-200 ${settings.is_enabled ? 'opacity-100' : 'opacity-50'}`}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-800/50 border border-indigo-500/20 p-6 rounded-xl space-y-6">
           <div className="flex items-center space-x-3 text-xl font-semibold text-indigo-300 border-b border-indigo-500/20 pb-4">
             <ListFilter className="text-indigo-400" />

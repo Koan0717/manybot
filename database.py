@@ -857,6 +857,8 @@ async def setup_db_schema(p):
 
                 guild_id BIGINT PRIMARY KEY,
 
+                is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+
                 whitelist_channel_ids BIGINT[] NOT NULL DEFAULT '{}',
 
                 blacklist_channel_ids BIGINT[] NOT NULL DEFAULT '{}',
@@ -872,6 +874,11 @@ async def setup_db_schema(p):
             )
 
         ''')
+
+        try:
+            await conn.execute('ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT FALSE')
+        except Exception:
+            pass
 
 
 
@@ -2754,11 +2761,20 @@ async def get_vc_coins_settings(guild_id: int) -> dict:
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_settings WHERE guild_id = $1', guild_id)
+        try:
+            row = await conn.fetchrow('SELECT is_enabled, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids FROM vc_coins_settings WHERE guild_id = $1', guild_id)
+        except Exception:
+            try:
+                await conn.execute('ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT FALSE')
+                row = await conn.fetchrow('SELECT is_enabled, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids FROM vc_coins_settings WHERE guild_id = $1', guild_id)
+            except Exception:
+                row = await conn.fetchrow('SELECT whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids FROM vc_coins_settings WHERE guild_id = $1', guild_id)
 
         if row:
 
             return {
+
+                "is_enabled": row["is_enabled"] if "is_enabled" in row and row["is_enabled"] is not None else False,
 
                 "whitelist": row["whitelist_channel_ids"] or [],
 
@@ -2767,16 +2783,16 @@ async def get_vc_coins_settings(guild_id: int) -> dict:
                 "categories": row["whitelist_category_ids"] or [],
 
                 "blacklist_categories": row["blacklist_category_ids"] or [],
-                "enable_exclude_rank_role": row["enable_exclude_rank_role"],
-                "exclude_rank_role_ids": row["exclude_rank_role_ids"] or []
+                "enable_exclude_rank_role": row.get("enable_exclude_rank_role", False) if hasattr(row, "get") else (row["enable_exclude_rank_role"] if "enable_exclude_rank_role" in row else False),
+                "exclude_rank_role_ids": row.get("exclude_rank_role_ids", []) if hasattr(row, "get") else (row["exclude_rank_role_ids"] if "exclude_rank_role_ids" in row else [])
 
             }
 
         else:
 
-            await conn.execute('INSERT INTO vc_coins_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (guild_id) DO NOTHING', guild_id, [], [], [], [], False, [])
+            await conn.execute('INSERT INTO vc_coins_settings (guild_id, is_enabled, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (guild_id) DO NOTHING', guild_id, False, [], [], [], [], False, [])
 
-            return {"whitelist": [], "blacklist": [], "categories": [], "blacklist_categories": [], "enable_exclude_rank_role": False, "exclude_rank_role_ids": []}
+            return {"is_enabled": False, "whitelist": [], "blacklist": [], "categories": [], "blacklist_categories": [], "enable_exclude_rank_role": False, "exclude_rank_role_ids": []}
 
 
 
@@ -2792,13 +2808,18 @@ async def get_all_vc_coins_settings() -> list[dict]:
 
             async with p.acquire() as conn:
 
-                rows = await conn.fetch('SELECT guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_settings')
+                try:
+                    rows = await conn.fetch('SELECT guild_id, is_enabled, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_settings')
+                except Exception:
+                    rows = await conn.fetch('SELECT guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_settings')
 
                 all_settings.extend([
 
                     {
 
                         "guild_id": r["guild_id"],
+
+                        "is_enabled": r["is_enabled"] if "is_enabled" in r and r["is_enabled"] is not None else False,
 
                         "whitelist": r["whitelist_channel_ids"] or [],
 

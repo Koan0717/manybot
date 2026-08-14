@@ -535,6 +535,11 @@ def is_vc_coins_eligible(bot, channel) -> bool:
         return False
     guild_id = channel.guild.id
     cfg = bot.get_vc_coins_config(guild_id)
+    
+    # 制限機能が無効（is_enabled == False）の場合は制限を行わない（すべてのVCで獲得可能）
+    if not cfg.get("is_enabled", False):
+        return True
+
     whitelist_channels = cfg.get("whitelist", set())
     whitelist_categories = cfg.get("categories", set())
     blacklist_channels = cfg.get("blacklist", set())
@@ -550,6 +555,10 @@ def is_vc_coins_eligible(bot, channel) -> bool:
         return True
     elif not has_whitelist and has_blacklist:
         return not in_blacklist
+    elif has_whitelist and not has_blacklist:
+        return in_whitelist
+    else:
+        return in_whitelist and not in_blacklist
 def format_evaluation_datetime(dt) -> str:
     if not dt:
         return "データなし"

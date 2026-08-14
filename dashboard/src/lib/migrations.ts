@@ -117,6 +117,11 @@ export async function ensureVcCoinsSettingsSchema(pool: any) {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS vc_coins_settings (
         guild_id BIGINT PRIMARY KEY,
+        is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        whitelist_channel_ids BIGINT[] NOT NULL DEFAULT '{}',
+        blacklist_channel_ids BIGINT[] NOT NULL DEFAULT '{}',
+        whitelist_category_ids BIGINT[] NOT NULL DEFAULT '{}',
+        blacklist_category_ids BIGINT[] NOT NULL DEFAULT '{}',
         whitelist_channels JSONB DEFAULT '[]',
         blacklist_channels JSONB DEFAULT '[]',
         whitelist_categories JSONB DEFAULT '[]',
@@ -124,6 +129,11 @@ export async function ensureVcCoinsSettingsSchema(pool: any) {
       )
     `);
     const cols = [
+      `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS whitelist_channel_ids BIGINT[] NOT NULL DEFAULT '{}'`,
+      `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS blacklist_channel_ids BIGINT[] NOT NULL DEFAULT '{}'`,
+      `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS whitelist_category_ids BIGINT[] NOT NULL DEFAULT '{}'`,
+      `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS blacklist_category_ids BIGINT[] NOT NULL DEFAULT '{}'`,
       `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS whitelist_channels JSONB DEFAULT '[]'`,
       `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS blacklist_channels JSONB DEFAULT '[]'`,
       `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS whitelist_categories JSONB DEFAULT '[]'`,

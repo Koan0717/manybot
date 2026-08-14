@@ -230,21 +230,13 @@ export async function GET(
 
     // 5) VCコイン獲得制限 (VC Coins)
     try {
-      const vccRes = await pool.query('SELECT is_enabled, whitelist_channels, blacklist_channels, vc_interval_min, vc_coins_per_interval FROM vc_coins_settings WHERE guild_id = $1', [guildId]);
+      const vccRes = await pool.query('SELECT is_enabled FROM vc_coins_settings WHERE guild_id = $1', [guildId]);
       const botCoinsRes = await pool.query("SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('vc_coin_reward_interval', 'vc_coin_reward_amount', 'is_whitelist_mode', 'channels', 'categories')", [guildId]);
       
-      const hasBotCoins = botCoinsRes.rows.length > 0;
       const vccRow = vccRes.rows[0];
-      
-      let isEnabled = true;
+      const isEnabled = vccRow ? (vccRow.is_enabled === true) : false;
       let interval = 10;
       let amount = 100;
-      
-      if (vccRow) {
-        isEnabled = vccRow.is_enabled !== false;
-        interval = vccRow.vc_interval_min || 10;
-        amount = vccRow.vc_coins_per_interval || 100;
-      }
       
       for (const r of botCoinsRes.rows) {
         if (r.setting_key === 'vc_coin_reward_interval') interval = Number(r.setting_value) || interval;
@@ -252,8 +244,10 @@ export async function GET(
       }
 
       modules['vc_coins'] = {
-        configured: isEnabled || hasBotCoins,
-        summary: isEnabled ? `稼働中 (${interval}分ごとに${amount}コイン付与)` : '無効化中',
+        configured: true,
+        summary: isEnabled 
+          ? `獲得制限: ON (${interval}分ごとに${amount}コイン)` 
+          : `獲得制限: OFF (${interval}分ごとに${amount}コイン / 全VC獲得)`,
       };
     } catch (e: any) {
       modules['vc_coins'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };

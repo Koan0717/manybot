@@ -93,12 +93,13 @@ class EconomyBot(commands.Bot):
 
     def get_vc_coins_config(self, guild_id: int) -> dict:
         if guild_id not in self.vc_coins_settings_cache:
-            return {"whitelist": set(), "blacklist": set(), "categories": set(), "blacklist_categories": set(), "enable_exclude_rank_role": False, "exclude_rank_role_ids": set()}
+            return {"is_enabled": False, "whitelist": set(), "blacklist": set(), "categories": set(), "blacklist_categories": set(), "enable_exclude_rank_role": False, "exclude_rank_role_ids": set()}
         return self.vc_coins_settings_cache[guild_id]
 
     async def fetch_and_cache_vc_coins_config(self, guild_id: int) -> dict:
         data = await database.get_vc_coins_settings(guild_id)
         self.vc_coins_settings_cache[guild_id] = {
+            "is_enabled": data.get("is_enabled", False),
             "whitelist": set(data.get("whitelist", [])),
             "blacklist": set(data.get("blacklist", [])),
             "categories": set(data.get("categories", [])),
@@ -176,6 +177,7 @@ class EconomyBot(commands.Bot):
             db_vc_coins = await database.get_all_vc_coins_settings()
             for r in db_vc_coins:
                 self.vc_coins_settings_cache[r["guild_id"]] = {
+                    "is_enabled": r.get("is_enabled", False),
                     "whitelist": set(r.get("whitelist", [])),
                     "blacklist": set(r.get("blacklist", [])),
                     "categories": set(r.get("categories", [])),

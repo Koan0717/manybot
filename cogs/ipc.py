@@ -107,10 +107,17 @@ class IPC(commands.Cog):
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload antigrief settings: {e}")
 
+                        elif panel_type == "reload_vc_coins":
+                            try:
+                                if hasattr(self.bot, "fetch_and_cache_vc_coins_config"):
+                                    await self.bot.fetch_and_cache_vc_coins_config(guild_id)
+                                self.bot.bot_settings = await database.load_settings()
+                                print(f"[IPC] Reloaded vc_coins settings for guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to reload vc_coins settings: {e}")
+
                         elif panel_type == "reload_call_board":
                             try:
-                                # call_board_settings はBotキャッシュなし（都度DBから読む設計）なので、
-                                # 読み込みが必要なキャッシュがあればここでリロードする。
                                 print(f"[IPC] Processed reload_call_board for guild {guild_id}")
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to process reload_call_board: {e}")
