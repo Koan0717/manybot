@@ -49,15 +49,27 @@ export default function CommandsPage({ params }: { params: { guild_id: string } 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command_name: commandName, is_enabled: newEnabled })
       });
-      if (!res.ok) throw new Error('更新失敗');
-    } catch (err) {
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        const msg = data.error || '更新失敗';
+        // Revert on error
+        setCommands(prev => 
+          prev.map(cmd => 
+            cmd.command_name === commandName ? { ...cmd, is_enabled: currentEnabled } : cmd
+          )
+        );
+        toast.error(`設定の保存に失敗しました: ${msg}`);
+        return;
+      }
+    } catch (err: any) {
+      const msg = err?.message || String(err);
       // Revert on error
       setCommands(prev => 
         prev.map(cmd => 
           cmd.command_name === commandName ? { ...cmd, is_enabled: currentEnabled } : cmd
         )
       );
-      toast.error('設定の保存に失敗しました');
+      toast.error(`設定の保存に失敗しました: ${msg}`);
     }
   };
 
