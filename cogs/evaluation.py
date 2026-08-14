@@ -322,16 +322,15 @@ class Evaluation(commands.Cog):
                 existing = await database.get_evaluation_period(after.guild.id, after.id)
                 if not existing:
                     now = datetime.datetime.now(JST)
-                    # 23時台に付与された場合は評価開始を翌0時に繰り下げ、それ以外は5分後に開始
-                    # （深夜帯をもっと広く繰り下げたい場合はこの条件を範囲指定に変更する）
+                    duration_days = eval_settings.get("evaluation_duration_days", 14)
                     if now.hour == 23:
                         start_time = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
                     else:
                         start_time = now + datetime.timedelta(minutes=5)
                     
-                    end_time = start_time + datetime.timedelta(days=14)
+                    end_time = start_time + datetime.timedelta(days=duration_days)
                     await database.add_evaluation_period(after.guild.id, after.id, start_time, end_time)
-                    print(f"[Evaluation] Started for {after.display_name}: {start_time} to {end_time}")
+                    print(f"[Evaluation] Started for {after.display_name}: {start_time} to {end_time} ({duration_days} days)")
 
         # 評価落ちロール付与検知
         eval_failed_role = get_role_by_setting(bot, after.guild, "DOWNGRADE_ROLE_ID", "評価落ち")
@@ -447,33 +446,38 @@ async def create_evaluation_thread_for_user(bot, guild: discord.Guild, user: dis
         print(f"[ERROR] Failed to fetch active threads: {e}")
         active_threads = list(guild.threads)
 
-    # 評価期間の取得または自動生成
-    period = await database.get_evaluation_period(guild.id, user.id)
-    if not period:
-        now = datetime.datetime.now(JST)
-        if now.hour == 23:
-            start_time = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        else:
-            start_time = now
-        end_time = start_time + datetime.timedelta(days=14)
-        try:
-            await database.add_evaluation_period(guild.id, user.id, start_time, end_time)
-            period = await database.get_evaluation_period(guild.id, user.id)
-            print(f"[Evaluation] Auto-started evaluation period for {user.display_name}: {start_time} to {end_time}")
-        except Exception as pe:
-            print(f"[Evaluation Error] Failed to auto-create evaluation period: {pe}")
+    auto_generate_period = cfg.get("auto_generate_period", True)
+    duration_days = cfg.get("evaluation_duration_days", 14)
 
-    if period:
-        start_str = format_evaluation_datetime(period['start_time'])
-        end_str = format_evaluation_datetime(period['end_time'])
-        content_lines = [
-            f"**対象者:** {user.mention}",
-            f"**評価期間:** {start_str} ～ {end_str}",
-        ]
-    else:
-        content_lines = [
-            f"**対象者:** {user.mention}",
-        ]
+    period = None
+    if auto_generate_period:
+        # 評価期間の取得または自動生成
+        period = await database.get_evaluation_period(guild.id, user.id)
+        if not period:
+            now = datetime.datetime.now(JST)
+            if now.hour == 23:
+                start_time = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                start_time = now
+            end_time = start_time + datetime.timedelta(days=duration_days)
+            try:
+                await database.add_evaluation_period(guild.id, user.id, start_time, end_time)
+                period = await database.get_evaluation_period(guild.id, user.id)
+                print(f"[Evaluation] Auto-started evaluation period for {user.display_name}: {start_time} to {end_time} ({duration_days} days)")
+            except Exception as pe:
+                print(f"[Evaluation Error] Failed to auto-create evaluation period: {pe}")
+            
+            if not period:
+                period = {"start_time": start_time, "end_time": end_time}
+
+    content_lines = [
+        f"**対象者:** {user.mention}",
+    ]
+    if auto_generate_period and period:
+        start_str = format_evaluation_datetime(period.get('start_time'))
+        end_str = format_evaluation_datetime(period.get('end_time'))
+        content_lines.append(f"**評価期間:** {start_str} ～ {end_str}")
+
     if message_url:
         content_lines.append(f"\n**自己紹介へのリンク:**\n{message_url}")
 

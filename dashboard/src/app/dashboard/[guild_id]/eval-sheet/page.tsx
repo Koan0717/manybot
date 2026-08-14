@@ -165,18 +165,40 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
           </button>
         </div>
 
-        <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
-          <div>
-            <h2 className="text-lg font-semibold text-white">評価期間の自動生成</h2>
-            <p className="text-sm text-zinc-400">この機能をONにすると、新規メンバーが参加・ロール付与された際に自動で評価期間を開始します。</p>
+        <div className="space-y-4 p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">評価期間の自動生成</h2>
+              <p className="text-sm text-zinc-400">ONにすると、自己紹介時に評価期間を設定して評価シート（スレッド）に期間を記載します。OFFにすると期間は記載されません。</p>
+            </div>
+            <button 
+              type="button"
+              onClick={() => handleChange('auto_generate_period', !settings.auto_generate_period)}
+              className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.auto_generate_period ? 'bg-blue-600' : 'bg-zinc-700'}`}
+            >
+              <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.auto_generate_period ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
           </div>
-          <button 
-            type="button"
-            onClick={() => handleChange('auto_generate_period', !settings.auto_generate_period)}
-            className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.auto_generate_period ? 'bg-blue-600' : 'bg-zinc-700'}`}
-          >
-            <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.auto_generate_period ? 'translate-x-6' : 'translate-x-0'}`} />
-          </button>
+
+          {settings.auto_generate_period && (
+            <div className="pt-2 border-t border-zinc-700/30 flex items-center justify-between">
+              <div>
+                <label className="text-sm font-medium text-zinc-200">評価期間（日数）</label>
+                <p className="text-xs text-zinc-400">自己紹介投稿時から何日間を評価期間とするかを設定します（例: 6日、14日など）。</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={settings.evaluation_duration_days !== undefined ? settings.evaluation_duration_days : 14}
+                  onChange={(e) => handleChange('evaluation_duration_days', parseInt(e.target.value) || 14)}
+                  className="w-24 bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white text-right focus:outline-none focus:border-blue-500"
+                />
+                <span className="text-sm text-zinc-400">日間</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">

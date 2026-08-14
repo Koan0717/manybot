@@ -2550,7 +2550,14 @@ async def get_evaluation_settings(guild_id: int) -> dict:
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT is_enabled, auto_generate_period, auto_fail_on_deadline, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
+        try:
+            row = await conn.fetchrow('SELECT is_enabled, auto_generate_period, auto_fail_on_deadline, evaluation_duration_days, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
+        except Exception:
+            try:
+                await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS evaluation_duration_days INT DEFAULT 14')
+                row = await conn.fetchrow('SELECT is_enabled, auto_generate_period, auto_fail_on_deadline, evaluation_duration_days, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
+            except Exception:
+                row = await conn.fetchrow('SELECT is_enabled, auto_generate_period, auto_fail_on_deadline, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
 
         if row:
 
@@ -2561,6 +2568,8 @@ async def get_evaluation_settings(guild_id: int) -> dict:
                 "auto_generate_period": row["auto_generate_period"] if row["auto_generate_period"] is not None else True,
 
                 "auto_fail_on_deadline": row["auto_fail_on_deadline"] if row["auto_fail_on_deadline"] is not None else False,
+
+                "evaluation_duration_days": row["evaluation_duration_days"] if ("evaluation_duration_days" in row and row["evaluation_duration_days"] is not None) else 14,
 
                 "forum_channel_ids": row["forum_channel_ids"] or [],
 
@@ -2584,7 +2593,10 @@ async def get_all_evaluation_settings() -> list[dict]:
 
             async with p.acquire() as conn:
 
-                rows = await conn.fetch('SELECT guild_id, is_enabled, auto_generate_period, auto_fail_on_deadline, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings')
+                try:
+                    rows = await conn.fetch('SELECT guild_id, is_enabled, auto_generate_period, auto_fail_on_deadline, evaluation_duration_days, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings')
+                except Exception:
+                    rows = await conn.fetch('SELECT guild_id, is_enabled, auto_generate_period, auto_fail_on_deadline, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings')
 
                 all_settings.extend([{
 
@@ -2596,7 +2608,9 @@ async def get_all_evaluation_settings() -> list[dict]:
 
                     "auto_fail_on_deadline": r["auto_fail_on_deadline"] if r["auto_fail_on_deadline"] is not None else False,
 
-                    "forum_channel_ids": r["forum_channel_ids"] or [], 
+                    "evaluation_duration_days": r["evaluation_duration_days"] if ("evaluation_duration_days" in r and r["evaluation_duration_days"] is not None) else 14,
+
+                    "forum_channel_ids": r["forum_channel_ids"] or [],
 
                     "self_intro_channel_ids": r["self_intro_channel_ids"] or []
 

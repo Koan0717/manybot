@@ -44,6 +44,9 @@ class EconomyBot(commands.Bot):
             forum_ids = forum_vals if isinstance(forum_vals, list) else ([forum_vals] if forum_vals else [])
             self.evaluation_settings[guild_id] = {
                 "is_enabled": True,
+                "auto_generate_period": True,
+                "auto_fail_on_deadline": False,
+                "evaluation_duration_days": 14,
                 "forum_channel_ids": set(forum_ids),
                 "self_intro_channel_ids": set(get_setting(self, "SELF_INTRO_CHANNEL_IDS") or [])
             }
@@ -54,12 +57,18 @@ class EconomyBot(commands.Bot):
         if data:
             self.evaluation_settings[guild_id] = {
                 "is_enabled": data.get("is_enabled", True),
+                "auto_generate_period": data.get("auto_generate_period", True),
+                "auto_fail_on_deadline": data.get("auto_fail_on_deadline", False),
+                "evaluation_duration_days": data.get("evaluation_duration_days", 14),
                 "forum_channel_ids": set(data.get("forum_channel_ids", [])),
                 "self_intro_channel_ids": set(data.get("self_intro_channel_ids", []))
             }
         else:
             self.evaluation_settings[guild_id] = {
                 "is_enabled": True,
+                "auto_generate_period": True,
+                "auto_fail_on_deadline": False,
+                "evaluation_duration_days": 14,
                 "forum_channel_ids": set(),
                 "self_intro_channel_ids": set()
             }

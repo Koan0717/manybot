@@ -550,18 +550,24 @@ def is_vc_coins_eligible(bot, channel) -> bool:
         return True
     elif not has_whitelist and has_blacklist:
         return not in_blacklist
-    elif has_whitelist and not has_blacklist:
-        return in_whitelist
-    else:
-        return in_whitelist and not in_blacklist
-
-def format_evaluation_datetime(dt: datetime.datetime) -> str:
+def format_evaluation_datetime(dt) -> str:
     if not dt:
         return "データなし"
-    if dt.tzinfo is not None:
+    if isinstance(dt, str):
+        try:
+            dt = datetime.datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except Exception:
+            try:
+                dt = datetime.datetime.strptime(dt[:19], "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                return str(dt)
+    if hasattr(dt, "tzinfo") and dt.tzinfo is not None:
         dt = dt.astimezone(JST)
-    weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][dt.weekday()]
-    return dt.strftime(f"%Y年%m月%d日({weekday_ja}) %H:%M")
+    try:
+        weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][dt.weekday()]
+        return dt.strftime(f"%Y年%m月%d日({weekday_ja}) %H:%M")
+    except Exception:
+        return str(dt)
 
 async def check_and_assign_level_roles(bot, member: discord.Member, level_type: str, new_level: int):
     rewards = await database.get_level_role_rewards(level_type)
