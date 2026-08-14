@@ -60,11 +60,19 @@ export default function LogSettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),
       });
-      if (!res.ok) throw new Error('保存に失敗しました');
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        const msg = data.error || '保存に失敗しました';
+        setError(`設定の保存に失敗しました: ${msg}`);
+        toast.error(`保存に失敗しました: ${msg}`);
+        return;
+      }
       toast.success('設定を保存しました！');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('設定の保存に失敗しました');
+      const msg = err?.message || String(err);
+      setError(`設定の保存に失敗しました: ${msg}`);
+      toast.error(`保存に失敗しました: ${msg}`);
     } finally {
       setSaving(false);
     }

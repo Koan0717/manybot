@@ -135,11 +135,19 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'save', ROOM_PRICES: prices, toggles, role_prices: flattenedRolePrices, ROOM_PANEL_CONFIGS: panelConfigs })
       });
-      if (!res.ok) throw new Error('保存に失敗しました');
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        const msg = data.error || '保存に失敗しました';
+        setError(`価格設定の保存に失敗しました: ${msg}`);
+        toast.error(`保存に失敗しました: ${msg}`);
+        return;
+      }
       toast.success('価格設定を保存しました');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('価格設定の保存に失敗しました');
+      const msg = err?.message || String(err);
+      setError(`価格設定の保存に失敗しました: ${msg}`);
+      toast.error(`保存に失敗しました: ${msg}`);
     } finally {
       setSaving(false);
     }
@@ -159,11 +167,17 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'deploy_panel', channel_id: channelId, panel_type: panelType })
       });
-      if (!res.ok) throw new Error('設置に失敗しました');
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        const msg = data.error || '設置に失敗しました';
+        toast.error(`パネルの設置リクエストに失敗しました: ${msg}`);
+        return;
+      }
       toast.success('Botにパネル設置をリクエストしました！数秒以内にDiscordにパネルが送信されます。');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('パネルの設置リクエストに失敗しました');
+      const msg = err?.message || String(err);
+      toast.error(`パネルの設置リクエストに失敗しました: ${msg}`);
     } finally {
       setDeploying(prev => ({ ...prev, [panelType]: false }));
     }
