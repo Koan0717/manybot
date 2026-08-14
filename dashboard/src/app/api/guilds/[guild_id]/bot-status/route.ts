@@ -147,7 +147,7 @@ export async function GET(
   }
 
   // 4. 全機能モジュールの連携状態を網羅的に診断
-  const modules: Record<string, { configured: boolean; summary: string; detail?: any }> = {};
+  const modules: Record<string, { configured: boolean; summary: string; detail?: any; error?: string }> = {};
 
   if (pool) {
     // 1) 基本・評価設定 (General Settings)
@@ -158,8 +158,8 @@ export async function GET(
         configured: settingCount > 0,
         summary: settingCount > 0 ? `${settingCount}項目のサーバー基本設定が連携中` : '未設定 (初期値)',
       };
-    } catch {
-      modules['general'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['general'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 2) 荒らし対策機能 (Anti-Grief)
@@ -177,8 +177,8 @@ export async function GET(
           ? `稼働中 (対象カテゴリ: ${agRow?.target_category_ids?.length || 0}件, チャンネル: ${agRow?.target_channel_ids?.length || 0}件)`
           : '機能オフ (無効化中)',
       };
-    } catch {
-      modules['antigrief'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['antigrief'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 3) 自動VCトリガー (Auto VC Triggers)
@@ -196,8 +196,8 @@ export async function GET(
         configured: count > 0,
         summary: count > 0 ? `${count}件のトリガーVCが登録中` : 'トリガー未登録',
       };
-    } catch {
-      modules['vc_triggers'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['vc_triggers'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 4) 通話募集掲示板 (Call Board)
@@ -218,8 +218,8 @@ export async function GET(
       } else {
         modules['call_board'] = { configured: false, summary: '未設定 (初期状態)' };
       }
-    } catch {
-      modules['call_board'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['call_board'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 5) VCコイン獲得制限 (VC Coins)
@@ -249,8 +249,8 @@ export async function GET(
         configured: isEnabled || hasBotCoins,
         summary: isEnabled ? `稼働中 (${interval}分ごとに${amount}コイン付与)` : '無効化中',
       };
-    } catch {
-      modules['vc_coins'] = { configured: true, summary: 'デフォルト動作中 (10分ごと付与)' };
+    } catch (e: any) {
+      modules['vc_coins'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 6) ショップ設定 (Shop)
@@ -264,8 +264,8 @@ export async function GET(
         configured: count > 0 || hasRoles,
         summary: count > 0 ? `${count}品目のアイテムが出品・販売中` : (hasRoles ? '役職ロール設定済み (商品0件)' : '商品未登録'),
       };
-    } catch {
-      modules['shop'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['shop'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 7) チケット設定 (Tickets)
@@ -283,8 +283,8 @@ export async function GET(
         configured: count > 0,
         summary: count > 0 ? `${count}件のチケットパネルが連携中` : 'パネル未設置',
       };
-    } catch {
-      modules['tickets'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['tickets'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 8) ランク設定 (Rank)
@@ -335,8 +335,8 @@ export async function GET(
           summary: '稼働中 (標準設定でXP集計・ランク機能有効)',
         };
       }
-    } catch {
-      modules['rank'] = { configured: true, summary: '稼働中 (標準設定でXP集計中)' };
+    } catch (e: any) {
+      modules['rank'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 9) 評価関連設定 (Evaluation / Sheet)
@@ -347,8 +347,8 @@ export async function GET(
         configured: evalRow ? (evalRow.is_enabled !== false) : false,
         summary: evalRow ? (evalRow.is_enabled !== false ? '稼働中 (評価フォーラム・自動生成)' : '無効化中') : '未設定',
       };
-    } catch {
-      modules['eval_sheet'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['eval_sheet'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 10) 経済・レベリング設定 (Economy & Users)
@@ -359,8 +359,8 @@ export async function GET(
         configured: true,
         summary: `ユーザー経済データ連携中 (${userCount}名の残高・XP記録)`,
       };
-    } catch {
-      modules['economy'] = { configured: true, summary: '経済システム稼働中' };
+    } catch (e: any) {
+      modules['economy'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 11) ギャンブル設定 (Gambling)
@@ -371,8 +371,8 @@ export async function GET(
         configured: count > 0,
         summary: count > 0 ? `設定済み (${count}項目のルール設定連携中)` : '標準ルールで稼働中',
       };
-    } catch {
-      modules['gambling'] = { configured: true, summary: '標準稼働中' };
+    } catch (e: any) {
+      modules['gambling'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 12) レベル到達報酬 (Level Rewards)
@@ -386,8 +386,8 @@ export async function GET(
         configured: total > 0,
         summary: total > 0 ? `${total}件の到達報酬 (ロール: ${roleCount}, コイン: ${coinCount})` : '報酬未登録',
       };
-    } catch {
-      modules['level_rewards'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['level_rewards'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 13) コマンド設定 (Commands)
@@ -398,8 +398,8 @@ export async function GET(
         configured: true,
         summary: count > 0 ? `${count}件の個別コマンド制御設定` : '全スラッシュコマンド利用可能 (標準)',
       };
-    } catch {
-      modules['commands'] = { configured: true, summary: '全コマンド利用可能' };
+    } catch (e: any) {
+      modules['commands'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 14) ログ出力設定 (Logs)
@@ -410,8 +410,8 @@ export async function GET(
         configured: logCount > 0,
         summary: logCount > 0 ? `${logCount}種類のログチャンネルを設定中` : 'ログ出力未設定',
       };
-    } catch {
-      modules['logs'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['logs'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 15) 面接官設定 (Interviewer)
@@ -422,8 +422,8 @@ export async function GET(
         configured: count > 0,
         summary: count > 0 ? `面接ログ記録件数: ${count}件` : '面接ログ待機中',
       };
-    } catch {
-      modules['interviewer'] = { configured: true, summary: '面接官システム準備完了' };
+    } catch (e: any) {
+      modules['interviewer'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 16) 条件ロール付与・自己紹介 (Self Intro / Roles)
@@ -437,8 +437,8 @@ export async function GET(
         configured: isSiConfigured || Number(rrRes.rows[0]?.count || 0) > 0,
         summary: isSiConfigured ? '設定済み (自己紹介チャンネル監視中)' : '未設定',
       };
-    } catch {
-      modules['self_intro_role'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['self_intro_role'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 17) VCルーム・宿設定 (Rooms & Inn)
@@ -450,8 +450,8 @@ export async function GET(
         configured: total > 0,
         summary: total > 0 ? `${total}件の部屋価格・ロール価格設定が連携中` : 'デフォルト価格で稼働中',
       };
-    } catch {
-      modules['rooms'] = { configured: true, summary: '部屋システム稼働中' };
+    } catch (e: any) {
+      modules['rooms'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 18) 評価落ちVCアクセス制御 (Room Access)
@@ -461,8 +461,8 @@ export async function GET(
         configured: raRes.rows.length > 0,
         summary: raRes.rows.length > 0 ? 'ロール別アクセス拒否・制限ルール連携中' : '全ロールアクセス可能 (制限なし)',
       };
-    } catch {
-      modules['room_access'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['room_access'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 19) その他パネル設定 (Other Panels)
@@ -473,8 +473,8 @@ export async function GET(
         configured: count > 0,
         summary: count > 0 ? `${count}件の問い合わせ・追加パネル設置中` : 'パネル未設置',
       };
-    } catch {
-      modules['other_panels'] = { configured: false, summary: '未設置' };
+    } catch (e: any) {
+      modules['other_panels'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
 
     // 20) データベース設定 (Database)
@@ -491,8 +491,8 @@ export async function GET(
         configured: count > 0,
         summary: count > 0 ? `${count}名のサーバー限定管理者アカウント登録中` : 'マスター管理者のみ',
       };
-    } catch {
-      modules['accounts'] = { configured: false, summary: '未設定' };
+    } catch (e: any) {
+      modules['accounts'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
     }
   }
 

@@ -178,57 +178,8 @@ class Logging(commands.Cog):
                         except Exception as e:
                             print(f"[ERROR] Timeout failed for {message.author.display_name}: {e}")
 
-        # 3. 自己紹介チャンネルでの発言検知（スレッド自動作成）
-        guild = message.guild
-        if guild:
-            cfg = self.bot.get_evaluation_config(guild.id)
-            if not cfg.get("is_enabled", True):
-                pass
-            elif cfg["forum_channel_ids"] and message.channel.id in cfg["self_intro_channel_ids"]:
-                human_role = config.get_role_by_setting(self.bot, guild, "NEW_MEMBER_ROLE_ID", config.NEW_MEMBER_ROLE_NAME)
-                if human_role and human_role in message.author.roles:
-                    for forum_id in cfg["forum_channel_ids"]:
-                        forum_channel = self.bot.get_channel(forum_id)
-                        if isinstance(forum_channel, discord.ForumChannel):
-                            period = await database.get_evaluation_period(message.guild.id, user_id)
-                            if period:
-                                start_str = config.format_evaluation_datetime(period['start_time'])
-                                end_str = config.format_evaluation_datetime(period['end_time'])
-                                content_thread = (
-                                    f"**対象者:** {message.author.mention}\n"
-                                    f"**評価期間:** {start_str} ～ {end_str}\n\n"
-                                    f"**自己紹介へのリンク:**\n{message.jump_url}"
-                                )
-                            else:
-                                content_thread = (
-                                    f"**対象者:** {message.author.mention}\n"
-                                    f"**評価期間:** データが見つかりませんでした。\n\n"
-                                    f"**自己紹介へのリンク:**\n{message.jump_url}"
-                                )
-                                
-                            thread_name = f"{message.author.display_name}_{message.author.name}"
-                            
-                            # すでに同一ユーザーのアクティブなスレッドが存在するか確認
-                            exists = False
-                            for thread in forum_channel.threads:
-                                if (str(message.author.id) in thread.name or 
-                                    message.author.name in thread.name or 
-                                    message.author.display_name in thread.name):
-                                    exists = True
-                                    break
-                            if exists:
-                                print(f"[Evaluation Thread] Already exists for {message.author.display_name} in forum {forum_id}, skipping auto creation.")
-                                continue
 
-                            try:
-                                await forum_channel.create_thread(
-                                    name=thread_name,
-                                    content=content_thread,
-                                    reason=f"Auto created evaluation thread for {message.author.display_name}"
-                                )
-                                print(f"[Evaluation Thread] Created for {message.author.display_name} in forum {forum_id}")
-                            except Exception as e:
-                                print(f"[ERROR] Failed to create forum thread in forum {forum_id}: {e}")
+        # 3. 自己紹介チャンネルでの評価スレッド自動作成は evaluation.py の on_message で一元管理
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):

@@ -63,7 +63,7 @@ interface StatusData {
     latencyMs: number;
     error?: string | null;
   };
-  modules: Record<string, { configured: boolean; summary: string; detail?: any }>;
+  modules: Record<string, { configured: boolean; summary: string; detail?: any; error?: string }>;
   ipc: {
     pendingCount: number;
     synchronized: boolean;
@@ -521,18 +521,27 @@ export default function BotStatusPage({ params }: { params: { guild_id: string }
                 const Icon = mod.icon;
                 const status = data?.modules[mod.key];
                 const isConfigured = status?.configured ?? false;
+                const hasError = !!status?.error;
 
                 return (
                   <Link
                     key={mod.key}
                     href={mod.path}
-                    className="mecha-clip-sm bg-neutral-900/90 hover:bg-neutral-800/90 border border-zinc-800 hover:border-cyan-500/50 p-4 transition-all duration-200 group flex flex-col justify-between relative overflow-hidden"
+                    className={`mecha-clip-sm hover:bg-neutral-800/90 border hover:border-cyan-500/50 p-4 transition-all duration-200 group flex flex-col justify-between relative overflow-hidden ${
+                      hasError
+                        ? 'bg-red-950/30 border-red-800/60'
+                        : 'bg-neutral-900/90 border-zinc-800'
+                    }`}
                   >
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2.5">
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                            isConfigured ? 'bg-cyan-950/80 border border-cyan-700/60 text-cyan-400' : 'bg-zinc-800 text-zinc-500'
+                            hasError
+                              ? 'bg-red-950/80 border border-red-700/60 text-red-400'
+                              : isConfigured
+                              ? 'bg-cyan-950/80 border border-cyan-700/60 text-cyan-400'
+                              : 'bg-zinc-800 text-zinc-500'
                           }`}>
                             <Icon className="w-4 h-4" />
                           </div>
@@ -544,6 +553,10 @@ export default function BotStatusPage({ params }: { params: { guild_id: string }
                         {loading ? (
                           <span className="font-tech text-xs text-zinc-500 flex items-center gap-1">
                             <Loader2 className="w-3 h-3 animate-spin" />
+                          </span>
+                        ) : hasError ? (
+                          <span className="inline-flex items-center gap-1 font-tech text-xs text-red-400 bg-red-950/60 border border-red-700 px-2 py-0.5 rounded font-bold">
+                            <XCircle className="w-3 h-3" /> エラー
                           </span>
                         ) : isConfigured ? (
                           <span className="inline-flex items-center gap-1 font-tech text-xs text-green-400 bg-green-950/60 border border-green-800 px-2 py-0.5 rounded font-bold">
@@ -562,8 +575,10 @@ export default function BotStatusPage({ params }: { params: { guild_id: string }
                     </div>
 
                     <div className="pt-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs">
-                      <span className="font-tech text-zinc-300 truncate pr-2">
-                        {loading ? '読み込み中...' : (status?.summary || '状態確認済み')}
+                      <span className={`font-tech truncate pr-2 ${
+                        hasError ? 'text-red-400' : 'text-zinc-300'
+                      }`} title={hasError ? status?.error : undefined}>
+                        {loading ? '読み込み中...' : hasError ? `⚠ ${status?.error || 'エラーが発生しました'}` : (status?.summary || '状態確認済み')}
                       </span>
                       <span className="font-tech text-cyan-400 group-hover:translate-x-0.5 transition-transform flex items-center gap-1 flex-shrink-0 font-bold">
                         設定へ <ExternalLink className="w-3 h-3" />

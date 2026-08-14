@@ -76,7 +76,7 @@ class CallBoardConfirmView(discord.ui.View):
             female_role_id = get_setting(interaction.client, "FEMALE_ROLE_ID", guild.id)
 
             user_role_ids = [r.id for r in self.recruiter.roles]
-            embed_color = discord.Color.grey() # 性別ロールがない場合はグレー
+            embed_color = discord.Color.light_grey() # 性別ロールがない場合はグレー
 
             try:
                 if male_role_id and int(male_role_id) in user_role_ids:

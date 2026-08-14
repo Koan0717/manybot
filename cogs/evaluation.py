@@ -364,68 +364,95 @@ class Evaluation(commands.Cog):
             cfg = self.bot.get_evaluation_config(guild.id)
             if not cfg.get("is_enabled", True):
                 return
-            if cfg["forum_channel_ids"] and message.channel.id in cfg["self_intro_channel_ids"]:
-                human_role = get_role_by_setting(self.bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
-                if human_role and human_role in message.author.roles:
-                    # Fetch active threads from Discord API for robust check
+            # self_intro_channel_ids が設定されていて、かつそのチャンネルへの投稿の場合
+            if not cfg["self_intro_channel_ids"] or message.channel.id not in cfg["self_intro_channel_ids"]:
+                return
+            if not cfg["forum_channel_ids"]:
+                print(f"[Evaluation] self_intro detected but no forum_channel_ids configured for guild {guild.id}")
+                return
+
+            human_role = get_role_by_setting(self.bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
+            if not human_role or human_role not in message.author.roles:
+                return
+
+            # アクティブスレッドを Discord API から取得（キャッシュより確実）
+            try:
+                active_threads = await guild.active_threads()
+            except Exception as e:
+                print(f"[ERROR] Failed to fetch active threads: {e}")
+                active_threads = list(guild.threads)
+
+            for forum_id in cfg["forum_channel_ids"]:
+                forum_channel = self.bot.get_channel(forum_id)
+                if forum_channel is None:
                     try:
-                        active_threads = await guild.active_threads()
+                        forum_channel = await self.bot.fetch_channel(forum_id)
                     except Exception as e:
-                        print(f"[ERROR] Failed to fetch active threads: {e}")
-                        active_threads = guild.threads
+                        print(f"[ERROR] Failed to fetch forum channel {forum_id}: {e}")
+                        try:
+                            await message.channel.send(f"⚠️ {message.author.mention} エラー: フォーラムチャンネルにアクセスできません（権限不足）。Discord側でボットに「チャンネルを見る」権限を付与してください！", delete_after=15)
+                        except:
+                            pass
+                        continue
 
-                    for forum_id in cfg["forum_channel_ids"]:
-                        forum_channel = self.bot.get_channel(forum_id)
-                        if forum_channel is None:
-                            try:
-                                forum_channel = await self.bot.fetch_channel(forum_id)
-                            except Exception as e:
-                                print(f"[ERROR] Failed to fetch forum channel {forum_id}: {e}")
-                                try:
-                                    await message.channel.send(f"⚠️ {message.author.mention} エラー: フォーラムチャンネルにアクセスできません（権限不足）。Discord側でボットに「チャンネルを見る」権限を付与してください！", delete_after=15)
-                                except:
-                                    pass
-                                continue
+                if not isinstance(forum_channel, discord.ForumChannel):
+                    continue
 
-                        if isinstance(forum_channel, discord.ForumChannel):
-                            # Suffix match on unique username to avoid substring mismatch (e.g. *_username)
-                            target_suffix = f"_{message.author.name.lower()}"
-                            duplicate = any(
-                                thread.parent_id == forum_id and thread.name.lower().endswith(target_suffix)
-                                for thread in active_threads
-                            )
-                            
-                            if not duplicate:
-                                period = await database.get_evaluation_period(message.guild.id, message.author.id)
-                                if period:
-                                    start_str = format_evaluation_datetime(period['start_time'])
-                                    end_str = format_evaluation_datetime(period['end_time'])
-                                    content_thread = (
-                                        f"**対象者:** {message.author.mention}\n"
-                                        f"**評価期間:** {start_str} ～ {end_str}\n\n"
-                                        f"**自己紹介へのリンク:**\n{message.jump_url}"
-                                    )
-                                else:
-                                    content_thread = (
-                                        f"**対象者:** {message.author.mention}\n"
-                                        f"**評価期間:** データが見つかりませんでした。\n\n"
-                                        f"**自己紹介へのリンク:**\n{message.jump_url}"
-                                    )
-                                    
-                                thread_name = f"{message.author.display_name}_{message.author.name}"
-                                try:
-                                    await forum_channel.create_thread(
-                                        name=thread_name,
-                                        content=content_thread,
-                                        reason=f"Auto created evaluation thread for {message.author.display_name}"
-                                    )
-                                    print(f"[Evaluation Thread] Created for {message.author.display_name} in forum {forum_id}")
-                                except Exception as e:
-                                    print(f"[ERROR] Failed to create forum thread in forum {forum_id}: {e}")
-                                    try:
-                                        await message.channel.send(f"⚠️ {message.author.mention} 評価シート（スレッド）の自動生成に失敗しました。\nエラー: `{e}`\nフォーラムの「タグ必須」設定やボットの権限（スレッド作成権限など）を確認してください。", delete_after=15)
-                                    except:
-                                        pass
+                # 重複チェック: スレッド名が "_username" で終わるものを探す
+                # スレッド名フォーマット: "{display_name}_{username}"
+                target_suffix = f"_{message.author.name.lower()}"
+
+                # アクティブスレッドから検索
+                duplicate = any(
+                    thread.parent_id == forum_id and thread.name.lower().endswith(target_suffix)
+                    for thread in active_threads
+                )
+
+                # アクティブになければアーカイブ済みスレッドも検索
+                if not duplicate:
+                    try:
+                        async for archived_thread in forum_channel.archived_threads(limit=100):
+                            if archived_thread.name.lower().endswith(target_suffix):
+                                duplicate = True
+                                break
+                    except Exception as e:
+                        print(f"[Evaluation] Could not check archived threads for forum {forum_id}: {e}")
+
+                if duplicate:
+                    print(f"[Evaluation Thread] Already exists for {message.author.display_name} (suffix: {target_suffix}) in forum {forum_id}, skipping.")
+                    continue
+
+                period = await database.get_evaluation_period(message.guild.id, message.author.id)
+                if period:
+                    start_str = format_evaluation_datetime(period['start_time'])
+                    end_str = format_evaluation_datetime(period['end_time'])
+                    content_thread = (
+                        f"**対象者:** {message.author.mention}\n"
+                        f"**評価期間:** {start_str} ～ {end_str}\n\n"
+                        f"**自己紹介へのリンク:**\n{message.jump_url}"
+                    )
+                else:
+                    content_thread = (
+                        f"**対象者:** {message.author.mention}\n"
+                        f"**評価期間:** データが見つかりませんでした。\n\n"
+                        f"**自己紹介へのリンク:**\n{message.jump_url}"
+                    )
+                    
+                thread_name = f"{message.author.display_name}_{message.author.name}"
+                try:
+                    await forum_channel.create_thread(
+                        name=thread_name,
+                        content=content_thread,
+                        reason=f"Auto created evaluation thread for {message.author.display_name}"
+                    )
+                    print(f"[Evaluation Thread] Created for {message.author.display_name} in forum {forum_id}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to create forum thread in forum {forum_id}: {e}")
+                    try:
+                        await message.channel.send(f"⚠️ {message.author.mention} 評価シート（スレッド）の自動生成に失敗しました。\nエラー: `{e}`\nフォーラムの「タグ必須」設定やボットの権限（スレッド作成権限など）を確認してください。", delete_after=15)
+                    except:
+                        pass
+
 
 async def setup(bot):
     await bot.add_cog(Evaluation(bot))
