@@ -1,29 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { ensureEvaluationSettingsSchema } from '@/lib/migrations';
 
-
-
-async function ensureEvaluationSettingsSchema(pool: any) {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS evaluation_settings (
-        guild_id BIGINT PRIMARY KEY,
-        forum_channel_ids BIGINT[] DEFAULT '{}',
-        self_intro_channel_ids BIGINT[] DEFAULT '{}',
-        is_enabled BOOLEAN DEFAULT TRUE,
-        auto_generate_period BOOLEAN DEFAULT TRUE,
-        auto_fail_on_deadline BOOLEAN DEFAULT FALSE
-      )
-    `);
-    await pool.query(`ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS forum_channel_ids BIGINT[] DEFAULT '{}'`);
-    await pool.query(`ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS self_intro_channel_ids BIGINT[] DEFAULT '{}'`);
-    await pool.query(`ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT TRUE`);
-    await pool.query(`ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_generate_period BOOLEAN DEFAULT TRUE`);
-    await pool.query(`ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_fail_on_deadline BOOLEAN DEFAULT FALSE`);
-  } catch (e) {
-    console.error('Failed to ensure evaluation_settings schema:', e);
-  }
-}
 
 export async function GET(
   request: Request,

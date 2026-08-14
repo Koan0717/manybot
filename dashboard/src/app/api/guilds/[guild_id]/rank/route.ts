@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
-
-
+import { ensureRankSettingsSchema } from '@/lib/migrations';
 
 export async function GET(
   request: Request,
@@ -10,20 +9,20 @@ export async function GET(
   const guildId = params.guild_id;
   const pool = await getPool(guildId);
   try {
-    // Fetch rank settings
+    await ensureRankSettingsSchema(pool);
+
     const rankResult = await pool.query(
       'SELECT whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids, ephemeral_rank_commands FROM rank_settings WHERE guild_id = $1',
       [guildId]
     );
 
-    // Fetch bot setting for ENABLE_RANK, ENABLE_TC_RANK and exclusion settings
     const botSettingsResult = await pool.query(
-      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ENABLE_RANK', 'ENABLE_TC_RANK', 'ENABLE_EXCLUDE_RANK_ROLE', 'EXCLUDE_RANK_ROLE_IDS')",
+      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ENABLE_RANK', 'ENABLE_TC_RANK')",
       [guildId]
     );
 
-    let enableRank = true; // default
-    let enableTcRank = true; // default
+    let enableRank = true;
+    let enableTcRank = true;
     for (const row of botSettingsResult.rows) {
       if (row.setting_key === 'ENABLE_RANK') {
         try { enableRank = JSON.parse(row.setting_value); } catch { enableRank = row.setting_value === 'true'; }
@@ -62,6 +61,8 @@ export async function POST(
   const guildId = params.guild_id;
   const pool = await getPool(guildId);
   try {
+    await ensureRankSettingsSchema(pool);
+
     const body = await request.json();
     const { 
       ENABLE_RANK,
@@ -79,7 +80,6 @@ export async function POST(
     try {
       await client.query('BEGIN');
 
-      // Update bot_settings for ENABLE_RANK, ENABLE_TC_RANK and exclusion settings
       const updateSetting = async (key: string, value: any) => {
         if (value !== undefined) {
           await client.query(
@@ -93,9 +93,7 @@ export async function POST(
 
       await updateSetting('ENABLE_RANK', ENABLE_RANK !== undefined ? ENABLE_RANK : true);
       await updateSetting('ENABLE_TC_RANK', ENABLE_TC_RANK);
-      
 
-      // Update rank_settings
       await client.query(
         `INSERT INTO rank_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids, ephemeral_rank_commands)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -113,7 +111,6 @@ export async function POST(
         ]
       );
 
-      // Request bot to reload the rank settings and bot_settings cache
       await client.query(
         `INSERT INTO panel_requests (guild_id, channel_id, panel_type)
          VALUES ($1, $2, $3)`,

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { ensureAntigriefSettingsSchema } from '@/lib/migrations';
 
 export async function GET(
   request: Request,
@@ -8,6 +9,7 @@ export async function GET(
   const guildId = params.guild_id;
   const pool = await getPool(guildId);
   try {
+    await ensureAntigriefSettingsSchema(pool);
     // Fetch antigrief settings
     const antigriefResult = await pool.query(
       'SELECT target_category_ids, target_channel_ids, exempt_role_ids FROM antigrief_settings WHERE guild_id = $1',
