@@ -137,12 +137,36 @@ export async function ensureVcCoinsSettingsSchema(pool: any) {
 }
 
 /**
+ * evaluation_periods テーブルの全カラムを保証する
+ */
+export async function ensureEvaluationPeriodsSchema(pool: any) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS evaluation_periods (
+        guild_id BIGINT,
+        user_id BIGINT,
+        PRIMARY KEY (guild_id, user_id),
+        start_time TIMESTAMP,
+        end_time TIMESTAMP
+      )
+    `);
+    try { await pool.query('ALTER TABLE evaluation_periods RENAME COLUMN start_date TO start_time'); } catch {}
+    try { await pool.query('ALTER TABLE evaluation_periods RENAME COLUMN end_date TO end_time'); } catch {}
+    try { await pool.query('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS start_time TIMESTAMP'); } catch {}
+    try { await pool.query('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS end_time TIMESTAMP'); } catch {}
+  } catch (e) {
+    console.error('Failed to ensure evaluation_periods schema:', e);
+  }
+}
+
+/**
  * すべての基本スキーマを一括保証する
  */
 export async function ensureAllSchemas(pool: any) {
   await Promise.allSettled([
     ensureRankSettingsSchema(pool),
     ensureEvaluationSettingsSchema(pool),
+    ensureEvaluationPeriodsSchema(pool),
     ensureAntigriefSettingsSchema(pool),
     ensureVcCoinsSettingsSchema(pool),
   ]);

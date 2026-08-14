@@ -749,6 +749,21 @@ async def setup_db_schema(p):
 
             await conn.execute("ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS allowed_role_ids BIGINT[] DEFAULT '{}'")
 
+            # evaluation_periods カラム移行 (start_date/end_date -> start_time/end_time)
+            try:
+                await conn.execute('ALTER TABLE evaluation_periods RENAME COLUMN start_date TO start_time')
+            except Exception:
+                pass
+            try:
+                await conn.execute('ALTER TABLE evaluation_periods RENAME COLUMN end_date TO end_time')
+            except Exception:
+                pass
+            try:
+                await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS start_time TIMESTAMP')
+                await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS end_time TIMESTAMP')
+            except Exception:
+                pass
+
         except Exception as e:
 
             print(f"[Migration] evaluation_settings migration warning: {e}")
@@ -1617,87 +1632,124 @@ async def add_evaluation_period(guild_id: int, user_id: int, start_time: datetim
 
     p = await get_pool(guild_id)
 
-    async with p.acquire() as conn:
-
+async def ensure_evaluation_periods_schema(conn):
+    try:
         await conn.execute('''
+            CREATE TABLE IF NOT EXISTS evaluation_periods (
+                guild_id BIGINT,
+                user_id BIGINT,
+                PRIMARY KEY (guild_id, user_id),
+                start_time TIMESTAMP,
+                end_time TIMESTAMP
+            )
+        ''')
+        try:
+            await conn.execute('ALTER TABLE evaluation_periods RENAME COLUMN start_date TO start_time')
+        except Exception:
+            pass
+        try:
+            await conn.execute('ALTER TABLE evaluation_periods RENAME COLUMN end_date TO end_time')
+        except Exception:
+            pass
+        try:
+            await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS start_time TIMESTAMP')
+            await conn.execute('ALTER TABLE evaluation_periods ADD COLUMN IF NOT EXISTS end_time TIMESTAMP')
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"[Migration] ensure_evaluation_periods_schema error: {e}")
 
-            INSERT INTO evaluation_periods (guild_id, user_id, start_time, end_time) 
-
-            VALUES ($1, $2, $3, $4) 
-
-            ON CONFLICT (guild_id, user_id) DO NOTHING
-
-        ''', guild_id, user_id, start_time, end_time)
-
-
+async def add_evaluation_period(guild_id: int, user_id: int, start_time: datetime.datetime, end_time: datetime.datetime):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        try:
+            await conn.execute('''
+                INSERT INTO evaluation_periods (guild_id, user_id, start_time, end_time) 
+                VALUES ($1, $2, $3, $4) 
+                ON CONFLICT (guild_id, user_id) DO UPDATE SET start_time = $3, end_time = $4
+            ''', guild_id, user_id, start_time, end_time)
+        except Exception as e:
+            if "column \"start_time\" does not exist" in str(e) or "column \"start_date\"" in str(e):
+                await ensure_evaluation_periods_schema(conn)
+                await conn.execute('''
+                    INSERT INTO evaluation_periods (guild_id, user_id, start_time, end_time) 
+                    VALUES ($1, $2, $3, $4) 
+                    ON CONFLICT (guild_id, user_id) DO UPDATE SET start_time = $3, end_time = $4
+                ''', guild_id, user_id, start_time, end_time)
+            else:
+                raise e
 
 async def get_evaluation_period(guild_id: int, user_id: int):
-
     p = await get_pool(guild_id)
-
     async with p.acquire() as conn:
-
-        row = await conn.fetchrow('SELECT start_time, end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
-
-        if row:
-
-            return {"start_time": row['start_time'], "end_time": row['end_time']}
-
-        return None
-
-
+        try:
+            row = await conn.fetchrow('SELECT start_time, end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+            if row:
+                return {"start_time": row['start_time'], "end_time": row['end_time']}
+            return None
+        except Exception as e:
+            if "column \"start_time\" does not exist" in str(e) or "column \"start_date\"" in str(e):
+                await ensure_evaluation_periods_schema(conn)
+                # フォールバックで再取得
+                row = await conn.fetchrow('SELECT start_time, end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+                if row:
+                    return {"start_time": row['start_time'], "end_time": row['end_time']}
+                return None
+            else:
+                raise e
 
 async def get_all_evaluation_periods():
-
     all_periods = []
-
     for p in await get_all_configured_pools():
-
         try:
-
-            rows = await p.fetch("SELECT guild_id, user_id, start_time, end_time FROM evaluation_periods")
-
-            all_periods.extend([dict(row) for row in rows])
-
+            async with p.acquire() as conn:
+                try:
+                    rows = await p.fetch("SELECT guild_id, user_id, start_time, end_time FROM evaluation_periods")
+                    all_periods.extend([dict(row) for row in rows])
+                except Exception as e:
+                    if "column \"start_time\" does not exist" in str(e) or "column \"start_date\"" in str(e):
+                        await ensure_evaluation_periods_schema(conn)
+                        rows = await p.fetch("SELECT guild_id, user_id, start_time, end_time FROM evaluation_periods")
+                        all_periods.extend([dict(row) for row in rows])
         except Exception:
-
             pass
-
     return all_periods
 
-
-
 async def extend_evaluation_period(guild_id: int, user_id: int, extra_days: int) -> bool:
-
     p = await get_pool(guild_id)
-
     async with p.acquire() as conn:
-
-        row = await conn.fetchrow('SELECT end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
-
-        if not row:
-
-            return False
-
-            
-
-        new_end_time = row['end_time'] + datetime.timedelta(days=extra_days)
-
-        await conn.execute('UPDATE evaluation_periods SET end_time = $1 WHERE guild_id = $2 AND user_id = $3', new_end_time, guild_id, user_id)
-
-        return True
-
-
+        try:
+            row = await conn.fetchrow('SELECT end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+            if not row:
+                return False
+            new_end_time = row['end_time'] + datetime.timedelta(days=extra_days)
+            await conn.execute('UPDATE evaluation_periods SET end_time = $1 WHERE guild_id = $2 AND user_id = $3', new_end_time, guild_id, user_id)
+            return True
+        except Exception as e:
+            if "column \"end_time\" does not exist" in str(e) or "column \"end_date\"" in str(e):
+                await ensure_evaluation_periods_schema(conn)
+                row = await conn.fetchrow('SELECT end_time FROM evaluation_periods WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+                if not row:
+                    return False
+                new_end_time = row['end_time'] + datetime.timedelta(days=extra_days)
+                await conn.execute('UPDATE evaluation_periods SET end_time = $1 WHERE guild_id = $2 AND user_id = $3', new_end_time, guild_id, user_id)
+                return True
+            else:
+                raise e
 
 async def update_evaluation_period_end(guild_id: int, user_id: int, new_end_time: datetime.datetime) -> bool:
-
     p = await get_pool(guild_id)
-
     async with p.acquire() as conn:
-
-        result = await conn.execute('UPDATE evaluation_periods SET end_time = $1 WHERE guild_id = $2 AND user_id = $3', new_end_time, guild_id, user_id)
-
-        return result != "UPDATE 0"
+        try:
+            result = await conn.execute('UPDATE evaluation_periods SET end_time = $1 WHERE guild_id = $2 AND user_id = $3', new_end_time, guild_id, user_id)
+            return result != "UPDATE 0"
+        except Exception as e:
+            if "column \"end_time\" does not exist" in str(e) or "column \"end_date\"" in str(e):
+                await ensure_evaluation_periods_schema(conn)
+                result = await conn.execute('UPDATE evaluation_periods SET end_time = $1 WHERE guild_id = $2 AND user_id = $3', new_end_time, guild_id, user_id)
+                return result != "UPDATE 0"
+            else:
+                raise e
 
 
 
