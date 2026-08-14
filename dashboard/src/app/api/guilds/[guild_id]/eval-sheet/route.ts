@@ -45,13 +45,40 @@ export async function GET(
     }
 
     const row = result.rows[0];
+    // 末尾00の丸められた不正IDを除去し、重複を排除するヘルパー
+    const cleanIds = (arr: any[]) => {
+      if (!Array.isArray(arr)) return [];
+      const strings = arr.map(String).filter(id => id && id.length > 5);
+      // 18桁以上のSnowflakeIDで末尾が00のものは過去のJS精度落ちで生じた破損IDなので除去
+      const valid = strings.filter(id => !(id.length >= 18 && id.endsWith('00')));
+      return Array.from(new Set(valid));
+    };
+
+    const forumChannelIds = cleanIds(row.forum_channel_ids || []);
+    const selfIntroChannelIds = cleanIds(row.self_intro_channel_ids || []);
+
+    // もしDB内のIDに破損IDや重複があった場合、自動的にDBをクリーンな配列に修復する
+    if (
+      JSON.stringify(forumChannelIds) !== JSON.stringify((row.forum_channel_ids || []).map(String)) ||
+      JSON.stringify(selfIntroChannelIds) !== JSON.stringify((row.self_intro_channel_ids || []).map(String))
+    ) {
+      try {
+        await pool.query(
+          `UPDATE evaluation_settings SET forum_channel_ids = $2::bigint[], self_intro_channel_ids = $3::bigint[] WHERE guild_id = $1`,
+          [guildId, forumChannelIds, selfIntroChannelIds]
+        );
+      } catch (e) {
+        console.error('Failed to auto-clean evaluation_settings IDs:', e);
+      }
+    }
+
     return NextResponse.json({
       is_enabled: row.is_enabled !== null ? row.is_enabled : true,
       auto_generate_period: row.auto_generate_period !== null ? row.auto_generate_period : true,
       auto_fail_on_deadline: row.auto_fail_on_deadline !== null ? row.auto_fail_on_deadline : false,
       evaluation_duration_days: row.evaluation_duration_days !== null && row.evaluation_duration_days !== undefined ? Number(row.evaluation_duration_days) : 14,
-      forum_channel_ids: row.forum_channel_ids?.map(String) || [],
-      self_intro_channel_ids: row.self_intro_channel_ids?.map(String) || [],
+      forum_channel_ids: forumChannelIds,
+      self_intro_channel_ids: selfIntroChannelIds,
       ENABLE_MINUS_PENALTY: enableMinusPenalty,
       MINUS_PUNISHMENT_TYPE: minusPunishmentType,
     });
@@ -73,8 +100,16 @@ export async function POST(
     const autoGeneratePeriod = body.auto_generate_period !== undefined ? body.auto_generate_period : true;
     const autoFailOnDeadline = body.auto_fail_on_deadline !== undefined ? body.auto_fail_on_deadline : false;
     const evaluationDurationDays = body.evaluation_duration_days !== undefined && !isNaN(Number(body.evaluation_duration_days)) ? Math.max(1, Number(body.evaluation_duration_days)) : 14;
-    const forumChannelIds = Array.isArray(body.forum_channel_ids) ? body.forum_channel_ids.map(String) : [];
-    const selfIntroChannelIds = Array.isArray(body.self_intro_channel_ids) ? body.self_intro_channel_ids.map(String) : [];
+
+    const cleanIds = (arr: any[]) => {
+      if (!Array.isArray(arr)) return [];
+      const strings = arr.map(String).filter(id => id && id.length > 5);
+      const valid = strings.filter(id => !(id.length >= 18 && id.endsWith('00')));
+      return Array.from(new Set(valid));
+    };
+
+    const forumChannelIds = cleanIds(body.forum_channel_ids || []);
+    const selfIntroChannelIds = cleanIds(body.self_intro_channel_ids || []);
     const enableMinusPenalty = body.ENABLE_MINUS_PENALTY ? 'true' : 'false';
     const minusPunishmentType = body.MINUS_PUNISHMENT_TYPE || 'evaluation_failure';
 

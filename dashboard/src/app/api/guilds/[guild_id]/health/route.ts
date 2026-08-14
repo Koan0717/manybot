@@ -182,11 +182,35 @@ export async function GET(
       const ev = await pool.query(`SELECT forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1`, [guildId]);
       const checks: (Check | null)[] = [];
       if (ev.rows.length > 0) {
-        for (const cid of ev.rows[0].forum_channel_ids || []) {
-          checks.push(await checkChannel(cid?.toString(), `評価フォーラム (${cid})`));
+        const cleanIds = (arr: any[]) => {
+          if (!Array.isArray(arr)) return [];
+          const strings = arr.map(String).filter(id => id && id.length > 5);
+          const valid = strings.filter(id => !(id.length >= 18 && id.endsWith('00')));
+          return Array.from(new Set(valid));
+        };
+        const rawForums = ev.rows[0].forum_channel_ids || [];
+        const rawIntros = ev.rows[0].self_intro_channel_ids || [];
+        const cleanForums = cleanIds(rawForums);
+        const cleanIntros = cleanIds(rawIntros);
+
+        // 不正IDや重複があれば即座にDBをクリーンアップ
+        if (
+          JSON.stringify(cleanForums) !== JSON.stringify(rawForums.map(String)) ||
+          JSON.stringify(cleanIntros) !== JSON.stringify(rawIntros.map(String))
+        ) {
+          try {
+            await pool.query(
+              `UPDATE evaluation_settings SET forum_channel_ids = $2::bigint[], self_intro_channel_ids = $3::bigint[] WHERE guild_id = $1`,
+              [guildId, cleanForums, cleanIntros]
+            );
+          } catch {}
         }
-        for (const cid of ev.rows[0].self_intro_channel_ids || []) {
-          checks.push(await checkChannel(cid?.toString(), `自己紹介チャンネル (${cid})`));
+
+        for (const cid of cleanForums) {
+          checks.push(await checkChannel(cid, `評価フォーラム (${cid})`));
+        }
+        for (const cid of cleanIntros) {
+          checks.push(await checkChannel(cid, `自己紹介チャンネル (${cid})`));
         }
       }
       result['eval-sheet'] = finalize(checks);

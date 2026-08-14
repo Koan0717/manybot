@@ -24,7 +24,11 @@ function CustomChannelSelect({ multiple, value, onChange, channels, loading }: {
     }
   };
 
-  const selectedChannels = channels.filter(c => valArray.includes(c.id));
+  const selectedChannels = valArray.map((id: string) => {
+    const found = channels.find(c => String(c.id) === String(id));
+    if (found) return found;
+    return { id, name: `不明なチャンネル (${id})`, isInvalid: true };
+  });
 
   return (
     <div className="relative">
@@ -36,7 +40,7 @@ function CustomChannelSelect({ multiple, value, onChange, channels, loading }: {
           <span className="text-zinc-500 text-sm">未設定</span>
         ) : (
           selectedChannels.map(c => (
-            <span key={c.id} className="bg-zinc-800 text-white px-2 py-1 rounded text-sm flex items-center border border-zinc-600">
+            <span key={c.id} className={`px-2 py-1 rounded text-sm flex items-center border ${c.isInvalid ? 'bg-red-950/80 text-red-300 border-red-700' : 'bg-zinc-800 text-white border-zinc-600'}`}>
               # {c.name}
               {multiple && (
                 <button 
