@@ -103,12 +103,12 @@ export async function POST(
          whitelist_channel_ids = $2, blacklist_channel_ids = $3, whitelist_category_ids = $4, blacklist_category_ids = $5, enable_exclude_rank_role = $6, exclude_rank_role_ids = $7, ephemeral_rank_commands = $8`,
         [
           guildId, 
-          whitelist_channel_ids || [], 
-          blacklist_channel_ids || [], 
-          whitelist_category_ids || [], 
-          blacklist_category_ids || [],
+          (whitelist_channel_ids || []).map(Number), 
+          (blacklist_channel_ids || []).map(Number), 
+          (whitelist_category_ids || []).map(Number), 
+          (blacklist_category_ids || []).map(Number),
           ENABLE_EXCLUDE_RANK_ROLE || false,
-          EXCLUDE_RANK_ROLE_IDS || [],
+          (EXCLUDE_RANK_ROLE_IDS || []).map(Number),
           ephemeral_rank_commands || false
         ]
       );

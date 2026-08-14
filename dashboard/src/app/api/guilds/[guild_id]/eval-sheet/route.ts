@@ -92,8 +92,8 @@ export async function POST(
     const isEnabled = body.is_enabled !== undefined ? body.is_enabled : true;
     const autoGeneratePeriod = body.auto_generate_period !== undefined ? body.auto_generate_period : true;
     const autoFailOnDeadline = body.auto_fail_on_deadline !== undefined ? body.auto_fail_on_deadline : false;
-    const forumChannelIds = Array.isArray(body.forum_channel_ids) ? body.forum_channel_ids : [];
-    const selfIntroChannelIds = Array.isArray(body.self_intro_channel_ids) ? body.self_intro_channel_ids : [];
+    const forumChannelIds = Array.isArray(body.forum_channel_ids) ? body.forum_channel_ids.map(Number) : [];
+    const selfIntroChannelIds = Array.isArray(body.self_intro_channel_ids) ? body.self_intro_channel_ids.map(Number) : [];
     const enableMinusPenalty = body.ENABLE_MINUS_PENALTY ? 'true' : 'false';
     const minusPunishmentType = body.MINUS_PUNISHMENT_TYPE || 'evaluation_failure';
 
