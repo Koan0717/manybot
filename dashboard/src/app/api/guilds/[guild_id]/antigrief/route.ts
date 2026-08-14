@@ -77,17 +77,16 @@ export async function POST(
         );
       }
 
-      // Update antigrief_settings
       await client.query(
         `INSERT INTO antigrief_settings (guild_id, target_category_ids, target_channel_ids, exempt_role_ids)
-         VALUES ($1, $2, $3, $4)
+         VALUES ($1, $2::bigint[], $3::bigint[], $4::bigint[])
          ON CONFLICT (guild_id) DO UPDATE SET 
-         target_category_ids = $2, target_channel_ids = $3, exempt_role_ids = $4`,
+         target_category_ids = $2::bigint[], target_channel_ids = $3::bigint[], exempt_role_ids = $4::bigint[]`,
         [
           guildId, 
-          target_category_ids?.map(Number) || [], 
-          target_channel_ids?.map(Number) || [], 
-          exempt_role_ids?.map(Number) || []
+          target_category_ids?.map(String) || [], 
+          target_channel_ids?.map(String) || [], 
+          exempt_role_ids?.map(String) || []
         ]
       );
 

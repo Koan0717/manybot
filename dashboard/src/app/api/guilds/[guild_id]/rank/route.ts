@@ -96,17 +96,17 @@ export async function POST(
 
       await client.query(
         `INSERT INTO rank_settings (guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids, ephemeral_rank_commands)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         VALUES ($1, $2::bigint[], $3::bigint[], $4::bigint[], $5::bigint[], $6, $7::bigint[], $8)
          ON CONFLICT (guild_id) DO UPDATE SET 
-         whitelist_channel_ids = $2, blacklist_channel_ids = $3, whitelist_category_ids = $4, blacklist_category_ids = $5, enable_exclude_rank_role = $6, exclude_rank_role_ids = $7, ephemeral_rank_commands = $8`,
+         whitelist_channel_ids = $2::bigint[], blacklist_channel_ids = $3::bigint[], whitelist_category_ids = $4::bigint[], blacklist_category_ids = $5::bigint[], enable_exclude_rank_role = $6, exclude_rank_role_ids = $7::bigint[], ephemeral_rank_commands = $8`,
         [
           guildId, 
-          (whitelist_channel_ids || []).map(Number), 
-          (blacklist_channel_ids || []).map(Number), 
-          (whitelist_category_ids || []).map(Number), 
-          (blacklist_category_ids || []).map(Number),
+          (whitelist_channel_ids || []).map(String), 
+          (blacklist_channel_ids || []).map(String), 
+          (whitelist_category_ids || []).map(String), 
+          (blacklist_category_ids || []).map(String),
           ENABLE_EXCLUDE_RANK_ROLE || false,
-          (EXCLUDE_RANK_ROLE_IDS || []).map(Number),
+          (EXCLUDE_RANK_ROLE_IDS || []).map(String),
           ephemeral_rank_commands || false
         ]
       );

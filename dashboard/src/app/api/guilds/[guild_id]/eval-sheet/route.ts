@@ -70,16 +70,16 @@ export async function POST(
     const isEnabled = body.is_enabled !== undefined ? body.is_enabled : true;
     const autoGeneratePeriod = body.auto_generate_period !== undefined ? body.auto_generate_period : true;
     const autoFailOnDeadline = body.auto_fail_on_deadline !== undefined ? body.auto_fail_on_deadline : false;
-    const forumChannelIds = Array.isArray(body.forum_channel_ids) ? body.forum_channel_ids.map(Number) : [];
-    const selfIntroChannelIds = Array.isArray(body.self_intro_channel_ids) ? body.self_intro_channel_ids.map(Number) : [];
+    const forumChannelIds = Array.isArray(body.forum_channel_ids) ? body.forum_channel_ids.map(String) : [];
+    const selfIntroChannelIds = Array.isArray(body.self_intro_channel_ids) ? body.self_intro_channel_ids.map(String) : [];
     const enableMinusPenalty = body.ENABLE_MINUS_PENALTY ? 'true' : 'false';
     const minusPunishmentType = body.MINUS_PUNISHMENT_TYPE || 'evaluation_failure';
 
     await pool.query(
       `INSERT INTO evaluation_settings (guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled, auto_generate_period, auto_fail_on_deadline)
-       VALUES ($1, $2, $3, $4, $5, $6)
+       VALUES ($1, $2::bigint[], $3::bigint[], $4, $5, $6)
        ON CONFLICT (guild_id)
-       DO UPDATE SET forum_channel_ids = $2, self_intro_channel_ids = $3, is_enabled = $4, auto_generate_period = $5, auto_fail_on_deadline = $6`,
+       DO UPDATE SET forum_channel_ids = $2::bigint[], self_intro_channel_ids = $3::bigint[], is_enabled = $4, auto_generate_period = $5, auto_fail_on_deadline = $6`,
       [guildId, forumChannelIds, selfIntroChannelIds, isEnabled, autoGeneratePeriod, autoFailOnDeadline]
     );
 
