@@ -118,6 +118,7 @@ export default function DashboardLayout({
         { label: '経済・レベリング設定', path: `/dashboard/${guildId}/economy`, roles: ['admin', 'subadmin'], icon: Coins, group: '評価鯖' },
         { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'], icon: Dices, group: '評価鯖' },
         { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'], icon: Gift, group: '評価鯖' },
+        { label: '福引ガチャ設定', path: `/dashboard/${guildId}/gacha`, roles: ['admin', 'subadmin'], icon: Gift, group: '雑談鯖' },
       ],
     },
     {
@@ -137,7 +138,6 @@ export default function DashboardLayout({
         { label: 'BOT機能接続状況', path: `/dashboard/${guildId}/bot-status`, roles: ['admin', 'subadmin'], icon: Activity, group: 'その他' },
         { label: 'データベース設定', path: `/dashboard/${guildId}/database`, roles: ['admin', 'subadmin'], icon: Database, group: 'その他' },
         { label: 'アカウント設定', path: `/dashboard/${guildId}/accounts`, roles: ['admin'], icon: Users, group: 'その他' },
-        { label: '福引ガチャ設定', path: `/dashboard/${guildId}/gacha`, roles: ['admin', 'subadmin'], icon: Gift, group: 'その他' },
       ],
     },
   ];

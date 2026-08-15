@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
-import Select from 'react-select';
 import { toast } from 'react-hot-toast';
 import { Gift, Plus, Trash2, Save, Loader2, Percent } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import PageHeader from '@/components/PageHeader';
+import RoleSelect from '@/components/RoleSelect';
+import type { RoleOption } from '@/components/RoleSelect';
 
 const COLORS = ['#8b5cf6', '#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#14b8a6', '#a3e635'];
 
@@ -17,30 +18,12 @@ type Prize = {
   reward_role_id: string | null;
 };
 
-const selectStyles = {
-  control: (base: any) => ({
-    ...base,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    borderColor: '#3f3f46',
-    minHeight: '38px',
-  }),
-  menu: (base: any) => ({ ...base, backgroundColor: '#18181b', zIndex: 50 }),
-  option: (base: any, state: any) => ({
-    ...base,
-    backgroundColor: state.isFocused ? '#3f3f46' : '#18181b',
-    color: 'white',
-  }),
-  multiValue: (base: any) => ({ ...base, backgroundColor: '#3f3f46' }),
-  multiValueLabel: (base: any) => ({ ...base, color: 'white' }),
-  singleValue: (base: any) => ({ ...base, color: 'white' }),
-  input: (base: any) => ({ ...base, color: 'white' }),
-  placeholder: (base: any) => ({ ...base, color: '#71717a' }),
-};
+
 
 export default function GachaSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
 
-  const [roles, setRoles] = useState<any[]>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -72,7 +55,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
       .finally(() => setLoading(false));
   }, [guildId]);
 
-  const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}` }));
+  const roleOptions = roles;
 
   const totalWeight = prizes.reduce((sum, p) => sum + (Number(p.weight) || 0), 0);
 
@@ -158,16 +141,14 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
 
         <div>
           <label className="block font-tech text-xs text-zinc-400 mb-1.5">対象者ロール(引ける人を限定する。未設定なら全員が引けます)</label>
-          <Select
-            isMulti
-            isClearable
-            isSearchable
-            options={roleOptions}
-            value={roleOptions.filter(o => allowedRoleIds.includes(o.value))}
-            onChange={(vals: any) => setAllowedRoleIds((vals || []).map((v: any) => v.value))}
-            placeholder="ロールを検索・選択..."
-            styles={selectStyles}
-            noOptionsMessage={() => '該当するロールがありません'}
+          <RoleSelect
+            label="対象者ロール"
+            multiple={true}
+            roles={roles}
+            value={allowedRoleIds}
+            onChange={(vals: string[]) => setAllowedRoleIds(vals)}
+            loading={loading}
+            placeholder="ロールを選択（未選択なら全員対象）"
           />
         </div>
 
@@ -249,15 +230,14 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
                   </div>
                   <div>
                     <label className="block text-[11px] text-zinc-500 mb-1">報酬ロール(任意)</label>
-                    <Select
-                      isClearable
-                      isSearchable
-                      options={roleOptions}
-                      value={roleOptions.find(o => o.value === prize.reward_role_id) || null}
-                      onChange={(val: any) => updatePrize(i, 'reward_role_id', val ? val.value : null)}
-                      placeholder="ロールを検索・選択..."
-                      styles={selectStyles}
-                      noOptionsMessage={() => '該当するロールがありません'}
+                    <RoleSelect
+                      label="報酬ロール"
+                      multiple={false}
+                      roles={roles}
+                      value={prize.reward_role_id || ''}
+                      onChange={(val: string) => updatePrize(i, 'reward_role_id', val || null)}
+                      loading={loading}
+                      placeholder="未設定（ロールなし）"
                     />
                   </div>
                 </div>
