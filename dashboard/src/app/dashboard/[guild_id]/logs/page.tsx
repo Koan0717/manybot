@@ -21,6 +21,7 @@ const LOG_TYPES = [
   { id: 'shop', label: 'ショップアイテムの購入・使用' },
   { id: 'shop_extend', label: '評価期間延長の購入' },
   { id: 'gambling', label: '賭博・カジノ機能の利用' },
+  { id: 'gacha', label: '福引ガチャの利用' },
   { id: 'evaluation_failure', label: '評価シートの浮上・不合格処理' },
   { id: 'interviewer', label: '面接官・入界処理' },
 ];

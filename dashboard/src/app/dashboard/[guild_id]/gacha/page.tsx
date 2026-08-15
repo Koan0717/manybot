@@ -208,7 +208,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] text-zinc-500 mb-1">重み ({percent}%)</label>
+                      <label className="block text-[11px] text-zinc-500 mb-1">確率 ({percent}%)</label>
                       <input
                         type="number"
                         min={1}
