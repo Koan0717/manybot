@@ -3,7 +3,10 @@ import { useState, useEffect } from 'react';
 import Select from 'react-select';
 import { toast } from 'react-hot-toast';
 import { Gift, Plus, Trash2, Save, Loader2, Percent } from 'lucide-react';
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import PageHeader from '@/components/PageHeader';
+
+const COLORS = ['#8b5cf6', '#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#14b8a6', '#a3e635'];
 
 type Prize = {
   id?: number;
@@ -44,6 +47,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
   const [isEnabled, setIsEnabled] = useState(true);
   const [allowedRoleIds, setAllowedRoleIds] = useState<string[]>([]);
   const [pullCost, setPullCost] = useState(0);
+  const [currencyName, setCurrencyName] = useState('通貨');
   const [prizes, setPrizes] = useState<Prize[]>([
     { prize_number: 1, prize_name: '', weight: 1, reward_coins: 0, reward_role_id: null },
   ]);
@@ -52,8 +56,9 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
     Promise.all([
       fetch(`/api/guilds/${guildId}/roles`).then(r => (r.ok ? r.json() : [])),
       fetch(`/api/guilds/${guildId}/gacha`).then(r => (r.ok ? r.json() : null)),
+      fetch(`/api/guilds/${guildId}/settings`).then(r => (r.ok ? r.json() : null)),
     ])
-      .then(([rolesData, gachaData]) => {
+      .then(([rolesData, gachaData, settingsData]) => {
         if (!rolesData.error) setRoles(rolesData.filter((r: any) => r.id !== guildId));
         if (gachaData && !gachaData.error) {
           setIsEnabled(gachaData.is_enabled);
@@ -61,6 +66,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
           setPullCost(gachaData.pull_cost || 0);
           if (gachaData.prizes && gachaData.prizes.length > 0) setPrizes(gachaData.prizes);
         }
+        if (settingsData && settingsData.CURRENCY_NAME) setCurrencyName(settingsData.CURRENCY_NAME);
       })
       .catch(() => toast.error('データの取得に失敗しました'))
       .finally(() => setLoading(false));
@@ -69,6 +75,13 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
   const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}` }));
 
   const totalWeight = prizes.reduce((sum, p) => sum + (Number(p.weight) || 0), 0);
+
+  const pieData = prizes
+    .filter(p => p.prize_name.trim() && p.weight > 0)
+    .map(p => ({
+      name: `${p.prize_number}番 ${p.prize_name}`,
+      value: totalWeight > 0 ? (p.weight / totalWeight) * 100 : 0,
+    }));
 
   const addPrize = () => {
     const nextNumber = prizes.length > 0 ? Math.max(...prizes.map(p => p.prize_number)) + 1 : 1;
@@ -159,7 +172,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
         </div>
 
         <div>
-          <label className="block font-tech text-xs text-zinc-400 mb-1.5">1回あたりの消費ゼニー(0で無料)</label>
+          <label className="block font-tech text-xs text-zinc-400 mb-1.5">1回あたりの消費{currencyName}(0で無料)</label>
           <input
             type="number"
             min={0}
@@ -170,90 +183,136 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
         </div>
       </div>
 
-      {/* 景品リスト */}
-      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-mecha text-sm font-bold text-white">景品・確率設定</h2>
-          <span className="text-xs text-zinc-500 flex items-center gap-1">
-            <Percent className="w-3.5 h-3.5" /> 確率は各景品の「重み」÷ 合計重みで自動計算されます
-          </span>
+      {/* 景品リスト + 円グラフ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-mecha text-sm font-bold text-white">景品・確率設定</h2>
+            <span className="text-xs text-zinc-500 flex items-center gap-1">
+              <Percent className="w-3.5 h-3.5" /> 確率は各景品の「重み」÷ 合計重みで自動計算されます
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {prizes.map((prize, i) => {
+              const percent = totalWeight > 0 ? ((prize.weight / totalWeight) * 100).toFixed(1) : '0.0';
+              return (
+                <div key={i} className="bg-black/40 border border-zinc-800 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-tech text-xs text-zinc-500 flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                      景品 #{i + 1}
+                    </span>
+                    <button onClick={() => removePrize(i)} className="text-zinc-500 hover:text-red-400 transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-zinc-500 mb-1">番号</label>
+                      <input
+                        type="number"
+                        value={prize.prize_number}
+                        onChange={e => updatePrize(i, 'prize_number', Number(e.target.value))}
+                        className="w-full bg-black/40 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:border-red-600 outline-none"
+                      />
+                    </div>
+                    <div className="col-span-2 md:col-span-1">
+                      <label className="block text-[11px] text-zinc-500 mb-1">景品名</label>
+                      <input
+                        value={prize.prize_name}
+                        onChange={e => updatePrize(i, 'prize_name', e.target.value)}
+                        placeholder="例: 特賞"
+                        className="w-full bg-black/40 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:border-red-600 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-zinc-500 mb-1">重み ({percent}%)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={prize.weight}
+                        onChange={e => updatePrize(i, 'weight', Number(e.target.value))}
+                        className="w-full bg-black/40 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:border-red-600 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-zinc-500 mb-1">報酬{currencyName}</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={prize.reward_coins}
+                        onChange={e => updatePrize(i, 'reward_coins', Number(e.target.value))}
+                        className="w-full bg-black/40 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:border-red-600 outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-zinc-500 mb-1">報酬ロール(任意)</label>
+                    <Select
+                      isClearable
+                      isSearchable
+                      options={roleOptions}
+                      value={roleOptions.find(o => o.value === prize.reward_role_id) || null}
+                      onChange={(val: any) => updatePrize(i, 'reward_role_id', val ? val.value : null)}
+                      placeholder="ロールを検索・選択..."
+                      styles={selectStyles}
+                      noOptionsMessage={() => '該当するロールがありません'}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={addPrize}
+            className="w-full flex items-center justify-center gap-2 border border-dashed border-zinc-700 hover:border-red-600 text-zinc-400 hover:text-white rounded-lg py-2.5 text-sm transition-colors"
+          >
+            <Plus className="w-4 h-4" /> 景品を追加
+          </button>
         </div>
 
-        <div className="space-y-3">
-          {prizes.map((prize, i) => {
-            const percent = totalWeight > 0 ? ((prize.weight / totalWeight) * 100).toFixed(1) : '0.0';
-            return (
-              <div key={i} className="bg-black/40 border border-zinc-800 rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-tech text-xs text-zinc-500">景品 #{i + 1}</span>
-                  <button onClick={() => removePrize(i)} className="text-zinc-500 hover:text-red-400 transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-[11px] text-zinc-500 mb-1">番号</label>
-                    <input
-                      type="number"
-                      value={prize.prize_number}
-                      onChange={e => updatePrize(i, 'prize_number', Number(e.target.value))}
-                      className="w-full bg-black/40 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:border-red-600 outline-none"
+        {/* 円グラフ */}
+        <div className="lg:col-span-1">
+          <div className="mecha-clip bg-gradient-to-b from-neutral-900 to-neutral-950 border border-zinc-800/80 p-6 shadow-2xl sticky top-6">
+            <h3 className="text-center font-mecha text-sm font-bold text-red-400 mb-1">現在の当選確率</h3>
+            <p className="text-center text-[11px] text-zinc-500 mb-4">景品名が未入力のものはグラフに反映されません</p>
+
+            {pieData.length > 0 ? (
+              <div className="h-[280px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={95}
+                      paddingAngle={2}
+                      dataKey="value"
+                      stroke="none"
+                      animationDuration={800}
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip
+                      formatter={(value: any) => [`${(Number(value)).toFixed(1)}%`, '確率']}
+                      contentStyle={{ backgroundColor: '#18181b', border: '1px solid #3f3f46', borderRadius: '8px', color: '#fff' }}
                     />
-                  </div>
-                  <div className="col-span-2 md:col-span-1">
-                    <label className="block text-[11px] text-zinc-500 mb-1">景品名</label>
-                    <input
-                      value={prize.prize_name}
-                      onChange={e => updatePrize(i, 'prize_name', e.target.value)}
-                      placeholder="例: 特賞"
-                      className="w-full bg-black/40 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:border-red-600 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-zinc-500 mb-1">重み ({percent}%)</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={prize.weight}
-                      onChange={e => updatePrize(i, 'weight', Number(e.target.value))}
-                      className="w-full bg-black/40 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:border-red-600 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-zinc-500 mb-1">報酬ゼニー</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={prize.reward_coins}
-                      onChange={e => updatePrize(i, 'reward_coins', Number(e.target.value))}
-                      className="w-full bg-black/40 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:border-red-600 outline-none"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] text-zinc-500 mb-1">報酬ロール(任意)</label>
-                  <Select
-                    isClearable
-                    isSearchable
-                    options={roleOptions}
-                    value={roleOptions.find(o => o.value === prize.reward_role_id) || null}
-                    onChange={(val: any) => updatePrize(i, 'reward_role_id', val ? val.value : null)}
-                    placeholder="ロールを検索・選択..."
-                    styles={selectStyles}
-                    noOptionsMessage={() => '該当するロールがありません'}
-                  />
-                </div>
+                    <Legend verticalAlign="bottom" height={48} wrapperStyle={{ fontSize: '11px', color: '#a1a1aa' }} />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
-            );
-          })}
+            ) : (
+              <div className="h-[280px] flex items-center justify-center text-zinc-600 text-sm">
+                景品を追加すると表示されます
+              </div>
+            )}
+          </div>
         </div>
-
-        <button
-          onClick={addPrize}
-          className="w-full flex items-center justify-center gap-2 border border-dashed border-zinc-700 hover:border-red-600 text-zinc-400 hover:text-white rounded-lg py-2.5 text-sm transition-colors"
-        >
-          <Plus className="w-4 h-4" /> 景品を追加
-        </button>
       </div>
     </div>
   );

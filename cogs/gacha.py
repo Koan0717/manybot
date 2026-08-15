@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import random
 import database
+from helpers import get_setting
 
 
 class GachaCog(commands.Cog):
@@ -13,6 +14,7 @@ class GachaCog(commands.Cog):
     async def gacha(self, interaction: discord.Interaction):
         guild = interaction.guild
         member = interaction.user
+        currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
 
         settings = await database.get_gacha_settings(guild.id)
 
@@ -37,7 +39,7 @@ class GachaCog(commands.Cog):
             user_data = await database.get_user(guild.id, member.id)
             balance = user_data["balance"] if user_data else 0
             if balance < pull_cost:
-                await interaction.response.send_message(f"所持金が足りません。（必要: {pull_cost}ゼニー / 所持: {balance}ゼニー）", ephemeral=True)
+                await interaction.response.send_message(f"所持{currency_name}が足りません。（必要: {pull_cost}{currency_name} / 所持: {balance}{currency_name}）", ephemeral=True)
                 return
             await database.add_balance(guild.id, member.id, -pull_cost)
 
@@ -53,7 +55,7 @@ class GachaCog(commands.Cog):
         reward_lines = []
         if won.get("reward_coins"):
             await database.add_balance(guild.id, member.id, won["reward_coins"])
-            reward_lines.append(f"💰 {won['reward_coins']}ゼニー")
+            reward_lines.append(f"💰 {won['reward_coins']}{currency_name}")
 
         if won.get("reward_role_id"):
             role = guild.get_role(won["reward_role_id"])
