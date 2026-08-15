@@ -324,6 +324,24 @@ export async function GET(
       result['call-board'] = { ok: false, checks: [{ label: '通話募集掲示板設定', ok: false, detail: e.message }] };
     }
 
+    // --- 福引ガチャ設定 ---
+    try {
+      const gachaSettings = await pool.query(`SELECT allowed_role_ids FROM gacha_settings WHERE guild_id = $1`, [guildId]);
+      const gachaPrizes = await pool.query(`SELECT reward_role_id, prize_name FROM gacha_prizes WHERE guild_id = $1`, [guildId]);
+      const checks: (Check | null)[] = [];
+      for (const rid of gachaSettings.rows[0]?.allowed_role_ids || []) {
+        checks.push(checkRoleExists(rid?.toString(), roleMap, '対象者ロール'));
+      }
+      for (const row of gachaPrizes.rows) {
+        if (row.reward_role_id) {
+          checks.push(checkRoleExists(row.reward_role_id?.toString(), roleMap, `報酬ロール (${row.prize_name})`));
+        }
+      }
+      result['gacha'] = finalize(checks);
+    } catch (e: any) {
+      result['gacha'] = { ok: false, checks: [{ label: '福引ガチャ設定', ok: false, detail: e.message }] };
+    }
+
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('[health] GET error:', error);

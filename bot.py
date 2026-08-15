@@ -254,6 +254,7 @@ class EconomyBot(commands.Bot):
             "cogs.tickets",
             "cogs.self_intro_roles",
             "cogs.call_board",
+            "cogs.gacha",
         ]
         for cog in cogs_to_load:
             try:

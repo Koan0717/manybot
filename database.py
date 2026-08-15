@@ -532,6 +532,40 @@ async def setup_db_schema(p):
         ''')
 
         await conn.execute('''
+            CREATE TABLE IF NOT EXISTS gacha_settings (
+                guild_id BIGINT PRIMARY KEY,
+                allowed_role_ids BIGINT[] DEFAULT '{}',
+                pull_cost INTEGER DEFAULT 0,
+                is_enabled BOOLEAN DEFAULT TRUE
+            )
+        ''')
+
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS gacha_prizes (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                prize_number INTEGER NOT NULL,
+                prize_name TEXT NOT NULL,
+                weight INTEGER NOT NULL DEFAULT 1,
+                reward_coins INTEGER DEFAULT 0,
+                reward_role_id BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS gacha_history (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                prize_id INTEGER,
+                prize_number INTEGER,
+                prize_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        await conn.execute('''
 
             CREATE TABLE IF NOT EXISTS level_role_rewards (
 
@@ -4453,3 +4487,65 @@ async def delete_user_data(guild_id: int, user_id: int):
             print(f"[UserData Cleanup] Successfully deleted data for user {user_id} in guild {guild_id} upon leave.")
         except Exception as e:
             print(f"[UserData Cleanup] Error deleting user data for user {user_id} in guild {guild_id}: {e}")
+
+
+# --- 福引ガチャ ---
+
+async def get_gacha_settings(guild_id: int) -> dict:
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        row = await conn.fetchrow(
+            'SELECT allowed_role_ids, pull_cost, is_enabled FROM gacha_settings WHERE guild_id = $1',
+            guild_id
+        )
+        if row:
+            return {
+                "allowed_role_ids": [str(r) for r in (row["allowed_role_ids"] or [])],
+                "pull_cost": row["pull_cost"],
+                "is_enabled": row["is_enabled"],
+            }
+        return {"allowed_role_ids": [], "pull_cost": 0, "is_enabled": True}
+
+
+async def save_gacha_settings(guild_id: int, allowed_role_ids: list[int], pull_cost: int, is_enabled: bool):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO gacha_settings (guild_id, allowed_role_ids, pull_cost, is_enabled)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (guild_id) DO UPDATE
+            SET allowed_role_ids = $2, pull_cost = $3, is_enabled = $4
+        ''', guild_id, allowed_role_ids, pull_cost, is_enabled)
+
+
+async def get_gacha_prizes(guild_id: int) -> list[dict]:
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        rows = await conn.fetch(
+            'SELECT id, prize_number, prize_name, weight, reward_coins, reward_role_id FROM gacha_prizes WHERE guild_id = $1 ORDER BY prize_number ASC',
+            guild_id
+        )
+        return [dict(r) for r in rows]
+
+
+async def replace_gacha_prizes(guild_id: int, prizes: list[dict]):
+    """ダッシュボードからの保存時、その guild の景品リストを丸ごと入れ替える"""
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute('DELETE FROM gacha_prizes WHERE guild_id = $1', guild_id)
+            for prize in prizes:
+                await conn.execute('''
+                    INSERT INTO gacha_prizes (guild_id, prize_number, prize_name, weight, reward_coins, reward_role_id)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                ''', guild_id, prize["prize_number"], prize["prize_name"], prize.get("weight", 1),
+                    prize.get("reward_coins", 0), prize.get("reward_role_id"))
+
+
+async def add_gacha_history(guild_id: int, user_id: int, prize_id: int, prize_number: int, prize_name: str):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO gacha_history (guild_id, user_id, prize_id, prize_number, prize_name)
+            VALUES ($1, $2, $3, $4, $5)
+        ''', guild_id, user_id, prize_id, prize_number, prize_name)
