@@ -119,6 +119,8 @@ export default function DashboardLayout({
         { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'], icon: Dices, group: '評価鯖' },
         { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'], icon: Gift, group: '評価鯖' },
         { label: '福引ガチャ設定', path: `/dashboard/${guildId}/gacha`, roles: ['admin', 'subadmin'], icon: Gift, group: '雑談鯖' },
+        { label: '🍃 ミッション設定', path: `/dashboard/${guildId}/missions`, roles: ['admin', 'subadmin'], icon: ClipboardCheck, group: '雑談鯖' },
+        { label: '🍃 どうぶつの森階級設定', path: `/dashboard/${guildId}/doumori-rank`, roles: ['admin', 'subadmin'], icon: Trophy, group: '雑談鯖' },
       ],
     },
     {

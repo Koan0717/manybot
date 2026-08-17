@@ -86,7 +86,6 @@ export async function getGuildDbUrl(guildId: string | number): Promise<string | 
       return res.rows[0].database_url;
     }
   } catch (error: any) {
-    // If table doesn't exist yet, ignore
     if (error.code !== '42P01') {
       console.error('Error fetching guild database URL:', error);
     }
@@ -94,8 +93,39 @@ export async function getGuildDbUrl(guildId: string | number): Promise<string | 
   return null;
 }
 
+export async function getDoumoriDbUrl(guildId: string | number): Promise<string | null> {
+  const parsedId = typeof guildId === 'string' ? guildId : String(guildId);
+  if (isNaN(Number(parsedId))) return process.env.DOUMORI_DATABASE_URL || null;
+
+  try {
+    const res = await masterPool.query(
+      'SELECT doumori_database_url FROM guild_databases WHERE guild_id = $1',
+      [parsedId]
+    );
+    if (res.rows.length > 0 && res.rows[0].doumori_database_url) {
+      return res.rows[0].doumori_database_url;
+    }
+  } catch (error: any) {
+    if (error.code !== '42P01') {
+      console.error('Error fetching doumori database URL:', error);
+    }
+  }
+  return process.env.DOUMORI_DATABASE_URL || null;
+}
+
 export async function getPool(guildId: string | number): Promise<Pool> {
   const url = await getGuildDbUrl(guildId);
+  if (url) {
+    if (!pools[url]) {
+      pools[url] = new Pool({ connectionString: url?.replace('?sslmode=require', ''), ssl: { rejectUnauthorized: false } });
+    }
+    return pools[url];
+  }
+  return masterPool;
+}
+
+export async function getDoumoriPool(guildId: string | number): Promise<Pool> {
+  const url = await getDoumoriDbUrl(guildId);
   if (url) {
     if (!pools[url]) {
       pools[url] = new Pool({ connectionString: url?.replace('?sslmode=require', ''), ssl: { rejectUnauthorized: false } });
