@@ -94,10 +94,19 @@ export default function BotDashboardLayout({
       ],
     },
     {
-      section: '🎫 浮上・チケット・道具',
+      section: '📜 ミッション＆ランク管理',
+      items: [
+        { label: 'ミッション一覧・作成・統計', tabKey: 'missions', icon: Camera, badge: '1日3枠' },
+        { label: '階級・ランクアップ設定', tabKey: 'resident-ranks', icon: CreditCard, badge: '4段階' },
+        { label: 'マイル手動操作＆ログ (管理者)', tabKey: 'mile-management', icon: Wrench, badge: '管理者' },
+      ],
+    },
+    {
+      section: '🎫 浮上・ショップ・経済',
       items: [
         { label: '浮上・チケット獲得設定', tabKey: 'tickets', icon: Ticket, badge: '自動付与' },
         { label: 'ショップ・道具交換 (/ショップ)', tabKey: 'shop', icon: ShoppingBag },
+        { label: '通貨・両替・売却 (/両替, /売却)', tabKey: 'economy-exchange', icon: Coins, badge: 'ゼニー連携' },
       ],
     },
     {
@@ -109,24 +118,10 @@ export default function BotDashboardLayout({
       ],
     },
     {
-      section: '🪙 経済・両替・ミッション',
+      section: '🗄️ データベース＆システム',
       items: [
-        { label: '通貨・両替・売却 (/両替, /売却)', tabKey: 'economy-exchange', icon: Coins, badge: 'ゼニー連携' },
-        { label: 'ミッション報告＆承認 (/ミッション報告)', tabKey: 'missions', icon: Camera, badge: 'ワンタップ' },
-      ],
-    },
-    {
-      section: '🃏 住民カード・階級・管理',
-      items: [
-        { label: '住民カード＆階級 (/住民カード, /ランクアップ)', tabKey: 'resident-ranks', icon: CreditCard },
-        { label: 'マイル手動管理＆ログ (管理者)', tabKey: 'mile-management', icon: Wrench, badge: '管理者' },
+        { label: 'データベース接続＆ヘルス', tabKey: 'database-health', icon: Database, badge: 'Supabase' },
         { label: '総合操作パネル (/パネル設置)', tabKey: 'panel-control', icon: Gamepad2, badge: '即時送信' },
-      ],
-    },
-    {
-      section: '🗄️ システム＆アカウント',
-      items: [
-        { label: 'データベース接続＆ヘルス', tabKey: 'database-health', icon: Database },
         { label: '専用アカウント設定', tabKey: 'accounts', icon: Users, badge: '限定アクセス' },
       ],
     },
