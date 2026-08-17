@@ -37,8 +37,8 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [panels, setPanels] = useState<PanelConfig[]>([defaultPanel(Date.now())]);
-  const [nextId, setNextId] = useState(Date.now() + 1);
+  const [panels, setPanels] = useState<PanelConfig[]>([defaultPanel(1)]);
+  const [nextId, setNextId] = useState(2);
 
   useEffect(() => {
     Promise.all([
@@ -127,6 +127,21 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
     }
   };
 
+  const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}`, color: r.color }));
+  const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
+
+  const customStyles = {
+    control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white' }),
+    menu: (base: any) => ({ ...base, backgroundColor: '#27272a', zIndex: 9999 }),
+    option: (base: any, state: any) => ({
+      ...base,
+      backgroundColor: state.isFocused ? '#3f3f46' : '#27272a',
+      color: state.data && state.data.color ? `#${state.data.color.toString(16).padStart(6, '0')}` : 'white',
+      ':active': { backgroundColor: '#52525b' }
+    }),
+    singleValue: (base: any) => ({ ...base, color: 'white' })
+  };
+
   if (loading) return <div className="text-zinc-400">読み込み中...</div>;
 
   return (
@@ -139,27 +154,10 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
         </div>
       )}
 
-<<<<<<< HEAD
       <div className="space-y-6">
         {panels.map((panel, panelIndex) => (
           <div key={panel.id} className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl relative">
-=======
-      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl max-w-3xl">
-        <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-bold text-zinc-300 mb-2">送信先チャンネル <span className="text-red-500">*</span></label>
-            <ChannelSelect
-              label="送信先チャンネル"
-              placeholder="パネルを送信するチャンネルを選択..."
-              value={formData.channel_id}
-              onChange={(id) => setFormData({ ...formData, channel_id: id })}
-              channels={channels}
-              multiple={false}
-            />
-          </div>
->>>>>>> f0d1aeb059f3c0733e50ba1fdf9848e56a4ffa41
 
-            {/* パネルヘッダー */}
             <div className="flex items-center justify-between mb-5 pb-3 border-b border-zinc-700">
               <div className="flex items-center gap-2">
                 <span className="text-zinc-400 text-sm font-mono">パネル #{panelIndex + 1}</span>
@@ -191,7 +189,6 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
             </div>
 
             <div className={`space-y-5 ${panel.installed ? 'opacity-50 pointer-events-none' : ''}`}>
-              {/* チャンネル選択 */}
               <div>
                 <label className="block text-sm font-bold text-zinc-300 mb-2">送信先チャンネル <span className="text-red-500">*</span></label>
                 <Select
@@ -203,8 +200,6 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                 />
               </div>
 
-<<<<<<< HEAD
-              {/* タイトル */}
               <div>
                 <label className="block text-sm font-bold text-zinc-300 mb-2">パネルのタイトル <span className="text-red-500">*</span></label>
                 <input
@@ -216,7 +211,6 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                 />
               </div>
 
-              {/* 説明文 */}
               <div>
                 <label className="block text-sm font-bold text-zinc-300 mb-2">パネルの説明文</label>
                 <textarea
@@ -227,7 +221,6 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                 />
               </div>
 
-              {/* ロールと絵文字 */}
               <div>
                 <label className="block text-sm font-bold text-zinc-300 mb-3 border-b border-zinc-700 pb-2">ロールと絵文字の設定 <span className="text-red-500">*</span></label>
                 <div className="space-y-3">
@@ -275,33 +268,6 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                           </div>
                         )}
                       </div>
-=======
-          <div>
-            <label className="block text-sm font-bold text-zinc-300 mb-4 border-b border-zinc-700 pb-2">ロールと絵文字の設定 <span className="text-red-500">*</span></label>
-            
-            <div className="space-y-3">
-              {formData.reaction_roles.map((rr, index) => (
-                <div key={index} className="flex flex-col md:flex-row items-start md:items-center gap-3 bg-zinc-900 p-3 rounded-lg border border-zinc-700">
-                  <div className="flex-1 w-full">
-                    <RoleSelect
-                      label="付与するロール"
-                      placeholder="付与するロール..."
-                      value={rr.role_id}
-                      onChange={(id) => handleChangeReactionRole(index, 'role_id', id)}
-                      roles={roles}
-                      multiple={false}
-                    />
-                  </div>
-                  <div className="w-full md:w-64 relative">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={rr.emoji}
-                        onChange={e => handleChangeReactionRole(index, 'emoji', e.target.value)}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500"
-                        placeholder="絵文字 (例: 🍎, <:name:id>)"
-                      />
->>>>>>> f0d1aeb059f3c0733e50ba1fdf9848e56a4ffa41
                       <button
                         onClick={() => removeReactionRole(panel.id, index)}
                         className="p-2 text-zinc-500 hover:text-red-500 hover:bg-zinc-800 rounded transition-colors"
@@ -321,7 +287,6 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                 </button>
               </div>
 
-              {/* 設置ボタン */}
               <div className="pt-4 border-t border-zinc-700 flex justify-end">
                 <button
                   onClick={() => handleSubmit(panel)}
@@ -336,7 +301,6 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
           </div>
         ))}
 
-        {/* パネル追加ボタン */}
         <button
           onClick={addPanel}
           className="w-full border-2 border-dashed border-zinc-700 hover:border-red-600/60 text-zinc-500 hover:text-red-400 py-5 rounded-xl transition-colors flex items-center justify-center gap-2 font-bold"
