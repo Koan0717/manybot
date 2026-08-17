@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
-import { ensureAllSchemas } from '@/lib/migrations';
+import { ensureAllSchemas, ensureEvaluationSettingsSchema } from '@/lib/migrations';
 
 type Check = { label: string; ok: boolean; detail?: string };
 type FeatureStatus = { ok: boolean; checks: Check[] };
@@ -179,6 +179,7 @@ export async function GET(
 
     // --- 評価関連設定 ---
     try {
+      await ensureEvaluationSettingsSchema(pool);
       const ev = await pool.query(`SELECT forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1`, [guildId]);
       const checks: (Check | null)[] = [];
       if (ev.rows.length > 0) {

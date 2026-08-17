@@ -5,6 +5,7 @@ import { Gift, Plus, Trash2, Save, Loader2, Percent } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import PageHeader from '@/components/PageHeader';
 import RoleSelect from '@/components/RoleSelect';
+import type { RoleOption } from '@/components/RoleSelect';
 
 const COLORS = ['#8b5cf6', '#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#14b8a6', '#a3e635'];
 
@@ -17,10 +18,11 @@ type Prize = {
   reward_role_id: string | null;
 };
 
+
 export default function GachaSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
 
-  const [roles, setRoles] = useState<any[]>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -51,6 +53,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
       .catch(() => toast.error('データの取得に失敗しました'))
       .finally(() => setLoading(false));
   }, [guildId]);
+
 
   const totalWeight = prizes.reduce((sum, p) => sum + (Number(p.weight) || 0), 0);
 
@@ -138,11 +141,12 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
           <label className="block font-tech text-xs text-zinc-400 mb-1.5">対象者ロール(引ける人を限定する。未設定なら全員が引けます)</label>
           <RoleSelect
             label="対象者ロール"
-            placeholder="ロールを検索・選択..."
-            value={allowedRoleIds}
-            onChange={(ids) => setAllowedRoleIds(ids)}
-            roles={roles}
             multiple={true}
+            roles={roles}
+            value={allowedRoleIds}
+            onChange={(vals: string[]) => setAllowedRoleIds(vals)}
+            loading={loading}
+            placeholder="ロールを選択（未選択なら全員対象）"
           />
         </div>
 
@@ -202,7 +206,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] text-zinc-500 mb-1">重み ({percent}%)</label>
+                      <label className="block text-[11px] text-zinc-500 mb-1">確率 ({percent}%)</label>
                       <input
                         type="number"
                         min={1}
@@ -226,11 +230,12 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
                     <label className="block text-[11px] text-zinc-500 mb-1">報酬ロール(任意)</label>
                     <RoleSelect
                       label="報酬ロール"
-                      placeholder="ロールを検索・選択..."
-                      value={prize.reward_role_id || ''}
-                      onChange={(id) => updatePrize(i, 'reward_role_id', id || null)}
-                      roles={roles}
                       multiple={false}
+                      roles={roles}
+                      value={prize.reward_role_id || ''}
+                      onChange={(val: string) => updatePrize(i, 'reward_role_id', val || null)}
+                      loading={loading}
+                      placeholder="未設定（ロールなし）"
                     />
                   </div>
                 </div>
