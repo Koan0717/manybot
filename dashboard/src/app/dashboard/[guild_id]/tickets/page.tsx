@@ -124,6 +124,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'save',
+          panel: formData,
           ...formData
         })
       });

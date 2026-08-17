@@ -54,8 +54,13 @@ export async function POST(
     const { action } = body;
 
     if (action === 'save') {
-      const { channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type } = body.panel;
+      const panel = body.panel || body;
+      const { channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type } = panel;
       
+      if (!channel_id) {
+        return NextResponse.json({ error: 'channel_id is required' }, { status: 400 });
+      }
+
       await pool.query(
         `INSERT INTO custom_ticket_panels (
           channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
