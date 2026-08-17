@@ -1,8 +1,9 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { toast } from 'react-hot-toast';
-import { LayoutPanelTop, Plus, Trash2, CheckCircle2, Send } from 'lucide-react';
+import { LayoutPanelTop, Plus, Trash2, CheckCircle2, Send, X } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import ChannelSelect from '@/components/ChannelSelect';
 import RoleSelect from '@/components/RoleSelect';
@@ -38,19 +39,47 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
   const [panels, setPanels] = useState<PanelConfig[]>([defaultPanel(1)]);
-  const [nextId, setNextId] = useState(2);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     Promise.all([
       fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : []),
-      fetch(`/api/guilds/${guildId}/roles`).then(res => res.ok ? res.json() : [])
-    ]).then(([channelsData, rolesData]: [any, any]) => {
-      if (!channelsData.error) setChannels(channelsData.filter((c: any) => c.type === 0));
-      if (!rolesData.error) setRoles(rolesData.filter((r: any) => r.id !== guildId));
-    }).catch(() => {
+      fetch(`/api/guilds/${guildId}/roles`).then(res => res.ok ? res.json() : []),
+      fetch(`/api/guilds/${guildId}/other-panels`).then(res => res.ok ? res.json() : [])
+    ]).then(([channelsData, rolesData, savedData]: [any, any, any]) => {
+      if (!channelsData.error) {
+        setChannels(channelsData.filter((c: any) => c.type === 0));
+      }
+      if (!rolesData.error) {
+        setRoles(rolesData.filter((r: any) => r.id !== guildId));
+      }
+      if (Array.isArray(savedData) && savedData.length > 0) {
+        const loaded: PanelConfig[] = savedData.map((s: any, i: number) => ({
+          id: i + 1,
+          channel_id: s.channel_id || '',
+          panel_title: s.panel_title || 'ロール付与パネル',
+          panel_description: s.panel_description || '',
+          reaction_roles: (s.reaction_roles && s.reaction_roles.length > 0)
+            ? s.reaction_roles
+            : [{ role_id: '', emoji: '' }],
+          submitting: false,
+          installed: !!s.message_id,
+          activeEmojiPicker: null,
+        }));
+        setPanels(loaded);
+      }
+    }).catch(err => {
+      console.error(err);
       setError('データの取得に失敗しました');
-    }).finally(() => setLoading(false));
+    }).finally(() => {
+      setLoading(false);
+    });
   }, [guildId]);
 
   const updatePanel = (id: number, updates: Partial<PanelConfig>) => {
@@ -58,48 +87,48 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
   };
 
   const addPanel = () => {
+    const nextId = Math.max(0, ...panels.map(p => p.id)) + 1;
     setPanels(prev => [...prev, defaultPanel(nextId)]);
-    setNextId(n => n + 1);
   };
 
   const removePanel = (id: number) => {
+    if (panels.length <= 1) return;
     setPanels(prev => prev.filter(p => p.id !== id));
   };
 
-  const addReactionRole = (id: number) => {
-    setPanels(prev => prev.map(p =>
-      p.id === id ? { ...p, reaction_roles: [...p.reaction_roles, { role_id: '', emoji: '' }] } : p
-    ));
+  const addReactionRole = (panelId: number) => {
+    setPanels(prev => prev.map(p => {
+      if (p.id !== panelId) return p;
+      return { ...p, reaction_roles: [...p.reaction_roles, { role_id: '', emoji: '' }] };
+    }));
+  };
+
+  const updateReactionRole = (panelId: number, index: number, field: keyof ReactionRoleEntry, value: string) => {
+    setPanels(prev => prev.map(p => {
+      if (p.id !== panelId) return p;
+      const updated = [...p.reaction_roles];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...p, reaction_roles: updated };
+    }));
   };
 
   const removeReactionRole = (panelId: number, index: number) => {
     setPanels(prev => prev.map(p => {
       if (p.id !== panelId) return p;
-      const newRoles = [...p.reaction_roles];
-      newRoles.splice(index, 1);
-      return { ...p, reaction_roles: newRoles };
-    }));
-  };
-
-  const updateReactionRole = (panelId: number, index: number, field: 'role_id' | 'emoji', value: string) => {
-    setPanels(prev => prev.map(p => {
-      if (p.id !== panelId) return p;
-      const newRoles = [...p.reaction_roles];
-      newRoles[index] = { ...newRoles[index], [field]: value };
-      return { ...p, reaction_roles: newRoles };
+      return { ...p, reaction_roles: p.reaction_roles.filter((_, i) => i !== index) };
     }));
   };
 
   const handleSubmit = async (panel: PanelConfig) => {
-    if (!panel.channel_id) { toast.error('送信先チャンネルを選択してください。'); return; }
-    if (!panel.panel_title) { toast.error('パネルのタイトルを入力してください。'); return; }
-
-    const validReactionRoles = panel.reaction_roles.filter(r => r.role_id && r.emoji);
-    if (validReactionRoles.length === 0) {
-      toast.error('最低1つのロールと絵文字のペアを設定してください。');
+    if (!panel.channel_id) {
+      toast.error('送信先チャンネルを選択してください');
       return;
     }
-    if (!confirm('この内容でDiscordにパネルを設置しますか？')) return;
+    const validPairs = panel.reaction_roles.filter(rr => rr.role_id && rr.emoji);
+    if (validPairs.length === 0) {
+      toast.error('ロールと絵文字のペアを最低1つ設定してください');
+      return;
+    }
 
     updatePanel(panel.id, { submitting: true });
     try {
@@ -108,22 +137,21 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           channel_id: panel.channel_id,
-          title: panel.panel_title,
-          description: panel.panel_description,
-          reaction_roles: validReactionRoles
-        })
+          panel_title: panel.panel_title,
+          panel_description: panel.panel_description,
+          reaction_roles: validPairs,
+        }),
       });
-
       const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success('パネルの設置に成功しました！');
-        updatePanel(panel.id, { installed: true, submitting: false });
+      if (!res.ok || data.error) {
+        toast.error(`設置に失敗しました: ${data.error || 'エラー'}`);
       } else {
-        toast.error(`設置に失敗しました: ${data.error || '不明なエラー'}`);
-        updatePanel(panel.id, { submitting: false });
+        toast.success(`パネル #${panel.id} を設置しました！`);
+        updatePanel(panel.id, { installed: true });
       }
-    } catch {
-      toast.error('通信エラーが発生しました。');
+    } catch (err: any) {
+      toast.error(`エラーが発生しました: ${err.message}`);
+    } finally {
       updatePanel(panel.id, { submitting: false });
     }
   };
@@ -235,25 +263,43 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                           <button
                             type="button"
                             onClick={() => updatePanel(panel.id, { activeEmojiPicker: panel.activeEmojiPicker === index ? null : index })}
-                            className="bg-zinc-700 hover:bg-zinc-600 text-white px-3 rounded transition-colors text-lg"
+                            className="bg-zinc-700 hover:bg-zinc-600 text-white px-3 rounded transition-colors text-lg flex-shrink-0"
                             title="絵文字を選択"
                           >
                             😊
                           </button>
                         </div>
-                        {panel.activeEmojiPicker === index && (
-                          <div className="absolute top-12 right-0 z-50">
-                            <div className="fixed inset-0" onClick={() => updatePanel(panel.id, { activeEmojiPicker: null })} />
-                            <div className="relative shadow-2xl border border-zinc-700 rounded-lg overflow-hidden">
+
+                        {/* モーダルダイアログ (createPortalで親のoverflow/clip-pathを脱出して描画) */}
+                        {panel.activeEmojiPicker === index && mounted && createPortal(
+                          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+                            <div 
+                              className="fixed inset-0" 
+                              onClick={() => updatePanel(panel.id, { activeEmojiPicker: null })} 
+                            />
+                            <div className="relative z-10 shadow-2xl border border-zinc-700 rounded-2xl overflow-hidden bg-zinc-900 p-3 flex flex-col items-center">
+                              <div className="w-full flex items-center justify-between pb-2 mb-2 border-b border-zinc-800 px-1">
+                                <span className="text-sm font-bold text-white font-tech">絵文字を選択</span>
+                                <button
+                                  type="button"
+                                  onClick={() => updatePanel(panel.id, { activeEmojiPicker: null })}
+                                  className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors"
+                                >
+                                  <X size={18} />
+                                </button>
+                              </div>
                               <EmojiPicker
                                 theme={Theme.DARK}
+                                width={350}
+                                height={420}
                                 onEmojiClick={(emojiData) => {
                                   updateReactionRole(panel.id, index, 'emoji', emojiData.emoji);
                                   updatePanel(panel.id, { activeEmojiPicker: null });
                                 }}
                               />
                             </div>
-                          </div>
+                          </div>,
+                          document.body
                         )}
                       </div>
                       <button
