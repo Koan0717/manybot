@@ -37,6 +37,7 @@ class TicketControlView(discord.ui.View):
         await interaction.response.send_message(embed=embed, view=TicketCloseConfirmView(), ephemeral=True)
 
 # --- スタンプ依頼 ---
+# --- スタンプ依頼 ---
 class EmblemRequestModal(discord.ui.Modal, title='スタンプ制作依頼'):
     details = discord.ui.TextInput(
         label='依頼内容の詳細',
@@ -57,18 +58,19 @@ class EmblemRequestModal(discord.ui.Modal, title='スタンプ制作依頼'):
         
         current_ticket_nums = []
         for c in guild.channels:
-            if c.name.startswith("ticket-"):
+            if c.name.startswith("stamp-") or c.name.startswith("ticket-"):
                 try:
-                    num = int(c.name.split("-")[1])
-                    current_ticket_nums.append(num)
-                except:
+                    parts = c.name.split("-")
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        current_ticket_nums.append(int(parts[1]))
+                except Exception:
                     pass
         
         ticket_num = 1
         while ticket_num in current_ticket_nums:
             ticket_num += 1
             
-        channel_name = f"ticket-{ticket_num:03d}"
+        channel_name = f"stamp-{ticket_num:03d}"
         
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -81,13 +83,23 @@ class EmblemRequestModal(discord.ui.Modal, title='スタンプ制作依頼'):
             role = discord.utils.get(guild.roles, name=role_name)
             if role:
                 roles_to_overwrite.append(role)
+                
+        admin_role_ids = get_setting(bot, "ADMIN_ROLE_IDS", guild.id) or []
+        for rid in admin_role_ids:
+            try:
+                role = guild.get_role(int(rid))
+                if role and role not in roles_to_overwrite:
+                    roles_to_overwrite.append(role)
+            except Exception:
+                pass
         
         manager_role = get_role_by_setting(bot, guild, "EMBLEM_MANAGER_ROLE_ID", EMBLEM_MANAGER_ROLE_NAME)
         if manager_role and manager_role not in roles_to_overwrite:
             roles_to_overwrite.append(manager_role)
             
         for role in roles_to_overwrite:
-            overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            if role:
+                overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
         try:
             category = interaction.channel.category
@@ -118,18 +130,22 @@ class EmblemRequestModal(discord.ui.Modal, title='スタンプ制作依頼'):
             await ticket_channel.send(content=mention_str, embed=embed, view=TicketControlView())
             await interaction.followup.send(f"✅ チケットを作成しました: {ticket_channel.mention}", ephemeral=True)
         except discord.Forbidden:
-            await interaction.followup.send("❌ エラー: Botにチャンネル作成権限（チャンネルの管理）がありません。サーバー権限を確認してください。", ephemeral=True)
+            await interaction.followup.send("❌ エラー: Botにチャンネル作成権限（チャンネルの管理）がありません。Botの権限設定を確認してください。", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"エラーが発生しました: {e}", ephemeral=True)
+            await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
 class EmblemSelectView(discord.ui.View):
     def __init__(self, bot, guild):
         super().__init__(timeout=60)
-        # EMBLEM_MASTER_ROLE_IDS（複数対応）を優先し、未設定なら旧EMBLEM_MASTER_ROLE_IDにフォールバック
-        master_role_ids = get_setting(bot, "EMBLEM_MASTER_ROLE_IDS") or []
-        master_roles = [guild.get_role(int(rid)) for rid in master_role_ids if guild.get_role(int(rid))]
+        master_role_ids = get_setting(bot, "EMBLEM_MASTER_ROLE_IDS", guild.id) or []
+        master_roles = []
+        for rid in master_role_ids:
+            try:
+                r = guild.get_role(int(rid))
+                if r: master_roles.append(r)
+            except Exception:
+                pass
         if not master_roles:
-            # 旧設定のフォールバック
             legacy_role = get_role_by_setting(bot, guild, "EMBLEM_MASTER_ROLE_ID", EMBLEM_MASTER_ROLE_NAME)
             if legacy_role:
                 master_roles = [legacy_role]
@@ -137,19 +153,29 @@ class EmblemSelectView(discord.ui.View):
         
         member_set = set()
         for role in master_roles:
-            member_set.update(role.members)
-        if manager_role: member_set.update(manager_role.members)
+            if role:
+                member_set.update(role.members)
+        if manager_role:
+            member_set.update(manager_role.members)
+            
+        # キャッシュ対策: member_set が空の場合、guild.members から該当ロール持ちを検索
+        if not member_set:
+            valid_role_ids = {r.id for r in master_roles if r}
+            if manager_role: valid_role_ids.add(manager_role.id)
+            for m in guild.members:
+                if any(r.id in valid_role_ids for r in m.roles):
+                    member_set.add(m)
         
         options = []
         for member in sorted(member_set, key=lambda m: m.display_name):
             options.append(discord.SelectOption(
-                label=member.display_name,
+                label=member.display_name[:100],
                 value=str(member.id),
-                description=f"{member.name}"
+                description=f"{member.name}"[:100]
             ))
         
         if not options:
-            self.add_item(discord.ui.Button(label="現在、依頼可能な製作者がいません", disabled=True))
+            self.add_item(discord.ui.Button(label="現在、依頼可能な製作者がいません（基本設定でロールを指定してください）", disabled=True))
         else:
             select = discord.ui.Select(
                 placeholder="担当する製作者を選択してください...",
@@ -159,12 +185,21 @@ class EmblemSelectView(discord.ui.View):
             self.add_item(select)
 
     async def select_callback(self, interaction: discord.Interaction):
-        user_id = int(interaction.data['values'][0])
-        target_member = interaction.guild.get_member(user_id)
-        if not target_member:
-            await interaction.response.send_message("メンバーが見つかりませんでした。", ephemeral=True)
-            return
-        await interaction.response.send_modal(EmblemRequestModal(target_member))
+        try:
+            user_id = int(interaction.data['values'][0])
+            target_member = interaction.guild.get_member(user_id)
+            if not target_member:
+                try:
+                    target_member = await interaction.guild.fetch_member(user_id)
+                except Exception:
+                    pass
+            if not target_member:
+                await interaction.response.send_message("メンバーが見つかりませんでした。", ephemeral=True)
+                return
+            await interaction.response.send_modal(EmblemRequestModal(target_member))
+        except Exception as e:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
 class EmblemRequestPanelView(discord.ui.View):
     def __init__(self):
@@ -681,12 +716,17 @@ class CustomTicketPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(style=discord.ButtonStyle.primary, custom_id="persistent_custom_ticket_panel_btn")
+    @discord.ui.button(label="チケット作成", style=discord.ButtonStyle.primary, emoji="🎫", custom_id="persistent_custom_ticket_panel_btn")
     async def request_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # DBクエリは一切行わず即座にモーダルを開く（3秒タイムアウト回避）
-        # パネル設定はon_submit時に取得する
-        modal = CustomTicketRequestModal(target_member=None, panel=None, channel_id=interaction.channel.id)
-        await interaction.response.send_modal(modal)
+        try:
+            modal = CustomTicketRequestModal(target_member=None, panel=None, channel_id=interaction.channel.id)
+            await interaction.response.send_modal(modal)
+        except Exception as e:
+            print(f"[CustomTicket Error] {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
 class CustomTicketSelectView(discord.ui.View):
     def __init__(self, options, panel):
@@ -749,12 +789,14 @@ class CustomTicketSelectView(discord.ui.View):
 class CustomTicketRequestModal(discord.ui.Modal):
     details = discord.ui.TextInput(label="ご用件・相談内容の詳細", style=discord.TextStyle.paragraph, placeholder="内容を詳しく入力してください。", required=True, max_length=1000)
 
-    def __init__(self, target_member, panel, extra_member=None, channel_id=None):
+    def __init__(self, target_member=None, panel=None, extra_member=None, channel_id=None):
         self.target_member = target_member
         self.panel = panel
         self.extra_member = extra_member
         self.channel_id = channel_id
-        title = (panel["panel_title"] if panel else "お問い合わせ")
+        title = "お問い合わせ"
+        if isinstance(panel, dict) and panel.get("panel_title"):
+            title = panel["panel_title"]
         if len(title) > 45:
             title = title[:42] + "..."
         super().__init__(title=title)
@@ -768,15 +810,28 @@ class CustomTicketRequestModal(discord.ui.Modal):
             self.panel = await database.get_custom_ticket_panel(interaction.guild.id, self.channel_id)
         if not self.panel:
             return await interaction.followup.send("❌ パネルの設定が見つかりません。設定が削除された可能性があります。", ephemeral=True)
+            
+        # ボタン利用可能ロールの確認
+        target_role_ids = self.panel.get("target_role_ids", [])
+        if target_role_ids:
+            try:
+                valid_target_ids = {int(rid) for rid in target_role_ids if str(rid).isdigit()}
+                user_role_ids = {r.id for r in interaction.user.roles}
+                if not (valid_target_ids & user_role_ids):
+                    return await interaction.followup.send("❌ このチケットを作成する権限がありません。", ephemeral=True)
+            except Exception:
+                pass
+
         prefix = self.panel.get("ticket_prefix") or "ticket"
         
         current_ticket_nums = []
         for c in guild.channels:
             if c.name.startswith(f"{prefix}-"):
                 try:
-                    num = int(c.name.split("-")[1])
-                    current_ticket_nums.append(num)
-                except:
+                    parts = c.name.split("-")
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        current_ticket_nums.append(int(parts[1]))
+                except Exception:
                     pass
         
         ticket_num = 1
@@ -795,21 +850,28 @@ class CustomTicketRequestModal(discord.ui.Modal):
             
         if getattr(self, 'extra_member', None):
             overwrites[self.extra_member] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            
         for role_name in ADMIN_ROLE_NAMES:
             role = discord.utils.get(guild.roles, name=role_name)
             if role:
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
                 
-        admin_role_ids = get_setting(bot, "ADMIN_ROLE_IDS") or []
+        admin_role_ids = get_setting(bot, "ADMIN_ROLE_IDS", guild.id) or []
         for rid in admin_role_ids:
-            role = guild.get_role(rid)
-            if role:
-                overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            try:
+                role = guild.get_role(int(rid))
+                if role:
+                    overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            except Exception:
+                pass
                 
         for rid in self.panel.get("mention_role_ids", []):
-            role = guild.get_role(rid)
-            if role:
-                overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            try:
+                role = guild.get_role(int(rid))
+                if role:
+                    overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            except Exception:
+                pass
                 
         try:
             category = interaction.channel.category
@@ -820,7 +882,7 @@ class CustomTicketRequestModal(discord.ui.Modal):
                 reason=f"Custom ticket ({prefix}) for {interaction.user.display_name}"
             )
             
-            title_text = f"🎫 {self.panel['panel_title']} チケット"
+            title_text = f"🎫 {self.panel.get('panel_title', 'チケット')} チケット"
             desc_text = f"**作成者:** {interaction.user.mention}\n"
             if self.target_member:
                 desc_text += f"**担当者:** {self.target_member.mention}\n"
@@ -838,16 +900,19 @@ class CustomTicketRequestModal(discord.ui.Modal):
             if getattr(self, 'extra_member', None):
                 mentions.append(self.extra_member.mention)
             for rid in self.panel.get("mention_role_ids", []):
-                role = guild.get_role(rid)
-                if role:
-                    mentions.append(role.mention)
+                try:
+                    role = guild.get_role(int(rid))
+                    if role:
+                        mentions.append(role.mention)
+                except Exception:
+                    pass
                     
             mention_str = " ".join(mentions)
             
             await ticket_channel.send(content=mention_str, embed=embed, view=TicketControlView())
             await interaction.followup.send(f"✅ チケットを作成しました: {ticket_channel.mention}", ephemeral=True)
         except discord.Forbidden:
-            await interaction.followup.send("❌ エラー: Botにチャンネル作成権限（チャンネルの管理）がありません。サーバー権限を確認してください。", ephemeral=True)
+            await interaction.followup.send("❌ エラー: Botにチャンネル作成権限（チャンネルの管理）がありません。Botの権限設定を確認してください。", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
