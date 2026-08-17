@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
+import ChannelSelect from '@/components/ChannelSelect';
 import {
   Bot,
   Activity,
@@ -605,18 +606,14 @@ export default function BotGuildDashboardPage({
               <label className="font-tech text-xs text-purple-300 font-bold uppercase">
                 チケット通知先チャンネル
               </label>
-              <select
+              <ChannelSelect
+                label="チケット通知先チャンネル"
+                placeholder="発言したチャンネル / DM (デフォルト)"
+                channels={textChannels}
                 value={settings.ticket_notify_channel_id || ''}
-                onChange={(e) => updateSetting('ticket_notify_channel_id', e.target.value)}
-                className="w-full bg-black/60 border border-purple-900/60 focus:border-purple-400 rounded p-3 text-sm text-white font-tech mecha-input-purple outline-none"
-              >
-                <option value="">発言したチャンネル / DM (デフォルト)</option>
-                {textChannels.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.name} ({c.id})
-                  </option>
-                ))}
-              </select>
+                onChange={(id: any) => updateSetting('ticket_notify_channel_id', id || '')}
+                multiple={false}
+              />
             </div>
           </div>
         </div>
@@ -1297,18 +1294,14 @@ export default function BotGuildDashboardPage({
               <label className="font-tech text-xs text-purple-300 font-bold uppercase">
                 パネル送信先チャンネル
               </label>
-              <select
+              <ChannelSelect
+                label="パネル送信先チャンネル"
+                placeholder="チャンネルを選択してください..."
+                channels={textChannels}
                 value={panelChannelId}
-                onChange={(e) => setPanelChannelId(e.target.value)}
-                className="w-full bg-black/60 border border-purple-900/60 focus:border-purple-400 rounded p-3 text-sm text-white font-tech mecha-input-purple outline-none"
-              >
-                <option value="">チャンネルを選択してください</option>
-                {textChannels.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.name} ({c.id})
-                  </option>
-                ))}
-              </select>
+                onChange={(id: any) => setPanelChannelId(id || '')}
+                multiple={false}
+              />
             </div>
 
             <div className="space-y-2">

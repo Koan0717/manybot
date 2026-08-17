@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Select from 'react-select';
 import { toast } from 'react-hot-toast';
 import { Trophy, Save, Shield, MessageSquare, Mic, EyeOff, CheckCircle2, XCircle, Power } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import { useSyncStatus, SyncStatusCards, SyncBadge } from '@/lib/useSyncStatus';
 import RoleSelect from '@/components/RoleSelect';
+import ChannelSelect from '@/components/ChannelSelect';
 
 export default function RankSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -94,38 +94,6 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
 
   const textChannels = channels.filter((c) => c.type === 0 || c.type === 2); // Text and Voice
   const categories = channels.filter((c) => c.type === 4); // Categories
-
-  const textChannelOptions = textChannels.map((c) => ({
-    value: c.id,
-    label: `${c.type === 0 ? '#' : '🔊'} ${c.name}`,
-  }));
-  const categoryOptions = categories.map((c) => ({
-    value: c.id,
-    label: `📁 ${c.name}`,
-  }));
-
-  const customStyles = {
-    control: (base: any) => ({
-      ...base,
-      backgroundColor: '#18181b',
-      borderColor: '#3f3f46',
-      color: 'white',
-    }),
-    menu: (base: any) => ({
-      ...base,
-      backgroundColor: '#18181b',
-      zIndex: 9999,
-      borderColor: '#3f3f46',
-    }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isFocused ? '#27272a' : '#18181b',
-      color: 'white',
-      ':active': { backgroundColor: '#3f3f46' },
-    }),
-    multiValue: (base: any) => ({ ...base, backgroundColor: '#27272a' }),
-    multiValueLabel: (base: any) => ({ ...base, color: 'white' }),
-  };
 
   if (loading) return <div className="text-zinc-400 p-8">読み込み中...</div>;
 
@@ -301,29 +269,25 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
 
             <div>
               <label className="block text-xs font-tech text-zinc-400 mb-1.5 uppercase">対象チャンネル</label>
-              <Select
-                isMulti
-                options={textChannelOptions}
-                value={textChannelOptions.filter((o) => settings.whitelist_channel_ids.includes(o.value))}
-                onChange={(selected: any) =>
-                  setSettings({ ...settings, whitelist_channel_ids: selected.map((s: any) => s.value) })
-                }
-                styles={customStyles}
+              <ChannelSelect
+                label="対象チャンネル"
                 placeholder="チャンネルを選択..."
+                channels={textChannels}
+                value={settings.whitelist_channel_ids}
+                onChange={(ids: any) => setSettings({ ...settings, whitelist_channel_ids: ids })}
+                multiple={true}
               />
             </div>
 
             <div>
               <label className="block text-xs font-tech text-zinc-400 mb-1.5 uppercase">対象カテゴリ</label>
-              <Select
-                isMulti
-                options={categoryOptions}
-                value={categoryOptions.filter((o) => settings.whitelist_category_ids.includes(o.value))}
-                onChange={(selected: any) =>
-                  setSettings({ ...settings, whitelist_category_ids: selected.map((s: any) => s.value) })
-                }
-                styles={customStyles}
+              <ChannelSelect
+                label="対象カテゴリ"
                 placeholder="カテゴリを選択..."
+                channels={categories}
+                value={settings.whitelist_category_ids}
+                onChange={(ids: any) => setSettings({ ...settings, whitelist_category_ids: ids })}
+                multiple={true}
               />
             </div>
           </div>
@@ -339,29 +303,25 @@ export default function RankSettingsPage({ params }: { params: { guild_id: strin
 
             <div>
               <label className="block text-xs font-tech text-zinc-400 mb-1.5 uppercase">除外チャンネル</label>
-              <Select
-                isMulti
-                options={textChannelOptions}
-                value={textChannelOptions.filter((o) => settings.blacklist_channel_ids.includes(o.value))}
-                onChange={(selected: any) =>
-                  setSettings({ ...settings, blacklist_channel_ids: selected.map((s: any) => s.value) })
-                }
-                styles={customStyles}
+              <ChannelSelect
+                label="除外チャンネル"
                 placeholder="チャンネルを選択..."
+                channels={textChannels}
+                value={settings.blacklist_channel_ids}
+                onChange={(ids: any) => setSettings({ ...settings, blacklist_channel_ids: ids })}
+                multiple={true}
               />
             </div>
 
             <div>
               <label className="block text-xs font-tech text-zinc-400 mb-1.5 uppercase">除外カテゴリ</label>
-              <Select
-                isMulti
-                options={categoryOptions}
-                value={categoryOptions.filter((o) => settings.blacklist_category_ids.includes(o.value))}
-                onChange={(selected: any) =>
-                  setSettings({ ...settings, blacklist_category_ids: selected.map((s: any) => s.value) })
-                }
-                styles={customStyles}
+              <ChannelSelect
+                label="除外カテゴリ"
                 placeholder="カテゴリを選択..."
+                channels={categories}
+                value={settings.blacklist_category_ids}
+                onChange={(ids: any) => setSettings({ ...settings, blacklist_category_ids: ids })}
+                multiple={true}
               />
             </div>
           </div>

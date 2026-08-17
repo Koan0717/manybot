@@ -18,6 +18,7 @@ interface RoleSelectProps {
   roles: RoleOption[];
   multiple?: boolean;
   loading?: boolean;
+  disabled?: boolean;
   className?: string;
 }
 
@@ -29,6 +30,7 @@ export default function RoleSelect({
   roles = [],
   multiple = false,
   loading = false,
+  disabled = false,
   className = '',
 }: RoleSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -202,8 +204,13 @@ export default function RoleSelect({
   return (
     <div className={className}>
       <div
-        className="bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 cursor-pointer hover:border-zinc-500 min-h-[44px] flex flex-wrap gap-1.5 items-center justify-between transition-all"
+        className={`bg-zinc-900 border rounded-lg p-2.5 min-h-[44px] flex flex-wrap gap-1.5 items-center justify-between transition-all ${
+          disabled
+            ? 'opacity-40 cursor-not-allowed border-zinc-800 pointer-events-none'
+            : 'border-zinc-700 cursor-pointer hover:border-zinc-500'
+        }`}
         onClick={() => {
+          if (disabled) return;
           setIsOpen(true);
           setSearchTerm('');
         }}

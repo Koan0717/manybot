@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Save, AlertCircle, Coins, ListFilter, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
-import Select from 'react-select';
 import { toast } from 'react-hot-toast';
 import { useSyncStatus, SyncBadge, SyncStatusCards } from '@/lib/useSyncStatus';
+import ChannelSelect from '@/components/ChannelSelect';
 
 interface DiscordChannel {
   id: string;
@@ -96,48 +96,27 @@ export default function VCCoinsSettingsPage() {
   const vcChannels = discordChannels.filter(c => c.type === 2);
   const categories = discordChannels.filter(c => c.type === 4);
 
-  const customStyles = {
-    control: (base: any) => ({
-      ...base,
-      backgroundColor: '#111827',
-      borderColor: '#374151',
-      color: '#fff',
-    }),
-    menu: (base: any) => ({
-      ...base,
-      backgroundColor: '#1f2937',
-    }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isFocused ? '#374151' : 'transparent',
-      color: '#fff',
-    }),
-    multiValue: (base: any) => ({
-      ...base,
-      backgroundColor: '#4b5563',
-    }),
-    multiValueLabel: (base: any) => ({
-      ...base,
-      color: '#fff',
-    }),
-  };
-
   if (loading) {
-    return <div className="flex justify-center items-center h-64 text-indigo-400">Loading...</div>;
+    return <div className="flex justify-center items-center h-64 text-purple-400">Loading...</div>;
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-600">
-          VCコイン獲得制限
-        </h1>
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+      {/* Header */}
+      <div className="flex justify-between items-center bg-gray-900/80 p-6 rounded-2xl border border-purple-500/20 backdrop-blur-sm sticky top-0 z-10 shadow-2xl">
+        <div>
+          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 flex items-center gap-3">
+            <Coins className="text-purple-500" size={32} />
+            VCコイン獲得設定
+          </h1>
+          <p className="text-gray-400 mt-2 text-sm">ボイスチャンネル滞在によるコイン報酬のルールを設定します。</p>
+        </div>
         <div className="flex items-center gap-3">
           <SyncBadge state={sync.state} botOnline={sync.botOnline} />
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center space-x-2 px-6 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-lg shadow-lg shadow-indigo-500/25 transition-all disabled:opacity-50"
+            className="flex items-center space-x-2 px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl shadow-[0_0_15px_rgba(139,92,246,0.5)] transition-all disabled:opacity-50 font-bold"
           >
             <Save size={20} />
             <span>{saving ? '保存中...' : '設定を保存'}</span>
@@ -148,35 +127,36 @@ export default function VCCoinsSettingsPage() {
       <SyncStatusCards sync={sync} />
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-lg flex items-center space-x-3">
+        <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl flex items-center space-x-3">
           <AlertCircle size={20} />
           <span>{error}</span>
         </div>
       )}
 
-      {/* ON / OFF トグルスイッチ */}
-      <div className="bg-gray-800/50 border border-indigo-500/20 p-6 rounded-xl flex items-center justify-between shadow-lg">
+      {/* Main Switch */}
+      <div className="bg-gray-800/50 border border-purple-500/20 p-6 rounded-xl flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-white">VCコイン獲得制限の有効化</h2>
-          <p className="text-sm text-gray-400 mt-1">
-            {settings.is_enabled 
-              ? '【有効】指定されたホワイトリスト/ブラックリストのルールに基づいてVCコインが獲得できます。' 
-              : '【無効】獲得制限は適用されず、すべてのVCチャンネルでVCコインを獲得できます。'}
-          </p>
+          <h2 className="text-xl font-semibold text-white">VCコイン獲得機能</h2>
+          <p className="text-gray-400 text-sm mt-1">有効にすると、ユーザーがVCに参加している時間に応じて定期的にコインを付与します。</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setSettings(prev => ({ ...prev, is_enabled: !prev.is_enabled }))}
-          className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.is_enabled ? 'bg-indigo-600' : 'bg-gray-700'}`}
-        >
-          <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.is_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
-        </button>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={settings.is_enabled}
+            onChange={(e) => setSettings(prev => ({ ...prev, is_enabled: e.target.checked }))}
+            className="sr-only peer"
+          />
+          <div className="w-14 h-7 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-purple-600"></div>
+        </label>
       </div>
 
-      <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 transition-opacity duration-200 ${settings.is_enabled ? 'opacity-100' : 'opacity-50'}`}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-800/50 border border-indigo-500/20 p-6 rounded-xl space-y-6">
-          <div className="flex items-center space-x-3 text-xl font-semibold text-indigo-300 border-b border-indigo-500/20 pb-4">
-            <ListFilter className="text-indigo-400" />
+      {/* Configuration Grid */}
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 transition-opacity duration-200 ${settings.is_enabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+        
+        {/* Whitelist / Blacklist Mode */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-800/50 border border-purple-500/20 p-6 rounded-xl space-y-6">
+          <div className="flex items-center space-x-3 text-xl font-semibold text-purple-300 border-b border-purple-500/20 pb-4">
+            <ListFilter className="text-purple-400" />
             <h2>制限モード</h2>
           </div>
 
@@ -184,19 +164,23 @@ export default function VCCoinsSettingsPage() {
             <label className="flex items-center space-x-3 cursor-pointer">
               <input
                 type="radio"
+                name="mode"
                 checked={settings.is_whitelist_mode === true}
                 onChange={() => setSettings(prev => ({ ...prev, is_whitelist_mode: true }))}
-                className="form-radio h-5 w-5 text-indigo-500 bg-gray-900 border-gray-700"
+                className="form-radio h-5 w-5 text-purple-600 bg-gray-900 border-gray-700"
               />
               <span className="text-gray-200 font-medium text-lg">ホワイトリスト形式</span>
             </label>
             <p className="text-sm text-gray-400 pl-8">
-              指定されたチャンネル/カテゴリにいる場合のみVCコインを獲得できます。
+              指定されたチャンネル/カテゴリにいる場合のみVCコインを獲得できます。（指定なしの場合は全VCが対象）
             </p>
 
-            <label className="flex items-center space-x-3 cursor-pointer pt-4">
+            <div className="border-t border-gray-700/50 my-4" />
+
+            <label className="flex items-center space-x-3 cursor-pointer">
               <input
                 type="radio"
+                name="mode"
                 checked={settings.is_whitelist_mode === false}
                 onChange={() => setSettings(prev => ({ ...prev, is_whitelist_mode: false }))}
                 className="form-radio h-5 w-5 text-indigo-500 bg-gray-900 border-gray-700"
@@ -209,6 +193,7 @@ export default function VCCoinsSettingsPage() {
           </div>
         </motion.div>
 
+        {/* Target selection */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-gray-800/50 border border-purple-500/20 p-6 rounded-xl space-y-6">
           <div className="flex items-center space-x-3 text-xl font-semibold text-purple-300 border-b border-purple-500/20 pb-4">
             <Coins className="text-purple-400" />
@@ -218,38 +203,31 @@ export default function VCCoinsSettingsPage() {
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">対象カテゴリ (複数選択可)</label>
-              <Select
-                isMulti
-                options={categories.map(c => ({ value: c.id, label: c.name }))}
-                value={settings.categories.map(id => {
-                  const cat = categories.find(c => c.id === id);
-                  return { value: id, label: cat ? cat.name : id };
-                })}
-                onChange={(selected) => setSettings(prev => ({ ...prev, categories: selected.map(s => s.value) }))}
-                styles={customStyles}
+              <ChannelSelect
+                label="対象カテゴリ"
                 placeholder="カテゴリを選択..."
-                noOptionsMessage={() => "カテゴリが見つかりません"}
+                channels={categories}
+                value={settings.categories}
+                onChange={(ids: any) => setSettings(prev => ({ ...prev, categories: ids }))}
+                multiple={true}
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">対象VCチャンネル (複数選択可)</label>
-              <Select
-                isMulti
-                options={vcChannels.map(c => ({ value: c.id, label: c.name }))}
-                value={settings.channels.map(id => {
-                  const ch = vcChannels.find(c => c.id === id);
-                  return { value: id, label: ch ? ch.name : id };
-                })}
-                onChange={(selected) => setSettings(prev => ({ ...prev, channels: selected.map(s => s.value) }))}
-                styles={customStyles}
+              <ChannelSelect
+                label="対象VCチャンネル"
                 placeholder="VCを選択..."
-                noOptionsMessage={() => "VCが見つかりません"}
+                channels={vcChannels}
+                value={settings.channels}
+                onChange={(ids: any) => setSettings(prev => ({ ...prev, channels: ids }))}
+                multiple={true}
               />
             </div>
           </div>
         </motion.div>
 
+        {/* Reward settings */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-gray-800/50 border border-green-500/20 p-6 rounded-xl space-y-6 md:col-span-2">
           <div className="flex items-center space-x-3 text-xl font-semibold text-green-300 border-b border-green-500/20 pb-4">
             <Clock className="text-green-400" />

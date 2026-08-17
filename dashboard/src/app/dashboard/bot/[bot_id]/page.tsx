@@ -15,6 +15,7 @@ import {
   RefreshCw,
   CircuitBoard,
   Trash2,
+  Search,
 } from 'lucide-react';
 
 interface BotInfo {
@@ -40,8 +41,18 @@ export default function BotGuildSelectPage({ params }: { params: { bot_id: strin
 
   const [botInfo, setBotInfo] = useState<BotInfo | null>(null);
   const [guilds, setGuilds] = useState<Guild[]>([]);
+  const [guildSearchTerm, setGuildSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const filteredGuilds = guilds.filter((g) => {
+    if (!guildSearchTerm.trim()) return true;
+    const term = guildSearchTerm.toLowerCase();
+    return (
+      (g.name && g.name.toLowerCase().includes(term)) ||
+      (g.id && String(g.id).includes(term))
+    );
+  });
 
   const fetchData = async () => {
     setLoading(true);
@@ -146,18 +157,38 @@ export default function BotGuildSelectPage({ params }: { params: { bot_id: strin
 
         {/* Guild List */}
         <div className="mecha-corners mecha-scan-wrap mecha-grid-bg bg-neutral-900/80 border border-violet-900/40 mecha-clip shadow-[0_0_35px_-10px_rgba(139,92,246,0.35)] p-6 md:p-8">
-          <div className="flex items-center justify-between mb-6 pb-3 border-b border-violet-900/30">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-3 border-b border-violet-900/30">
             <h2 className="font-mecha text-lg font-bold flex items-center gap-2 text-zinc-200">
               <span className="mecha-led w-1.5 h-1.5 rounded-full bg-violet-500 text-violet-500" />
-              参加サーバー一覧
+              参加サーバー一覧 ({filteredGuilds.length}/{guilds.length})
             </h2>
-            <button
-              onClick={fetchData}
-              disabled={loading}
-              className="font-tech text-xs text-zinc-500 hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> 更新
-            </button>
+            <div className="flex items-center gap-2">
+              <div className="relative min-w-[220px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input
+                  type="text"
+                  placeholder="🔍 サーバー名 / IDで検索..."
+                  value={guildSearchTerm}
+                  onChange={(e) => setGuildSearchTerm(e.target.value)}
+                  className="w-full bg-black/60 border border-zinc-700 rounded-lg pl-9 pr-10 py-1.5 text-xs text-white focus:outline-none focus:border-violet-500 transition-colors font-tech placeholder:text-zinc-500"
+                />
+                {guildSearchTerm && (
+                  <button
+                    onClick={() => setGuildSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-500 hover:text-zinc-300 font-tech"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={fetchData}
+                disabled={loading}
+                className="font-tech text-xs text-zinc-500 hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors disabled:opacity-50 flex-shrink-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> 更新
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -179,7 +210,7 @@ export default function BotGuildSelectPage({ params }: { params: { bot_id: strin
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {guilds.map((guild) => (
+              {filteredGuilds.map((guild) => (
                 <button
                   key={guild.id}
                   onClick={() => router.push(`/dashboard/bot/${bot_id}/${guild.id}`)}
@@ -206,9 +237,9 @@ export default function BotGuildSelectPage({ params }: { params: { bot_id: strin
                 </button>
               ))}
 
-              {guilds.length === 0 && !error && (
+              {filteredGuilds.length === 0 && !error && (
                 <div className="col-span-full text-center py-14 text-zinc-500 font-tech text-sm">
-                  このBotが参加しているサーバーが見つかりません。
+                  {guildSearchTerm ? `「${guildSearchTerm}」に一致するサーバーは見つかりませんでした。` : 'このBotが参加しているサーバーが見つかりません。'}
                 </div>
               )}
             </div>

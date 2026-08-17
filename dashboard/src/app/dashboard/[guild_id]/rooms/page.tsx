@@ -1,9 +1,9 @@
 'use client';
 import { useState, useEffect } from 'react';
-import Select from 'react-select';
 import { toast } from 'react-hot-toast';
 import { DoorOpen } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import ChannelSelect from '@/components/ChannelSelect';
 
 const defaultPrices = {
   "宿": {
@@ -101,8 +101,8 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
         }
         setRolePrices(mergedRolePrices);
       }
-      if (!channelsData.error) {
-        setChannels(channelsData.filter((c: any) => c.type === 0)); // Text channels
+      if (!channelsData.error && Array.isArray(channelsData)) {
+        setChannels(channelsData);
       }
     }).catch(err => {
       console.error(err);
@@ -212,19 +212,8 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
     }));
   };
 
-  const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
-
-  const customStyles = {
-    control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white', minHeight: '38px' }),
-    menu: (base: any) => ({ ...base, backgroundColor: '#27272a', zIndex: 9999 }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isFocused ? '#3f3f46' : '#27272a',
-      color: 'white',
-      ':active': { backgroundColor: '#52525b' }
-    }),
-    singleValue: (base: any) => ({ ...base, color: 'white' })
-  };
+  const textChannels = channels.filter(c => c.type === 0);
+  const categoryChannels = channels.filter(c => c.type === 4);
 
   if (loading) return <div className="text-zinc-400">読み込み中...</div>;
 
@@ -403,12 +392,13 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
                   <p className="text-xs text-zinc-400 mt-1">{panel.desc}</p>
                 </div>
               <div className="w-full md:w-64">
-                <Select
-                  options={channelOptions}
-                  value={channelOptions.find(o => o.value === selectedChannels[panel.id])}
-                  onChange={(selected: any) => setSelectedChannels(prev => ({ ...prev, [panel.id]: selected?.value || '' }))}
-                  styles={customStyles}
+                <ChannelSelect
+                  label="設置先チャンネル"
                   placeholder="設置先チャンネル..."
+                  channels={textChannels}
+                  value={selectedChannels[panel.id] || ''}
+                  onChange={(val: any) => setSelectedChannels(prev => ({ ...prev, [panel.id]: val || '' }))}
+                  multiple={false}
                 />
               </div>
                 <button
@@ -455,12 +445,13 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
                     <div className="bg-zinc-800 p-3 rounded border border-zinc-700">
                       <span className="block text-sm text-white font-bold mb-2">作成先のカテゴリー</span>
                       <p className="text-xs text-zinc-400 mb-2">指定しない場合は、パネルと同じカテゴリーに部屋が作られます。</p>
-                      <Select
-                        options={[{value: '', label: '指定なし (パネルと同じカテゴリー)'}, ...channels.filter(c => c.type === 4).map(c => ({ value: c.id, label: `📁 ${c.name}` }))]}
-                        value={panelConfigs[panel.id].categoryId ? {value: panelConfigs[panel.id].categoryId, label: `📁 ${channels.find(c => c.id === panelConfigs[panel.id].categoryId)?.name || '不明'}`} : {value: '', label: '指定なし (パネルと同じカテゴリー)'}}
-                        onChange={(selected: any) => setPanelConfigs((prev: any) => ({ ...prev, [panel.id]: { ...prev[panel.id], categoryId: selected?.value || '' } }))}
-                        styles={customStyles}
-                        placeholder="カテゴリーを選択..."
+                      <ChannelSelect
+                        label="作成先のカテゴリー"
+                        placeholder="指定なし (パネルと同じカテゴリー)"
+                        channels={categoryChannels}
+                        value={panelConfigs[panel.id].categoryId || ''}
+                        onChange={(val: any) => setPanelConfigs((prev: any) => ({ ...prev, [panel.id]: { ...prev[panel.id], categoryId: val || '' } }))}
+                        multiple={false}
                       />
                     </div>
                     

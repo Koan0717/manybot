@@ -18,6 +18,7 @@ import {
   GitBranch,
   RefreshCw,
   GitCommit,
+  Search,
 } from 'lucide-react';
 import AddBotModal from '@/components/AddBotModal';
 
@@ -42,10 +43,20 @@ interface RegisteredBot {
 export default function Home() {
   const router = useRouter();
   const [guilds, setGuilds] = useState<any[]>([]);
+  const [guildSearchTerm, setGuildSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [status, setStatus] = useState<{ supabase: ConnStatus; render: ConnStatus; clientId: string | null } | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
+
+  const filteredGuilds = guilds.filter((g) => {
+    if (!guildSearchTerm.trim()) return true;
+    const term = guildSearchTerm.toLowerCase();
+    return (
+      (g.name && g.name.toLowerCase().includes(term)) ||
+      (g.id && String(g.id).includes(term))
+    );
+  });
 
   // 登録済みBot
   const [registeredBots, setRegisteredBots] = useState<RegisteredBot[]>([]);
@@ -217,10 +228,32 @@ export default function Home() {
 
         {/* Main Bot Guild List */}
         <div className="mecha-corners mecha-scan-wrap mecha-grid-bg bg-neutral-900/80 border border-red-900/40 mecha-clip shadow-[0_0_35px_-10px_rgba(255,43,61,0.35)] p-6 md:p-8">
-          <h2 className="font-mecha text-lg font-bold mb-6 pb-3 border-b border-red-900/30 flex items-center gap-2 text-zinc-200">
-            <span className="mecha-led w-1.5 h-1.5 rounded-full bg-red-500 text-red-500" />
-            サーバー一覧
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-3 border-b border-red-900/30">
+            <h2 className="font-mecha text-lg font-bold flex items-center gap-2 text-zinc-200">
+              <span className="mecha-led w-1.5 h-1.5 rounded-full bg-red-500 text-red-500" />
+              サーバー一覧 ({filteredGuilds.length}/{guilds.length})
+            </h2>
+
+            {/* リアルタイムサーバー検索バー */}
+            <div className="relative min-w-[240px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="🔍 サーバー名 / IDで検索..."
+                value={guildSearchTerm}
+                onChange={(e) => setGuildSearchTerm(e.target.value)}
+                className="w-full bg-black/60 border border-zinc-700 rounded-lg pl-9 pr-10 py-1.5 text-xs text-white focus:outline-none focus:border-red-500 transition-colors font-tech placeholder:text-zinc-500"
+              />
+              {guildSearchTerm && (
+                <button
+                  onClick={() => setGuildSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-500 hover:text-zinc-300 font-tech"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
 
           {error && (
             <div className="mecha-clip-sm bg-red-950/50 text-red-200 p-4 mb-4 border border-red-900/60 flex items-start gap-3">
@@ -241,7 +274,7 @@ export default function Home() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {guilds.map((guild) => (
+              {filteredGuilds.map((guild) => (
                 <button
                   key={guild.id}
                   onClick={() => handleSelectGuild(guild.id)}
@@ -266,9 +299,9 @@ export default function Home() {
                 </button>
               ))}
 
-              {guilds.length === 0 && !error && (
+              {filteredGuilds.length === 0 && !error && (
                 <div className="col-span-full text-center py-14 text-zinc-500 font-tech text-sm">
-                  参加しているサーバーが見つかりません。
+                  {guildSearchTerm ? `「${guildSearchTerm}」に一致するサーバーは見つかりませんでした。` : '参加しているサーバーが見つかりません。'}
                 </div>
               )}
             </div>

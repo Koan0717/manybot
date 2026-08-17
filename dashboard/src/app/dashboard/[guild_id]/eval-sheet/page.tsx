@@ -4,92 +4,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { ClipboardCheck } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
-
-function CustomChannelSelect({ multiple, value, onChange, channels, loading }: { multiple: boolean, value: any, onChange: (val: any) => void, channels: any[], loading: boolean }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const valArray = multiple ? (Array.isArray(value) ? value : []) : (value ? [value] : []);
-
-  if (loading) return <div className="bg-zinc-900 border border-zinc-700 rounded p-2 text-zinc-500 text-sm h-10 flex items-center">読み込み中...</div>;
-
-  const toggleOption = (id: string) => {
-    if (multiple) {
-      if (valArray.includes(id)) {
-        onChange(valArray.filter((v: string) => v !== id));
-      } else {
-        onChange([...valArray, id]);
-      }
-    } else {
-      onChange(id);
-      setIsOpen(false);
-    }
-  };
-
-  const selectedChannels = valArray.map((id: string) => {
-    const found = channels.find(c => String(c.id) === String(id));
-    if (found) return found;
-    return { id, name: `不明なチャンネル (${id})`, isInvalid: true };
-  });
-
-  return (
-    <div className="relative">
-      <div 
-        className="bg-zinc-900 border border-zinc-700 rounded p-2 min-h-10 cursor-pointer flex flex-wrap gap-2 items-center"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        {selectedChannels.length === 0 ? (
-          <span className="text-zinc-500 text-sm">未設定</span>
-        ) : (
-          selectedChannels.map(c => (
-            <span key={c.id} className={`px-2 py-1 rounded text-sm flex items-center border ${c.isInvalid ? 'bg-red-950/80 text-red-300 border-red-700' : 'bg-zinc-800 text-white border-zinc-600'}`}>
-              # {c.name}
-              {multiple && (
-                <button 
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); toggleOption(c.id); }}
-                  className="ml-2 text-zinc-400 hover:text-red-400 font-bold"
-                >&times;</button>
-              )}
-            </span>
-          ))
-        )}
-      </div>
-
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
-          <div className="absolute z-20 mt-1 w-full bg-zinc-900 border border-zinc-700 rounded shadow-xl max-h-60 overflow-y-auto">
-            {!multiple && (
-              <div 
-                className="p-3 hover:bg-zinc-800 cursor-pointer text-zinc-400 italic border-b border-zinc-800"
-                onClick={() => { onChange(''); setIsOpen(false); }}
-              >
-                未設定にする
-              </div>
-            )}
-            {channels.map(c => {
-              const isSelected = valArray.includes(c.id);
-              return (
-                <div 
-                  key={c.id} 
-                  className={`p-3 hover:bg-zinc-800 cursor-pointer flex items-center transition-colors ${isSelected ? 'bg-zinc-800' : ''}`}
-                  onClick={() => toggleOption(c.id)}
-                >
-                  {multiple && (
-                    <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-zinc-500'}`}>
-                      {isSelected && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-                    </div>
-                  )}
-                  <span className={isSelected ? 'font-bold text-white' : 'text-zinc-300'}># {c.name}</span>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
+import ChannelSelect from '@/components/ChannelSelect';
 
 export default function EvalSheetSettings({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -108,23 +23,36 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/guilds/${guildId}/channels`).then(res => res.json()),
-      fetch(`/api/guilds/${guildId}/eval-sheet`).then(res => res.json())
-    ])
-    .then(([channelsData, settingsData]) => {
-      if (!channelsData.error) {
+      fetch(`/api/guilds/${guildId}/eval-sheet`).then(res => res.ok ? res.json() : {}),
+      fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : [])
+    ]).then(([settingsData, channelsData]: [any, any]) => {
+      if (settingsData && !settingsData.error) {
+        setSettings({
+          is_enabled: settingsData.is_enabled ?? true,
+          auto_generate_period: settingsData.auto_generate_period ?? true,
+          auto_fail_on_deadline: settingsData.auto_fail_on_deadline ?? false,
+          forum_channel_ids: settingsData.forum_channel_ids ?? [],
+          self_intro_channel_ids: settingsData.self_intro_channel_ids ?? [],
+          ENABLE_MINUS_PENALTY: settingsData.ENABLE_MINUS_PENALTY ?? false,
+          MINUS_PUNISHMENT_TYPE: settingsData.MINUS_PUNISHMENT_TYPE ?? 'evaluation_failure'
+        });
+      }
+      if (channelsData && !channelsData.error && Array.isArray(channelsData)) {
         setChannels(channelsData);
       }
-      if (!settingsData.error) {
-        setSettings(settingsData);
-      }
-    })
-    .catch(console.error)
-    .finally(() => setLoading(false));
+    }).catch(err => {
+      console.error(err);
+      toast.error('データの取得に失敗しました');
+    }).finally(() => {
+      setLoading(false);
+    });
   }, [guildId]);
 
   const handleChange = (key: string, value: any) => {
-    setSettings((prev: any) => ({ ...prev, [key]: value }));
+    setSettings((prev: any) => ({
+      ...prev,
+      [key]: value
+    }));
   };
 
   const handleSave = async () => {
@@ -132,33 +60,43 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
     try {
       const res = await fetch(`/api/guilds/${guildId}/eval-sheet`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify(settings)
       });
       const data = await res.json();
-      if (data.success) {
-        toast.success('設定を保存しました！');
+      if (res.ok && data.success) {
+        toast.success('設定を保存しました');
       } else {
-        toast.error('エラーが発生しました: ' + data.error);
+        toast.error('エラーが発生しました: ' + (data.error || '保存に失敗しました'));
       }
     } catch (e) {
-      toast.error('保存に失敗しました');
+      toast.error('通信エラーが発生しました');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <div className="text-white p-8">読み込み中...</div>;
+  if (loading) {
+    return <div className="text-zinc-400 p-8">読み込み中...</div>;
+  }
 
   return (
-    <div className="p-8 max-w-4xl mx-auto space-y-8 animate-fade-in">
-      <PageHeader icon={ClipboardCheck} title="評価関連設定" subtitle="自己紹介での評価シートの自動作成や、通貨がマイナスになった際のペナルティなどを設定します" guildId={guildId} healthKey="eval-sheet" />
+    <div className="max-w-4xl mx-auto pb-20 space-y-6">
+      <PageHeader 
+        icon={ClipboardCheck} 
+        title="評価シート自動生成設定" 
+        subtitle="自己紹介チャンネルへの投稿を検知し、指定したフォーラムへ評価シートのスレッドを自動作成します" 
+        guildId={guildId} 
+        healthKey="eval-sheet" 
+      />
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6 shadow-xl">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6">
         <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
           <div>
-            <h2 className="text-lg font-semibold text-white">評価シート自動生成の有効化</h2>
-            <p className="text-sm text-zinc-400">この機能をONにすると、自己紹介時に自動でスレッドが生成されます。</p>
+            <h2 className="text-lg font-semibold text-white">評価シート自動生成機能</h2>
+            <p className="text-sm text-zinc-400">この機能をONにすると、指定したチャンネルでの投稿を監視して自動作成を行います。</p>
           </div>
           <button 
             type="button"
@@ -169,46 +107,24 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
           </button>
         </div>
 
-        <div className="space-y-4 p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-white">評価期間の自動生成</h2>
-              <p className="text-sm text-zinc-400">ONにすると、自己紹介時に評価期間を設定して評価シート（スレッド）に期間を記載します。OFFにすると期間は記載されません。</p>
-            </div>
-            <button 
-              type="button"
-              onClick={() => handleChange('auto_generate_period', !settings.auto_generate_period)}
-              className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.auto_generate_period ? 'bg-blue-600' : 'bg-zinc-700'}`}
-            >
-              <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.auto_generate_period ? 'translate-x-6' : 'translate-x-0'}`} />
-            </button>
+        <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+          <div>
+            <h2 className="text-lg font-semibold text-white">評価期間の自動設定</h2>
+            <p className="text-sm text-zinc-400">シート作成時に自動で評価期間（2週間など）を設定します。</p>
           </div>
-
-          {settings.auto_generate_period && (
-            <div className="pt-2 border-t border-zinc-700/30 flex items-center justify-between">
-              <div>
-                <label className="text-sm font-medium text-zinc-200">評価期間（日数）</label>
-                <p className="text-xs text-zinc-400">自己紹介投稿時から何日間を評価期間とするかを設定します（例: 6日、14日など）。</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min="1"
-                  max="365"
-                  value={settings.evaluation_duration_days !== undefined ? settings.evaluation_duration_days : 14}
-                  onChange={(e) => handleChange('evaluation_duration_days', parseInt(e.target.value) || 14)}
-                  className="w-24 bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-white text-right focus:outline-none focus:border-blue-500"
-                />
-                <span className="text-sm text-zinc-400">日間</span>
-              </div>
-            </div>
-          )}
+          <button 
+            type="button"
+            onClick={() => handleChange('auto_generate_period', !settings.auto_generate_period)}
+            className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.auto_generate_period ? 'bg-blue-600' : 'bg-zinc-700'}`}
+          >
+            <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.auto_generate_period ? 'translate-x-6' : 'translate-x-0'}`} />
+          </button>
         </div>
 
         <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
           <div>
-            <h2 className="text-lg font-semibold text-white">締切時の自動評価落ち</h2>
-            <p className="text-sm text-zinc-400">評価期間の締切日になった際、自動で「評価落ち」のロール処理を行います。</p>
+            <h2 className="text-lg font-semibold text-white">期限切れ時の自動「不合格」処理</h2>
+            <p className="text-sm text-zinc-400">評価期間を過ぎても結果が出ていない場合、自動的に不合格（評価落ち）として処理します。</p>
           </div>
           <button 
             type="button"
@@ -254,12 +170,13 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
               対象の自己紹介チャンネル (複数選択可)
             </label>
             <p className="text-xs text-zinc-400 mb-2">このチャンネルでメッセージが送信された際に、自動生成の対象となります。</p>
-            <CustomChannelSelect
-              multiple={true}
+            <ChannelSelect
+              label="対象の自己紹介チャンネル"
+              placeholder="チャンネルを選択..."
               value={settings.self_intro_channel_ids}
-              onChange={(val) => handleChange('self_intro_channel_ids', val)}
+              onChange={(val: any) => handleChange('self_intro_channel_ids', val)}
               channels={channels}
-              loading={loading}
+              multiple={true}
             />
           </div>
 
@@ -268,12 +185,13 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
               評価シートを作成するフォーラム (複数選択可)
             </label>
             <p className="text-xs text-zinc-400 mb-2">上記の自己紹介チャンネルで投稿があった際、ここに評価スレッドが作成されます。</p>
-            <CustomChannelSelect
-              multiple={true}
+            <ChannelSelect
+              label="評価シートを作成するフォーラム"
+              placeholder="フォーラムを選択..."
               value={settings.forum_channel_ids}
-              onChange={(val) => handleChange('forum_channel_ids', val)}
+              onChange={(val: any) => handleChange('forum_channel_ids', val)}
               channels={channels.filter(c => c.type === 15)} // 15 is GUILD_FORUM type in Discord
-              loading={loading}
+              multiple={true}
             />
           </div>
         </div>

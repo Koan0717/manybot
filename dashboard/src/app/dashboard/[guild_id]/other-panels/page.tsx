@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
-import Select from 'react-select';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { toast } from 'react-hot-toast';
 import { LayoutPanelTop, Plus, Trash2, CheckCircle2, Send } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import ChannelSelect from '@/components/ChannelSelect';
+import RoleSelect from '@/components/RoleSelect';
 
 type ReactionRoleEntry = { role_id: string; emoji: string };
 
@@ -127,21 +128,6 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
     }
   };
 
-  const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}`, color: r.color }));
-  const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
-
-  const customStyles = {
-    control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white' }),
-    menu: (base: any) => ({ ...base, backgroundColor: '#27272a', zIndex: 9999 }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isFocused ? '#3f3f46' : '#27272a',
-      color: state.data && state.data.color ? `#${state.data.color.toString(16).padStart(6, '0')}` : 'white',
-      ':active': { backgroundColor: '#52525b' }
-    }),
-    singleValue: (base: any) => ({ ...base, color: 'white' })
-  };
-
   if (loading) return <div className="text-zinc-400">読み込み中...</div>;
 
   return (
@@ -191,12 +177,13 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
             <div className={`space-y-5 ${panel.installed ? 'opacity-50 pointer-events-none' : ''}`}>
               <div>
                 <label className="block text-sm font-bold text-zinc-300 mb-2">送信先チャンネル <span className="text-red-500">*</span></label>
-                <Select
-                  options={channelOptions}
-                  value={channelOptions.find(o => o.value === panel.channel_id) || null}
-                  onChange={(val: any) => updatePanel(panel.id, { channel_id: val ? val.value : '' })}
-                  styles={customStyles}
+                <ChannelSelect
+                  label="送信先チャンネル"
                   placeholder="パネルを送信するチャンネルを選択..."
+                  value={panel.channel_id}
+                  onChange={(val: any) => updatePanel(panel.id, { channel_id: val || '' })}
+                  channels={channels}
+                  multiple={false}
                 />
               </div>
 
@@ -206,7 +193,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                   type="text"
                   value={panel.panel_title}
                   onChange={e => updatePanel(panel.id, { panel_title: e.target.value })}
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all font-tech"
                   placeholder="例: ロール付与パネル"
                 />
               </div>
@@ -216,7 +203,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                 <textarea
                   value={panel.panel_description}
                   onChange={e => updatePanel(panel.id, { panel_description: e.target.value })}
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all min-h-[100px]"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all min-h-[100px] font-tech"
                   placeholder="例: 以下のリアクションを押してロールを取得してください。"
                 />
               </div>
@@ -227,12 +214,13 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                   {panel.reaction_roles.map((rr, index) => (
                     <div key={index} className="flex flex-col md:flex-row items-start md:items-center gap-3 bg-zinc-900 p-3 rounded-lg border border-zinc-700">
                       <div className="flex-1 w-full">
-                        <Select
-                          options={roleOptions}
-                          value={roleOptions.find(o => o.value === rr.role_id) || null}
-                          onChange={(val: any) => updateReactionRole(panel.id, index, 'role_id', val ? val.value : '')}
-                          styles={customStyles}
-                          placeholder="付与するロール..."
+                        <RoleSelect
+                          label="付与ロール"
+                          placeholder="付与するロールを選択..."
+                          value={rr.role_id}
+                          onChange={(val: any) => updateReactionRole(panel.id, index, 'role_id', val || '')}
+                          roles={roles}
+                          multiple={false}
                         />
                       </div>
                       <div className="w-full md:w-64 relative">
@@ -241,7 +229,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                             type="text"
                             value={rr.emoji}
                             onChange={e => updateReactionRole(panel.id, index, 'emoji', e.target.value)}
-                            className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500"
+                            className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500 font-tech"
                             placeholder="絵文字 (例: 🍎)"
                           />
                           <button
@@ -281,7 +269,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                 </div>
                 <button
                   onClick={() => addReactionRole(panel.id)}
-                  className="mt-3 text-sm text-red-400 hover:text-red-300 font-bold flex items-center gap-1"
+                  className="mt-3 text-sm text-red-400 hover:text-red-300 font-bold flex items-center gap-1 font-tech"
                 >
                   ＋ さらに追加する
                 </button>
@@ -303,7 +291,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
 
         <button
           onClick={addPanel}
-          className="w-full border-2 border-dashed border-zinc-700 hover:border-red-600/60 text-zinc-500 hover:text-red-400 py-5 rounded-xl transition-colors flex items-center justify-center gap-2 font-bold"
+          className="w-full border-2 border-dashed border-zinc-700 hover:border-red-600/60 text-zinc-500 hover:text-red-400 py-5 rounded-xl transition-colors flex items-center justify-center gap-2 font-bold font-tech"
         >
           <Plus size={18} />
           別の場所にパネルを追加する

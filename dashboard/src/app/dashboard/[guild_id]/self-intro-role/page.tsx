@@ -1,8 +1,10 @@
-﻿'use client';
+'use client';
 import { useState, useEffect } from 'react';
 import { Save, Loader2, Eye, Shield, Hash, Bell, UserPlus } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import PageHeader from '@/components/PageHeader';
+import ChannelSelect from '@/components/ChannelSelect';
+import RoleSelect from '@/components/RoleSelect';
 
 interface Channel { id: string; name: string; type: number; }
 interface Role { id: string; name: string; color: number; }
@@ -92,8 +94,6 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
     }
   };
 
-  const roleColor = (color: number) => color ? `#${color.toString(16).padStart(6, '0')}` : '#99aab5';
-
   if (loading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin text-zinc-500" size={32} /></div>;
 
   return (
@@ -121,34 +121,40 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
         <div>
           <label className="block text-sm font-medium text-zinc-300 mb-2">自己紹介チャンネル <span className="text-red-400">*</span></label>
           <p className="text-xs text-zinc-500 mb-2">テンプレートの記入を監視するチャンネルです。</p>
-          <select value={channelId} onChange={e => setChannelId(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-white focus:outline-none focus:border-red-500">
-            <option value="">-- 選択してください --</option>
-            {textChannels.map(ch => <option key={ch.id} value={ch.id}>#{ch.name}</option>)}
-          </select>
+          <ChannelSelect
+            label="自己紹介チャンネル"
+            placeholder="チャンネルを選択..."
+            channels={textChannels}
+            value={channelId}
+            onChange={(id: any) => setChannelId(id || '')}
+            multiple={false}
+          />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-zinc-300 mb-2"><Bell size={14} className="inline mr-1 text-zinc-400" />入室案内の送信先チャンネル（任意）</label>
           <p className="text-xs text-zinc-500 mb-2">入室時のメンション案内を送るチャンネルです。未選択の場合は自己紹介チャンネルに直接送ります。</p>
-          <select value={welcomeChannelId} onChange={e => setWelcomeChannelId(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-white focus:outline-none focus:border-red-500">
-            <option value="">-- 未設定（自己紹介チャンネルに送る）--</option>
-            {textChannels.map(ch => <option key={ch.id} value={ch.id}>#{ch.name}</option>)}
-          </select>
+          <ChannelSelect
+            label="入室案内の送信先チャンネル"
+            placeholder="未設定（自己紹介チャンネルに送る）"
+            channels={textChannels}
+            value={welcomeChannelId}
+            onChange={(id: any) => setWelcomeChannelId(id || '')}
+            multiple={false}
+          />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-zinc-300 mb-2"><Shield size={14} className="inline mr-1 text-zinc-400" />付与するロール <span className="text-red-400">*</span></label>
           <p className="text-xs text-zinc-500 mb-2">自己紹介完成後に付与するロールです。</p>
-          <select value={roleId} onChange={e => setRoleId(e.target.value)} className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-white focus:outline-none focus:border-red-500">
-            <option value="">-- 選択してください --</option>
-            {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-          </select>
-          {roleId && (
-            <div className="mt-2 flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: roleColor(roles.find(r => r.id === roleId)?.color ?? 0) }} />
-              <span className="text-sm text-zinc-300">{roles.find(r => r.id === roleId)?.name}</span>
-            </div>
-          )}
+          <RoleSelect
+            label="付与するロール"
+            placeholder="ロールを選択..."
+            roles={roles}
+            value={roleId}
+            onChange={(id: any) => setRoleId(id || '')}
+            multiple={false}
+          />
         </div>
       </div>
 
@@ -156,58 +162,57 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">自己紹介テンプレート</h2>
-          <button onClick={() => setShowPreview(!showPreview)} className="flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors">
-            <Eye size={15} />{showPreview ? 'テンプレートを編集' : 'チェック項目プレビュー'}
+          <button
+            type="button"
+            onClick={() => setShowPreview(!showPreview)}
+            className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 bg-zinc-800 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Eye size={14} />
+            {showPreview ? '編集に戻る' : '判定キーワードを確認'}
           </button>
         </div>
-        <p className="text-xs text-zinc-500">【〇〇】 や 〇〇： 形式で書いた各行がチェック項目になります。<br />例: 【名前】、【年齢】、招待者：、趣味：</p>
+        <p className="text-xs text-zinc-400 leading-relaxed">
+          ユーザーが入室した際に送信されるテンプレートです。<br />
+          行頭の <code className="bg-zinc-800 px-1 py-0.5 rounded text-red-400">【項目名】</code> または <code className="bg-zinc-800 px-1 py-0.5 rounded text-red-400">項目名：</code> が自動で<strong>必須キーワード</strong>として抽出されます。<br />
+          ユーザーがすべての項目を書いて送信した時のみ、指定ロールが付与されます。
+        </p>
 
         {showPreview ? (
-          <div className="space-y-3">
-            <div className="text-sm text-zinc-400 mb-2">抽出されるチェック項目：</div>
-            {keywords.length === 0 ? (
-              <div className="text-zinc-500 text-sm italic">テンプレートを入力してください</div>
-            ) : (
-              <div className="space-y-2">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 space-y-3">
+            <div className="text-xs text-zinc-400 font-semibold">検出された必須キーワード ({keywords.length}個):</div>
+            {keywords.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
                 {keywords.map((kw, i) => (
-                  <div key={i} className="flex items-center gap-2 p-2.5 bg-zinc-950/60 rounded-lg border border-zinc-800">
-                    <div className="w-5 h-5 rounded-full bg-red-600/20 border border-red-500/50 flex items-center justify-center text-xs text-red-400 font-bold flex-shrink-0">{i + 1}</div>
-                    <code className="text-sm text-red-300 font-mono">{kw}</code>
-                    <span className="text-xs text-zinc-500 ml-auto">がメッセージに含まれるかチェック</span>
-                  </div>
+                  <span key={i} className="text-xs bg-red-950/60 border border-red-800 text-red-300 px-2.5 py-1 rounded-md font-mono">
+                    {kw}
+                  </span>
                 ))}
               </div>
+            ) : (
+              <p className="text-xs text-zinc-600">キーワードが見つかりませんでした。【項目名】の形式で行頭に記入してください。</p>
             )}
-            <div className="mt-3 p-3 bg-blue-950/30 border border-blue-900/50 rounded-lg text-xs text-blue-300">
-              💡 上記の全項目がメッセージ内に含まれていると自己紹介完成と判定されます。
-            </div>
           </div>
         ) : (
           <textarea
             value={template}
             onChange={e => setTemplate(e.target.value)}
-            placeholder={'例:\n【名前】\n【年齢】\n趣味：\n招待者：'}
             rows={8}
-            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-white font-mono text-sm focus:outline-none focus:border-red-500 resize-y"
+            placeholder={"【名前】\n【一言】\n【好きなゲーム】"}
+            className="w-full bg-zinc-950 border border-zinc-700 rounded-lg p-3 text-white font-mono text-sm focus:outline-none focus:border-red-500 leading-relaxed"
           />
         )}
       </div>
 
-      {/* 動作プレビュー */}
-      {channelId && template && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <h2 className="text-lg font-bold mb-4">入室時の案内メッセージプレビュー</h2>
-          <div className="bg-zinc-950 rounded-lg p-4 border border-zinc-800 font-mono text-sm text-zinc-200 whitespace-pre-wrap">
-            {`🎉 @新メンバー さん、ようこそ！\n\nまず #${textChannels.find(c => c.id === channelId)?.name ?? '自己紹介'} で以下のテンプレートを使って自己紹介をお願いします📝\n全ての項目を埋めて送信すると、ロールが付与されます！\n\n` + '```\n' + template + '\n```'}
-          </div>
-        </div>
-      )}
-
       {/* 保存ボタン */}
-      <div className="flex justify-end pb-8">
-        <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-6 py-3 rounded-lg transition-colors">
-          {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-          設定を保存する
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-lg transition-colors"
+        >
+          {saving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
+          設定を保存
         </button>
       </div>
     </div>

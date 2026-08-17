@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { Save, AlertCircle, Plus, Trash2, Award, Coins, Shield, Users, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-hot-toast';
+import RoleSelect from '@/components/RoleSelect';
 
 interface DiscordRole {
   id: string;
@@ -160,8 +161,7 @@ export default function LevelRewardsPage() {
         if ((copy[i].condition_role_id || null) === conditionRoleId) {
           seen++;
           if (seen === indexInScope) {
-            const isNumberField = field === 'level' || field === 'coins';
-            copy[i] = { ...copy[i], [field]: isNumberField ? Number(value) || 0 : value };
+            copy[i] = { ...copy[i], [field]: value };
             break;
           }
         }
@@ -175,25 +175,24 @@ export default function LevelRewardsPage() {
     updater(prev => {
       let seen = -1;
       return prev.filter(r => {
-        if ((r.condition_role_id || null) !== conditionRoleId) return true;
-        seen++;
-        return seen !== indexInScope;
+        if ((r.condition_role_id || null) === conditionRoleId) {
+          seen++;
+          return seen !== indexInScope;
+        }
+        return true;
       });
     });
   };
 
   const addRoleGroup = () => {
-    if (!newGroupRoleId) return;
-    if (roleGroups.includes(newGroupRoleId)) {
-      toast.error('既に追加されているロールです');
-      return;
-    }
+    if (!newGroupRoleId || roleGroups.includes(newGroupRoleId)) return;
     setRoleGroups(prev => [...prev, newGroupRoleId]);
     setNewGroupRoleId('');
   };
 
   const removeRoleGroup = (roleId: string) => {
     setRoleGroups(prev => prev.filter(id => id !== roleId));
+    // Also remove rewards associated with this group
     setTcRewards(prev => prev.filter(r => r.condition_role_id !== roleId));
     setVcRewards(prev => prev.filter(r => r.condition_role_id !== roleId));
   };
@@ -232,9 +231,9 @@ export default function LevelRewardsPage() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="flex flex-col md:flex-row gap-4 p-4 bg-gray-900/50 rounded-lg border border-gray-700/50"
+                className="flex flex-col md:flex-row gap-4 p-4 bg-gray-900/50 rounded-lg border border-gray-700/50 items-end"
               >
-                <div className="flex-1 space-y-2">
+                <div className="w-full md:w-32 space-y-2">
                   <label className="text-xs text-gray-400">到達レベル</label>
                   <div className="flex items-center space-x-2">
                     <span className="text-purple-400 font-bold">Lv.</span>
@@ -248,24 +247,19 @@ export default function LevelRewardsPage() {
                   </div>
                 </div>
 
-                <div className="flex-[2] space-y-2">
+                <div className="flex-1 w-full space-y-2">
                   <label className="text-xs text-gray-400">付与ロール (任意)</label>
-                  <div className="flex items-center space-x-2">
-                    <Shield size={16} className="text-blue-400" />
-                    <select
-                      value={reward.role_id}
-                      onChange={(e) => updateReward(type, conditionRoleId, i, 'role_id', e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-purple-500"
-                    >
-                      <option value="">-- ロールなし --</option>
-                      {roles.map(r => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <RoleSelect
+                    label="付与ロール"
+                    placeholder="ロールを選択 (未選択でなし)..."
+                    roles={roles}
+                    value={reward.role_id}
+                    onChange={(id: any) => updateReward(type, conditionRoleId, i, 'role_id', id || '')}
+                    multiple={false}
+                  />
                 </div>
 
-                <div className="flex-1 space-y-2">
+                <div className="w-full md:w-40 space-y-2">
                   <label className="text-xs text-gray-400">報酬コイン (任意)</label>
                   <div className="flex items-center space-x-2">
                     <Coins size={16} className="text-yellow-400" />
@@ -279,21 +273,19 @@ export default function LevelRewardsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-end pb-1">
-                  <button
-                    onClick={() => removeReward(type, conditionRoleId, i)}
-                    className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                </div>
+                <button
+                  onClick={() => removeReward(type, conditionRoleId, i)}
+                  className="p-2.5 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+                >
+                  <Trash2 size={18} />
+                </button>
               </motion.div>
             ))}
           </AnimatePresence>
 
           {rewards.length === 0 && (
-            <div className="text-center text-gray-500 py-8">
-              報酬ルールが設定されていません。<br/>「ルール追加」ボタンから追加してください。
+            <div className="text-center text-gray-500 py-6 border border-dashed border-gray-700 rounded-xl">
+              設定されている報酬がありません。「ルール追加」ボタンから追加してください。
             </div>
           )}
         </div>
@@ -304,7 +296,7 @@ export default function LevelRewardsPage() {
   const availableRolesForNewGroup = roles.filter(r => !roleGroups.includes(r.id));
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-600">
           レベル到達報酬設定
@@ -399,20 +391,20 @@ export default function LevelRewardsPage() {
 
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-gray-800/50 border border-cyan-500/20 p-4 rounded-xl flex items-center gap-3">
             <Shield size={18} className="text-cyan-400 flex-shrink-0" />
-            <select
-              value={newGroupRoleId}
-              onChange={(e) => setNewGroupRoleId(e.target.value)}
-              className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
-            >
-              <option value="">-- 対象ロールを選択 --</option>
-              {availableRolesForNewGroup.map(r => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </select>
+            <div className="flex-1">
+              <RoleSelect
+                label="対象ロール"
+                placeholder="対象ロールを選択..."
+                roles={availableRolesForNewGroup}
+                value={newGroupRoleId}
+                onChange={(id: any) => setNewGroupRoleId(id || '')}
+                multiple={false}
+              />
+            </div>
             <button
               onClick={addRoleGroup}
               disabled={!newGroupRoleId}
-              className="flex items-center space-x-2 px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 rounded-lg transition-all text-sm disabled:opacity-40"
+              className="flex items-center space-x-2 px-4 py-3 bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 rounded-lg transition-all text-sm disabled:opacity-40 font-bold whitespace-nowrap"
             >
               <Plus size={16} />
               <span>ロール別報酬を追加</span>

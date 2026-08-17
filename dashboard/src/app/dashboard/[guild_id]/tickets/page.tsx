@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
-import Select from 'react-select';
 import { toast } from 'react-hot-toast';
 import { Ticket } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import ChannelSelect from '@/components/ChannelSelect';
+import RoleSelect from '@/components/RoleSelect';
 
 export default function TicketsSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -100,72 +101,61 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
     setIsModalOpen(true);
   };
 
-  const savePanel = async () => {
-    if (!formData.channel_id || !formData.panel_title) {
-      toast('設置先チャンネルとタイトルを入力してください');
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingPanel(null);
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.channel_id) {
+      toast.error('設置先チャンネルを選択してください');
       return;
     }
+    if (!formData.panel_title) {
+      toast.error('パネルのタイトルを入力してください');
+      return;
+    }
+
     setSaving(true);
-    
     try {
       const res = await fetch(`/api/guilds/${guildId}/tickets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'save', 
-          panel: formData 
+        body: JSON.stringify({
+          action: 'save',
+          ...formData
         })
       });
-      
       const data = await res.json();
       if (res.ok && data.success) {
-        // Update local state
+        toast.success('チケットパネル設定を保存しました');
+        // Update local list
         setPanels(prev => {
-          const exists = prev.find(p => String(p.channel_id) === String(formData.channel_id));
+          const exists = prev.some(p => p.channel_id === formData.channel_id);
           if (exists) {
-            return prev.map(p => String(p.channel_id) === String(formData.channel_id) ? formData : p);
+            return prev.map(p => p.channel_id === formData.channel_id ? { ...p, ...formData } : p);
+          } else {
+            return [...prev, { ...formData }];
           }
-          return [...prev, formData];
         });
-        setIsModalOpen(false);
-        toast.success('保存しました！');
+        closeModal();
       } else {
-        toast.error('保存に失敗しました: ' + (data.error || '不明なエラー'));
+        toast.error(`保存に失敗しました: ${data.error || '不明なエラー'}`);
       }
-    } catch (e: any) {
-      toast.error('エラーが発生しました: ' + (e.message || String(e)));
+    } catch (e) {
+      toast.error('通信エラーが発生しました');
     } finally {
       setSaving(false);
     }
   };
 
-  const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}`, color: r.color }));
-  const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
   const panelTypeOptions = [
-    { value: 'custom_ticket', label: '標準のチケット (カスタム設定)' },
-    { value: 'emblem_req', label: 'スタンプ依頼' },
-    { value: 'confession_req', label: '告解・相談' },
-    { value: 'inquiry_req', label: 'お問い合わせ' },
-    { value: 'interview_req', label: '入界手続き (面接)' },
+    { value: 'custom_ticket', label: '汎用お問い合わせチケット' },
+    { value: 'confession', label: '懺悔室 (告解司祭用)' },
+    { value: 'interview', label: '面接チケット' },
     { value: 'anonymous_chat', label: '匿名チャット' }
   ];
-
-  const customStyles = {
-    control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white' }),
-    menu: (base: any) => ({ ...base, backgroundColor: '#27272a', zIndex: 9999 }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isFocused ? '#3f3f46' : '#27272a',
-      color: state.data?.color ? `#${state.data.color.toString(16).padStart(6, '0')}` : 'white',
-      ':active': { backgroundColor: '#52525b' }
-    }),
-    singleValue: (base: any) => ({ ...base, color: 'white' }),
-    multiValue: (base: any) => ({ ...base, backgroundColor: '#3f3f46' }),
-    multiValueLabel: (base: any, state: any) => ({
-      ...base,
-      color: state.data?.color ? `#${state.data.color.toString(16).padStart(6, '0')}` : 'white'
-    })
-  };
 
   if (loading) return <div className="text-zinc-400">読み込み中...</div>;
 
@@ -187,14 +177,15 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         </div>
       )}
 
+      {/* Panels List */}
       <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl">
-        <p className="text-sm text-zinc-400 mb-6">
+        <p className="text-sm text-zinc-400 mb-6 font-tech">
           特定のチャンネルに専用の「お問い合わせ・チケット作成ボタン」を設置できます。
           (設定を保存後、Botが指定されたチャンネルにパネルメッセージを送信します)
         </p>
 
         {panels.length === 0 ? (
-          <p className="text-zinc-500 text-center py-8">設定されているチケットパネルはありません。</p>
+          <p className="text-zinc-500 text-center py-8 font-tech">設定されているチケットパネルはありません。</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {panels.map(panel => {
@@ -202,26 +193,26 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
               return (
                 <div key={panel.channel_id} className="bg-zinc-900 border border-zinc-700 rounded-lg p-5 hover:border-zinc-500 transition-colors">
                   <div className="flex justify-between items-start mb-3">
-                    <h3 className="text-lg font-bold text-white flex items-center">
+                    <h3 className="text-lg font-bold text-white flex items-center font-tech">
                       <span className="text-red-500 mr-2">#</span>
                       {ch ? ch.name : panel.channel_id}
                     </h3>
-                    <div className="space-x-2">
+                    <div className="space-x-2 font-tech">
                       <button onClick={() => openModal(panel)} className="text-blue-400 hover:text-blue-300 text-sm">編集</button>
                       <button onClick={() => handleDelete(panel.channel_id)} className="text-red-500 hover:text-red-400 text-sm">削除</button>
                     </div>
                   </div>
                   <div className="bg-zinc-800 p-3 rounded text-sm mb-3 border border-zinc-700/50">
-                    <p className="font-bold text-white mb-1">{panel.panel_title}</p>
-                    <p className="text-zinc-400 whitespace-pre-wrap text-xs">{panel.panel_description}</p>
-                    <div className="mt-3 inline-block bg-zinc-700 px-3 py-1.5 rounded font-bold text-white cursor-not-allowed">
+                    <p className="font-bold text-white mb-1 font-tech">{panel.panel_title}</p>
+                    <p className="text-zinc-400 whitespace-pre-wrap text-xs font-tech">{panel.panel_description}</p>
+                    <div className="mt-3 inline-block bg-zinc-700 px-3 py-1.5 rounded font-bold text-white cursor-not-allowed font-tech">
                       {panel.button_emoji} {panel.button_label}
                     </div>
                   </div>
-                  <div className="text-xs text-zinc-500 space-y-1 mb-4">
+                  <div className="text-xs text-zinc-500 space-y-1 mb-4 font-tech">
                     <p>チケットの接頭辞: <span className="text-zinc-300 font-mono">{panel.ticket_prefix}-001</span></p>
                     <p>メンション: {panel.mention_role_ids?.length || 0} 個のロール</p>
-                    <p>利用可能: {panel.target_role_ids?.length || '全員'}</p>
+                    <p>利用可能: {panel.target_role_ids?.length ? `${panel.target_role_ids.length} 個のロール` : '全員'}</p>
                   </div>
                   <button
                     onClick={async () => {
@@ -230,15 +221,15 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                         const res = await fetch(`/api/guilds/${guildId}/rooms`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ action: 'deploy_panel', channel_id: panel.channel_id, panel_type: 'custom_ticket' }) // Bot側でDBから取得して判定するためこのままでOK
+                          body: JSON.stringify({ action: 'deploy_panel', channel_id: panel.channel_id, panel_type: 'custom_ticket' })
                         });
-                        if (res.ok) toast('パネルの設置をリクエストしました！');
+                        if (res.ok) toast.success('パネルの設置をリクエストしました！');
                         else toast.error('リクエストに失敗しました。');
                       } catch (e) {
                         toast.error('エラーが発生しました。');
                       }
                     }}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-bold shadow transition-colors"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-bold shadow transition-colors font-tech"
                   >
                     🚀 このチャンネルにパネルを設置する
                   </button>
@@ -253,135 +244,140 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-zinc-900 rounded-lg shadow-2xl border border-zinc-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-white mb-6 border-b border-zinc-800 pb-2">
+            <form onSubmit={handleFormSubmit} className="p-6">
+              <h2 className="text-2xl font-bold text-white mb-6 border-b border-zinc-800 pb-2 font-mecha">
                 {editingPanel ? 'パネルを編集' : '新規パネル作成'}
               </h2>
 
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">設置先チャンネル <span className="text-red-500">*</span></label>
-                  <Select
-                    options={channelOptions}
-                    value={channelOptions.find(o => o.value === formData.channel_id)}
-                    onChange={(val: any) => setFormData({ ...formData, channel_id: val ? val.value : '' })}
-                    styles={customStyles}
-                    placeholder="チャンネルを選択..."
-                    isDisabled={!!editingPanel}
-                  />
+                  <label className="block text-sm text-zinc-400 mb-1 font-tech">設置先チャンネル <span className="text-red-500">*</span></label>
+                  {editingPanel ? (
+                    <div className="bg-zinc-800/80 border border-zinc-700 rounded-lg p-3 text-zinc-400 text-sm font-tech">
+                      #{channels.find(c => c.id === formData.channel_id)?.name || formData.channel_id} (変更不可)
+                    </div>
+                  ) : (
+                    <ChannelSelect
+                      label="設置先チャンネル"
+                      placeholder="チャンネルを選択..."
+                      channels={channels}
+                      value={formData.channel_id}
+                      onChange={(id: any) => setFormData({ ...formData, channel_id: id || '' })}
+                      multiple={false}
+                    />
+                  )}
                 </div>
 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">パネルの種類（機能） <span className="text-red-500">*</span></label>
-                  <Select
-                    options={panelTypeOptions}
-                    value={panelTypeOptions.find(o => o.value === formData.panel_type) || panelTypeOptions[0]}
-                    onChange={(val: any) => setFormData({ ...formData, panel_type: val ? val.value : 'custom_ticket' })}
-                    styles={customStyles}
-                    placeholder="種類を選択..."
-                  />
-                  <p className="text-xs text-zinc-500 mt-1">選択した種類に応じた機能がボタンに割り当てられます。</p>
+                  <label className="block text-sm text-zinc-400 mb-1 font-tech">パネルの種類（機能） <span className="text-red-500">*</span></label>
+                  <select
+                    value={formData.panel_type}
+                    onChange={(e) => setFormData({ ...formData, panel_type: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-3 text-white focus:outline-none focus:border-red-500 font-tech"
+                  >
+                    {panelTypeOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-zinc-500 mt-1 font-tech">選択した種類に応じた機能がボタンに割り当てられます。</p>
                 </div>
 
                 <div>
-                  {editingPanel && <p className="text-xs text-red-400 mt-1">※既存パネルの設置先チャンネルは変更できません</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm text-zinc-400 mb-1">パネルのタイトル <span className="text-red-500">*</span></label>
+                  <label className="block text-sm text-zinc-400 mb-1 font-tech">パネルのタイトル <span className="text-red-500">*</span></label>
                   <input 
                     type="text" 
                     value={formData.panel_title} 
                     onChange={e => setFormData({...formData, panel_title: e.target.value})}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500" 
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500 font-tech" 
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">パネルの説明文</label>
+                  <label className="block text-sm text-zinc-400 mb-1 font-tech">パネルの説明文</label>
                   <textarea 
                     value={formData.panel_description} 
                     onChange={e => setFormData({...formData, panel_description: e.target.value})}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500 h-24" 
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500 h-24 font-tech" 
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-zinc-400 mb-1">ボタンの文字</label>
+                    <label className="block text-sm text-zinc-400 mb-1 font-tech">ボタンの文字</label>
                     <input 
                       type="text" 
                       value={formData.button_label} 
                       onChange={e => setFormData({...formData, button_label: e.target.value})}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500" 
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500 font-tech" 
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm text-zinc-400 mb-1">ボタンの絵文字</label>
+                    <label className="block text-sm text-zinc-400 mb-1 font-tech">ボタンの絵文字</label>
                     <input 
                       type="text" 
                       value={formData.button_emoji} 
                       onChange={e => setFormData({...formData, button_emoji: e.target.value})}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500" 
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500 font-tech" 
                       placeholder="🎫, ❓ など"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">チケット作成時にメンションするロール</label>
-                  <Select
-                    isMulti
-                    options={roleOptions}
-                    value={roleOptions.filter(o => formData.mention_role_ids.includes(o.value))}
-                    onChange={(selected: any) => setFormData({...formData, mention_role_ids: selected.map((s: any) => s.value)})}
-                    styles={customStyles}
+                  <label className="block text-sm text-zinc-400 mb-1 font-tech">チケット作成時にメンションするロール</label>
+                  <RoleSelect
+                    label="メンションロール"
                     placeholder="ロールを選択..."
+                    roles={roles}
+                    value={formData.mention_role_ids}
+                    onChange={(ids: any) => setFormData({ ...formData, mention_role_ids: ids })}
+                    multiple={true}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">ボタンを押せるロール (指定なしで全員)</label>
-                  <Select
-                    isMulti
-                    options={roleOptions}
-                    value={roleOptions.filter(o => formData.target_role_ids.includes(o.value))}
-                    onChange={(selected: any) => setFormData({...formData, target_role_ids: selected.map((s: any) => s.value)})}
-                    styles={customStyles}
-                    placeholder="ロールを選択..."
+                  <label className="block text-sm text-zinc-400 mb-1 font-tech">ボタンを押せるロール (指定なしで全員)</label>
+                  <RoleSelect
+                    label="利用可能ロール"
+                    placeholder="ロールを選択 (未選択で全員)..."
+                    roles={roles}
+                    value={formData.target_role_ids}
+                    onChange={(ids: any) => setFormData({ ...formData, target_role_ids: ids })}
+                    multiple={true}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-1">チケットチャンネルの接頭辞</label>
+                  <label className="block text-sm text-zinc-400 mb-1 font-tech">チケットチャンネルの接頭辞</label>
                   <input 
                     type="text" 
                     value={formData.ticket_prefix} 
                     onChange={e => setFormData({...formData, ticket_prefix: e.target.value})}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-red-500" 
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-red-500 font-tech" 
                     placeholder="ticket"
                   />
-                  <p className="text-xs text-zinc-500 mt-1">例:「support」と入力すると「support-001」という名前のチャンネルが作成されます</p>
+                  <p className="text-xs text-zinc-500 mt-1 font-tech">例:「support」と入力すると「support-001」という名前のチャンネルが作成されます</p>
                 </div>
               </div>
 
               <div className="mt-8 flex justify-end space-x-3">
                 <button 
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded text-zinc-400 hover:text-white transition-colors"
+                  type="button" 
+                  onClick={closeModal}
+                  className="bg-zinc-700 hover:bg-zinc-600 text-white px-5 py-2 rounded font-bold transition-colors font-tech"
                 >
                   キャンセル
                 </button>
                 <button 
-                  onClick={savePanel}
+                  type="submit" 
                   disabled={saving}
-                  className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-6 py-2 rounded font-bold shadow transition-colors"
+                  className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-6 py-2 rounded font-bold shadow-lg transition-colors"
                 >
-                  {saving ? '保存中...' : '保存する'}
+                  {saving ? '保存中...' : '設定を保存'}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
