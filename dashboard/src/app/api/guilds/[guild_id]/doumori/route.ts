@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { masterPool, getPool } from '@/lib/db';
+import { Pool } from 'pg';
+import { masterPool, getPool, getDoumoriPool, getDoumoriDbUrl } from '@/lib/db';
 
 const DEFAULT_SETTINGS = {
   // 1. 🎫 浮上・チケット獲得システム
@@ -93,9 +94,9 @@ export async function GET(
   const token = process.env.DISCORD_BOT_TOKEN;
 
   try {
-    const pool = await getPool(guildId);
+    const pool = await getDoumoriPool(guildId);
 
-    // 1. Settings Table ensure & fetch
+    // 1. Settings & Master Tables ensure & fetch
     try {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS doumori_settings (
@@ -103,6 +104,27 @@ export async function GET(
           setting_key TEXT,
           setting_value TEXT,
           PRIMARY KEY (guild_id, setting_key)
+        );
+        CREATE TABLE IF NOT EXISTS doumori_missions_master (
+          id SERIAL PRIMARY KEY,
+          guild_id BIGINT DEFAULT 0,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL,
+          target_rank INTEGER DEFAULT 0,
+          reward_miles INTEGER DEFAULT 100,
+          is_active BOOLEAN DEFAULT TRUE,
+          times_assigned INTEGER DEFAULT 0,
+          times_completed INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS doumori_ranks_master (
+          level INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          required_miles INTEGER NOT NULL,
+          color TEXT NOT NULL,
+          role_name TEXT NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS doumori_mission_logs (
           id SERIAL PRIMARY KEY,
@@ -138,7 +160,7 @@ export async function GET(
 
     const settingsRows = await pool
       .query('SELECT setting_key, setting_value FROM doumori_settings WHERE guild_id = $1', [guildId])
-      .then((res) => res.rows)
+      .then((res: any) => res.rows)
       .catch(() => []);
 
     const customSettings: Record<string, any> = {};
@@ -152,7 +174,60 @@ export async function GET(
 
     const mergedSettings = { ...DEFAULT_SETTINGS, ...customSettings };
 
-    // 2. Fetch Recent Mission Logs
+    // 2. Fetch Missions Master & Calculate Stats
+    const missionsRes = await pool.query(
+      `SELECT * FROM doumori_missions_master
+       WHERE guild_id = $1 OR guild_id = 0
+       ORDER BY is_active DESC, id ASC`,
+      [guildId]
+    ).catch(() => ({ rows: [] as any[] }));
+
+    let totalAssigned = 0;
+    let totalCompleted = 0;
+    let activeMissions = 0;
+
+    const missionsMaster = (missionsRes.rows || []).map((row: any) => {
+      const assigned = parseInt(row.times_assigned || 0, 10);
+      const completed = parseInt(row.times_completed || 0, 10);
+      const completionRate = assigned > 0 ? Math.round((completed / assigned) * 100) : 0;
+      if (row.is_active) activeMissions++;
+      totalAssigned += assigned;
+      totalCompleted += completed;
+      return {
+        ...row,
+        times_assigned: assigned,
+        times_completed: completed,
+        completion_rate: completionRate,
+      };
+    });
+
+    const missionStats = {
+      totalMissions: missionsMaster.length,
+      activeMissions,
+      totalAssigned,
+      totalCompleted,
+      overallCompletionRate: totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0,
+      averageAssigned: missionsMaster.length > 0 ? Math.round(totalAssigned / missionsMaster.length) : 0,
+    };
+
+    // 3. Fetch Ranks Master
+    const DEFAULT_RANKS = [
+      { level: 1, name: '🌱 新規住人', required_miles: 0, color: '#A8E6CF', role_name: '新規住人' },
+      { level: 2, name: '🏠 住人', required_miles: 4000, color: '#3498DB', role_name: '住人' },
+      { level: 3, name: '☕ 常連住人', required_miles: 15000, color: '#E67E22', role_name: '常連住人' },
+      { level: 4, name: '🌟 人気住人', required_miles: 45000, color: '#FFD700', role_name: '人気住人' },
+    ];
+
+    let ranksMaster = await pool
+      .query('SELECT level, name, required_miles, color, role_name FROM doumori_ranks_master ORDER BY level ASC')
+      .then((res: any) => res.rows)
+      .catch(() => []);
+
+    if (ranksMaster.length === 0) {
+      ranksMaster = DEFAULT_RANKS;
+    }
+
+    // 4. Fetch Recent Mission Logs
     const missionLogs = await pool
       .query(
         `SELECT id, user_id, staff_id, mission_desc, reward_miles, mission_count, created_at
@@ -161,10 +236,10 @@ export async function GET(
          ORDER BY created_at DESC LIMIT 20`,
         [guildId]
       )
-      .then((res) => res.rows)
+      .then((res: any) => res.rows)
       .catch(() => []);
 
-    // 3. Fetch Recent Mile Logs
+    // 5. Fetch Recent Mile Logs
     const mileLogs = await pool
       .query(
         `SELECT id, user_id, admin_id, amount, action, reason, created_at
@@ -173,10 +248,13 @@ export async function GET(
          ORDER BY created_at DESC LIMIT 20`,
         [guildId]
       )
-      .then((res) => res.rows)
+      .then((res: any) => res.rows)
       .catch(() => []);
 
-    // 4. Fetch Discord Channels & Roles
+    // 6. Fetch Database URL
+    const doumoriDbUrl = await getDoumoriDbUrl(guildId);
+
+    // 7. Fetch Discord Channels & Roles
     let channels: any[] = [];
     let roles: any[] = [];
 
@@ -196,8 +274,12 @@ export async function GET(
 
     return NextResponse.json({
       settings: mergedSettings,
+      missionsMaster,
+      missionStats,
+      ranksMaster,
       missionLogs,
       mileLogs,
+      databaseUrl: doumoriDbUrl || '',
       channels: Array.isArray(channels) ? channels : [],
       roles: Array.isArray(roles) ? roles : [],
     });
@@ -219,10 +301,121 @@ export async function POST(
 
   try {
     const body = await request.json();
-    const { action, settings, mileOperation, panelRequest } = body;
-    const pool = await getPool(guildId);
+    const { action, settings, mileOperation, panelRequest, mission, ranks, database_url } = body;
+    const pool = await getDoumoriPool(guildId);
 
-    // Case 1: Manual Mile Action (Grant / Revoke)
+    // Case 0: Save Database URL
+    if (action === 'save_database') {
+      if (database_url) {
+        let testPool: Pool | null = null;
+        try {
+          testPool = new Pool({ connectionString: database_url?.replace('?sslmode=require', ''), ssl: { rejectUnauthorized: false } });
+          await testPool.query('SELECT 1');
+        } catch (connErr: any) {
+          if (testPool) await testPool.end().catch(() => {});
+          return NextResponse.json({ error: `データベース接続テストに失敗しました: ${connErr.message}` }, { status: 400 });
+        } finally {
+          if (testPool) await testPool.end().catch(() => {});
+        }
+      }
+
+      await masterPool.query(`
+        CREATE TABLE IF NOT EXISTS guild_databases (
+            guild_id BIGINT PRIMARY KEY,
+            database_url TEXT NOT NULL,
+            doumori_database_url TEXT
+        );
+        ALTER TABLE guild_databases ADD COLUMN IF NOT EXISTS doumori_database_url TEXT;
+      `).catch(() => {});
+
+      await masterPool.query(
+        `INSERT INTO guild_databases (guild_id, database_url, doumori_database_url)
+         VALUES ($1, '', $2)
+         ON CONFLICT (guild_id)
+         DO UPDATE SET doumori_database_url = EXCLUDED.doumori_database_url`,
+        [guildId, database_url || null]
+      );
+
+      return NextResponse.json({ success: true, message: 'どうぶつの森専用データベース設定を保存しました！' });
+    }
+
+    // Case 1: Create Mission
+    if (action === 'create_mission' && mission) {
+      const { title, description, target_rank = 0, reward_miles = 100 } = mission;
+      if (!title || !description) {
+        return NextResponse.json({ error: 'タイトルと達成条件は必須です' }, { status: 400 });
+      }
+
+      const res = await pool.query(
+        `INSERT INTO doumori_missions_master (guild_id, title, description, target_rank, reward_miles, is_active)
+         VALUES ($1, $2, $3, $4, $5, TRUE)
+         RETURNING *`,
+        [guildId, title, description, parseInt(target_rank, 10) || 0, parseInt(reward_miles, 10) || 100]
+      );
+      return NextResponse.json({ success: true, mission: res.rows[0], message: '新規ミッションを作成しました！' });
+    }
+
+    // Case 2: Update Mission
+    if (action === 'update_mission' && mission) {
+      const { id, title, description, target_rank, reward_miles, is_active } = mission;
+      if (!id) {
+        return NextResponse.json({ error: 'ミッションIDが指定されていません' }, { status: 400 });
+      }
+
+      const res = await pool.query(
+        `UPDATE doumori_missions_master
+         SET title = COALESCE($1, title),
+             description = COALESCE($2, description),
+             target_rank = COALESCE($3, target_rank),
+             reward_miles = COALESCE($4, reward_miles),
+             is_active = COALESCE($5, is_active),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $6
+         RETURNING *`,
+        [
+          title || null,
+          description || null,
+          target_rank !== undefined ? parseInt(target_rank, 10) : null,
+          reward_miles !== undefined ? parseInt(reward_miles, 10) : null,
+          is_active !== undefined ? Boolean(is_active) : null,
+          id,
+        ]
+      );
+      return NextResponse.json({ success: true, mission: res.rows[0], message: 'ミッションを更新しました！' });
+    }
+
+    // Case 3: Delete Mission
+    if (action === 'delete_mission' && mission?.id) {
+      await pool.query('DELETE FROM doumori_missions_master WHERE id = $1', [mission.id]);
+      return NextResponse.json({ success: true, message: 'ミッションを削除しました。' });
+    }
+
+    // Case 4: Save Ranks Master
+    if (action === 'save_ranks' && Array.isArray(ranks)) {
+      for (const r of ranks) {
+        await pool.query(
+          `INSERT INTO doumori_ranks_master (level, name, required_miles, color, role_name, updated_at)
+           VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+           ON CONFLICT (level)
+           DO UPDATE SET
+             name = EXCLUDED.name,
+             required_miles = EXCLUDED.required_miles,
+             color = EXCLUDED.color,
+             role_name = EXCLUDED.role_name,
+             updated_at = CURRENT_TIMESTAMP`,
+          [
+            parseInt(r.level, 10),
+            r.name || `Rank ${r.level}`,
+            parseInt(r.required_miles, 10) || 0,
+            r.color || '#3498DB',
+            r.role_name || r.name,
+          ]
+        );
+      }
+      return NextResponse.json({ success: true, message: '階級・ランク設定を保存しました！' });
+    }
+
+    // Case 5: Manual Mile Action (Grant / Revoke)
     if (action === 'mile_operation' && mileOperation) {
       const { user_id, amount, op_type, reason, admin_id } = mileOperation;
       const numericAmount = Math.abs(parseInt(amount, 10) || 0);
