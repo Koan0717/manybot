@@ -2379,8 +2379,13 @@ async def save_custom_ticket_panel(guild_id: int, channel_id: int, panel_title: 
 
     p = await get_pool(guild_id)
     async with p.acquire() as conn:
+        try:
+            await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS guild_id BIGINT")
+        except Exception:
+            pass
         res = await conn.execute('''
             UPDATE custom_ticket_panels SET
+                guild_id = $10,
                 panel_title = $2,
                 panel_description = $3,
                 button_label = $4,
@@ -2390,15 +2395,15 @@ async def save_custom_ticket_panel(guild_id: int, channel_id: int, panel_title: 
                 ticket_prefix = $8,
                 panel_type = $9
             WHERE channel_id = $1
-        ''', channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type)
+        ''', channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type, guild_id)
         
         # If no row updated, insert
         if res.endswith(" 0"):
             await conn.execute('''
                 INSERT INTO custom_ticket_panels (
-                    channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            ''', channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type)
+                    guild_id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ''', guild_id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type)
 
 
 

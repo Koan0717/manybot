@@ -61,10 +61,11 @@ export async function POST(
         return NextResponse.json({ error: 'channel_id is required' }, { status: 400 });
       }
 
-      // テーブルとインデックスの存在を保証
+      // テーブルとインデックス、guild_idカラムの存在を保証
       await pool.query(`
         CREATE TABLE IF NOT EXISTS custom_ticket_panels (
           channel_id BIGINT,
+          guild_id BIGINT,
           panel_title TEXT NOT NULL,
           panel_description TEXT NOT NULL,
           button_label TEXT NOT NULL,
@@ -74,6 +75,7 @@ export async function POST(
           ticket_prefix TEXT NOT NULL,
           panel_type TEXT DEFAULT 'custom_ticket'
         );
+        ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS guild_id BIGINT;
         CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_ticket_panels_channel_id ON custom_ticket_panels (channel_id);
         CREATE TABLE IF NOT EXISTS panel_requests (
           id SERIAL PRIMARY KEY,
@@ -89,17 +91,17 @@ export async function POST(
       // 制約不一致エラーを防ぐため、UPDATE -> なければ INSERT を実行
       const updateRes = await pool.query(
         `UPDATE custom_ticket_panels SET 
-          panel_title = $2, panel_description = $3, button_label = $4, button_emoji = $5, mention_role_ids = $6, target_role_ids = $7, ticket_prefix = $8, panel_type = $9
+          guild_id = $10, panel_title = $2, panel_description = $3, button_label = $4, button_emoji = $5, mention_role_ids = $6, target_role_ids = $7, ticket_prefix = $8, panel_type = $9
          WHERE channel_id = $1`,
-        [channel_id, panel_title, panel_description, button_label || 'チケット作成', button_emoji || '', mention_role_ids || [], target_role_ids || [], ticket_prefix || 'ticket', panel_type || 'custom_ticket']
+        [channel_id, panel_title, panel_description, button_label || 'チケット作成', button_emoji || '', mention_role_ids || [], target_role_ids || [], ticket_prefix || 'ticket', panel_type || 'custom_ticket', guildId]
       );
 
       if (updateRes.rowCount === 0) {
         await pool.query(
           `INSERT INTO custom_ticket_panels (
-            channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [channel_id, panel_title, panel_description, button_label || 'チケット作成', button_emoji || '', mention_role_ids || [], target_role_ids || [], ticket_prefix || 'ticket', panel_type || 'custom_ticket']
+            guild_id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [guildId, channel_id, panel_title, panel_description, button_label || 'チケット作成', button_emoji || '', mention_role_ids || [], target_role_ids || [], ticket_prefix || 'ticket', panel_type || 'custom_ticket']
         );
       }
       
