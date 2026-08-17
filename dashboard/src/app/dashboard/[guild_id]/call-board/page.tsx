@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Select from 'react-select';
+import ChannelSelect from '@/components/ChannelSelect';
 import { toast } from 'react-hot-toast';
 import { PhoneCall, Send, Save, Info, Hash, FolderKanban } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
@@ -107,29 +107,6 @@ export default function CallBoardSettingsPage({ params }: { params: { guild_id: 
     }
   };
 
-  const textChannelOptions = textChannels.map(c => ({
-    value: c.id,
-    label: `# ${c.name}`
-  }));
-
-  const categoryOptions = categoryChannels.map(c => ({
-    value: c.id,
-    label: `📁 ${c.name}`
-  }));
-
-  const customStyles = {
-    control: (base: any) => ({ ...base, backgroundColor: '#18181b', borderColor: '#3f3f46', color: 'white', padding: '2px' }),
-    menu: (base: any) => ({ ...base, backgroundColor: '#18181b', zIndex: 9999 }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isFocused ? '#27272a' : '#18181b',
-      color: 'white',
-      ':active': { backgroundColor: '#3f3f46' }
-    }),
-    singleValue: (base: any) => ({ ...base, color: 'white' }),
-    input: (base: any) => ({ ...base, color: 'white' })
-  };
-
   if (loading) {
     return <div className="text-zinc-400 p-8">読み込み中...</div>;
   }
@@ -171,13 +148,13 @@ export default function CallBoardSettingsPage({ params }: { params: { guild_id: 
               募集パネル設置チャンネル
               <span className="text-xs text-zinc-500 font-normal">（「通話を募集する」ボタンが設置される場所）</span>
             </label>
-            <Select
-              options={textChannelOptions}
-              value={textChannelOptions.find(o => o.value === formData.panel_channel_id)}
-              onChange={(val: any) => setFormData({ ...formData, panel_channel_id: val ? val.value : '' })}
-              styles={customStyles}
+            <ChannelSelect
+              label="募集パネル設置チャンネル"
               placeholder="チャンネルを選択または検索..."
-              isClearable
+              value={formData.panel_channel_id}
+              onChange={(id) => setFormData({ ...formData, panel_channel_id: id })}
+              channels={textChannels}
+              multiple={false}
             />
           </div>
 
@@ -188,13 +165,13 @@ export default function CallBoardSettingsPage({ params }: { params: { guild_id: 
               募集一覧掲載チャンネル
               <span className="text-xs text-zinc-500 font-normal">（ユーザーの通話募集Embedが送信される場所）</span>
             </label>
-            <Select
-              options={textChannelOptions}
-              value={textChannelOptions.find(o => o.value === formData.board_channel_id)}
-              onChange={(val: any) => setFormData({ ...formData, board_channel_id: val ? val.value : '' })}
-              styles={customStyles}
+            <ChannelSelect
+              label="募集一覧掲載チャンネル"
               placeholder="チャンネルを選択または検索..."
-              isClearable
+              value={formData.board_channel_id}
+              onChange={(id) => setFormData({ ...formData, board_channel_id: id })}
+              channels={textChannels}
+              multiple={false}
             />
           </div>
 
@@ -205,13 +182,13 @@ export default function CallBoardSettingsPage({ params }: { params: { guild_id: 
               マッチング時VC作成カテゴリ
               <span className="text-xs text-zinc-500 font-normal">（「参加する」ボタン押下時にプライベートVCが作られるカテゴリー）</span>
             </label>
-            <Select
-              options={categoryOptions}
-              value={categoryOptions.find(o => o.value === formData.vc_category_id)}
-              onChange={(val: any) => setFormData({ ...formData, vc_category_id: val ? val.value : '' })}
-              styles={customStyles}
+            <ChannelSelect
+              label="マッチング時VC作成カテゴリ"
               placeholder="カテゴリを選択または検索..."
-              isClearable
+              value={formData.vc_category_id}
+              onChange={(id) => setFormData({ ...formData, vc_category_id: id })}
+              channels={categoryChannels}
+              multiple={false}
             />
           </div>
         </div>

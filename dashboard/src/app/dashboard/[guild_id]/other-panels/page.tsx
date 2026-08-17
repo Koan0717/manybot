@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import Select from 'react-select';
+import ChannelSelect from '@/components/ChannelSelect';
+import RoleSelect from '@/components/RoleSelect';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { toast } from 'react-hot-toast';
 import { LayoutPanelTop } from 'lucide-react';
@@ -112,21 +113,6 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
     }
   };
 
-  const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}`, color: r.color }));
-  const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
-
-  const customStyles = {
-    control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white' }),
-    menu: (base: any) => ({ ...base, backgroundColor: '#27272a', zIndex: 9999 }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isFocused ? '#3f3f46' : '#27272a',
-      color: state.data?.color ? `#${state.data.color.toString(16).padStart(6, '0')}` : 'white',
-      ':active': { backgroundColor: '#52525b' }
-    }),
-    singleValue: (base: any) => ({ ...base, color: 'white' })
-  };
-
   if (loading) return <div className="text-zinc-400">読み込み中...</div>;
 
   return (
@@ -143,12 +129,13 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
         <div className="space-y-6">
           <div>
             <label className="block text-sm font-bold text-zinc-300 mb-2">送信先チャンネル <span className="text-red-500">*</span></label>
-            <Select
-              options={channelOptions}
-              value={channelOptions.find(o => o.value === formData.channel_id)}
-              onChange={(val: any) => setFormData({ ...formData, channel_id: val ? val.value : '' })}
-              styles={customStyles}
+            <ChannelSelect
+              label="送信先チャンネル"
               placeholder="パネルを送信するチャンネルを選択..."
+              value={formData.channel_id}
+              onChange={(id) => setFormData({ ...formData, channel_id: id })}
+              channels={channels}
+              multiple={false}
             />
           </div>
 
@@ -180,12 +167,13 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
               {formData.reaction_roles.map((rr, index) => (
                 <div key={index} className="flex flex-col md:flex-row items-start md:items-center gap-3 bg-zinc-900 p-3 rounded-lg border border-zinc-700">
                   <div className="flex-1 w-full">
-                    <Select
-                      options={roleOptions}
-                      value={roleOptions.find(o => o.value === rr.role_id)}
-                      onChange={(val: any) => handleChangeReactionRole(index, 'role_id', val ? val.value : '')}
-                      styles={customStyles}
+                    <RoleSelect
+                      label="付与するロール"
                       placeholder="付与するロール..."
+                      value={rr.role_id}
+                      onChange={(id) => handleChangeReactionRole(index, 'role_id', id)}
+                      roles={roles}
+                      multiple={false}
                     />
                   </div>
                   <div className="w-full md:w-64 relative">

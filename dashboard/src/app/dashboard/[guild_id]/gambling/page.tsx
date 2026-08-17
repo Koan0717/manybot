@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { Save, AlertCircle, Settings, Dices, Coins, Cherry, Spade, Disc, Percent } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
-import Select from 'react-select';
+import ChannelSelect from '@/components/ChannelSelect';
 import { toast } from 'react-hot-toast';
 
 const COLORS = ['#8b5cf6', '#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1'];
@@ -246,20 +246,6 @@ export default function GamblingSettingsPage() {
       </div>
     </div>
   );
-
-  const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
-
-  const customStyles = {
-    control: (base: any) => ({ ...base, backgroundColor: '#18181b', borderColor: '#3f3f46', color: 'white', padding: '2px' }),
-    menu: (base: any) => ({ ...base, backgroundColor: '#27272a', zIndex: 9999 }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isFocused ? '#3f3f46' : '#27272a',
-      color: 'white',
-      ':active': { backgroundColor: '#52525b' }
-    }),
-    singleValue: (base: any) => ({ ...base, color: 'white' })
-  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
@@ -524,14 +510,13 @@ export default function GamblingSettingsPage() {
           </div>
           <div className="flex-1 w-full">
             <label className="block text-sm font-medium text-zinc-400 mb-2">送信先チャンネル</label>
-            <Select
-              options={channelOptions}
-              value={channelOptions.find(c => c.value === selectedChannelId) || null}
-              onChange={(selected: any) => setSelectedChannelId(selected ? selected.value : '')}
+            <ChannelSelect
+              label="送信先チャンネル"
               placeholder="チャンネルを検索・選択..."
-              isClearable
-              styles={customStyles}
-              noOptionsMessage={() => "チャンネルが見つかりません"}
+              value={selectedChannelId}
+              onChange={(id) => setSelectedChannelId(id || '')}
+              channels={channels}
+              multiple={false}
             />
           </div>
           <button
