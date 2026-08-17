@@ -3029,9 +3029,9 @@ async def check_initial_issued(guild_id: int, user_id: int) -> bool:
 
 
 
-async def get_reaction_role(message_id: int, emoji: str):
+async def get_reaction_role(message_id: int, emoji: str, guild_id: int = None):
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
@@ -3053,9 +3053,9 @@ async def add_evaluation_vc_time(guild_id: int, user_id: int, seconds: int):
 
 
 
-async def remove_reaction_role(message_id: int, emoji: str):
+async def remove_reaction_role(message_id: int, emoji: str, guild_id: int = None):
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
@@ -3071,9 +3071,9 @@ async def remove_reaction_role(message_id: int, emoji: str):
 
 
 
-async def add_reaction_role(message_id: int, emoji: str, role_id: int):
+async def add_reaction_role(message_id: int, emoji: str, role_id: int, guild_id: int = None):
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
@@ -3086,226 +3086,6 @@ async def add_reaction_role(message_id: int, emoji: str, role_id: int):
             ON CONFLICT (message_id, emoji) DO UPDATE SET role_id = EXCLUDED.role_id
 
         ''', message_id, emoji, role_id)
-
-
-
-
-
-        await conn.execute('''
-
-            CREATE TABLE IF NOT EXISTS shop_settings (
-
-                guild_id BIGINT PRIMARY KEY,
-
-                employee_role_id BIGINT,
-
-                manager_role_id BIGINT
-
-            )
-
-        ''')
-
-
-
-        await conn.execute('''
-
-            CREATE TABLE IF NOT EXISTS shop_items (
-
-                item_id SERIAL PRIMARY KEY,
-
-                guild_id BIGINT,
-
-                name TEXT,
-
-                usage TEXT,
-
-                price INTEGER DEFAULT 0,
-
-                target_role_id BIGINT,
-
-                reward_role_id BIGINT
-
-            )
-
-        ''')
-
-        
-
-        try:
-
-            await conn.execute('ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS target_role_id BIGINT')
-
-            await conn.execute('ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS reward_role_id BIGINT')
-
-            await conn.execute('ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS target_role_ids BIGINT[] DEFAULT \'{}\'')
-
-            await conn.execute('ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS reward_role_ids BIGINT[] DEFAULT \'{}\'')
-
-            # Migrate existing data
-
-            await conn.execute("UPDATE shop_items SET target_role_ids = ARRAY[target_role_id] WHERE target_role_id IS NOT NULL AND (target_role_ids IS NULL OR target_role_ids = '{}')")
-
-            await conn.execute("UPDATE shop_items SET reward_role_ids = ARRAY[reward_role_id] WHERE reward_role_id IS NOT NULL AND (reward_role_ids IS NULL OR reward_role_ids = '{}')")
-
-        except Exception as e:
-
-            print(f"[Migration] shop_items duplicate migration warning: {e}")
-
-
-
-        await conn.execute('''
-
-            CREATE TABLE IF NOT EXISTS user_items (
-
-                id SERIAL PRIMARY KEY,
-
-                guild_id BIGINT,
-
-                user_id BIGINT,
-
-                item_id INTEGER,
-
-                purchased_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-
-            )
-
-        ''')
-
-
-
-        try:
-
-            await conn.execute('ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS duration_days INTEGER DEFAULT NULL')
-
-        except Exception as e:
-
-            print(f"[Migration] shop_items duration_days migration warning: {e}")
-
-
-
-        try:
-
-            await conn.execute('ALTER TABLE user_items ADD COLUMN IF NOT EXISTS expire_at TIMESTAMP DEFAULT NULL')
-
-            await conn.execute('ALTER TABLE user_items ADD COLUMN IF NOT EXISTS role_removed BOOLEAN DEFAULT FALSE')
-
-        except Exception as e:
-
-            print(f"[Migration] user_items columns migration warning: {e}")
-
-
-
-        try:
-
-            await conn.execute('ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS is_eval_extend BOOLEAN DEFAULT FALSE')
-
-            await conn.execute('ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS extend_days INTEGER DEFAULT NULL')
-
-        except Exception as e:
-
-            print(f"[Migration] shop_items eval_extend migration warning: {e}")
-
-
-
-        # user_evaluations columns migration
-
-        try:
-
-            await conn.execute('ALTER TABLE user_evaluations ADD COLUMN IF NOT EXISTS evaluator_name TEXT')
-
-            await conn.execute('ALTER TABLE user_evaluations ADD COLUMN IF NOT EXISTS score INTEGER DEFAULT 0')
-
-            await conn.execute('ALTER TABLE user_evaluations ADD COLUMN IF NOT EXISTS stamp_count INTEGER DEFAULT 0')
-
-            await conn.execute('ALTER TABLE user_evaluations ADD COLUMN IF NOT EXISTS comment TEXT')
-
-        except Exception as e:
-
-            print(f"[Migration] user_evaluations columns migration warning: {e}")
-
-
-
-        try:
-
-            # Migrate all tables that should have guild_id
-
-            tables_to_migrate = [
-
-                "users", "evaluation_periods", "bot_settings", "antigrief_settings", 
-
-                "level_role_rewards", "panel_requests", "log_settings", "evaluation_settings", 
-
-                "rank_settings", "vc_coins_settings", "interviewer_logs", "user_evaluations", 
-
-                "user_vc_durations", "shop_settings", "shop_items", "user_items", "level_coin_rewards"
-
-            ]
-
-            
-
-            default_guild_id = 1111621213446053898 # 譌｢蟁E・繝E・繧E繧堤EE陦後E繧九ョ繝輔か繝ｫ繝医し繝ｼ繝E・ID
-
-            
-
-            for table in tables_to_migrate:
-
-                try:
-
-                    # try to add column, it will error if it already exists
-
-                    await conn.execute(f'ALTER TABLE {table} ADD COLUMN guild_id BIGINT')
-
-                    await conn.execute(f'UPDATE {table} SET guild_id = $1 WHERE guild_id IS NULL', default_guild_id)
-
-                except Exception:
-
-                    pass # column likely already exists
-
-                
-
-                try:
-
-                    # Recreate primary keys for specific tables if necessary
-
-                    if table == "users":
-
-                        await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey CASCADE')
-
-                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, user_id)')
-
-                    elif table in ["antigrief_settings", "evaluation_settings", "rank_settings", "vc_coins_settings", "shop_settings"]:
-
-                        await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey CASCADE')
-
-                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id)')
-
-                    elif table == "level_role_rewards":
-
-                        await conn.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS condition_role_id BIGINT DEFAULT NULL')
-
-                        await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey CASCADE')
-
-                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level, role_id, condition_role_id)')
-
-                    elif table == "level_coin_rewards":
-
-                        await conn.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS condition_role_id BIGINT DEFAULT NULL')
-
-                        await conn.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey CASCADE')
-
-                        await conn.execute(f'ALTER TABLE {table} ADD PRIMARY KEY (guild_id, level_type, level, condition_role_id)')
-
-                    print(f"[Migration] Added guild_id to {table} and migrated data.")
-
-                except Exception as e:
-
-                    print(f"[Migration] {table} PK migration warning: {e}")
-
-        except Exception as e:
-
-            print(f"[Migration] Comprehensive migration error: {e}")
-
-
 
 async def get_user_evaluation_counts(target_user_id: int) -> dict:
 

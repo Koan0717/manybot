@@ -14,7 +14,7 @@ class ReactionRoles(commands.Cog):
             return
             
         emoji_str = str(payload.emoji)
-        role_id = await database.get_reaction_role(payload.message_id, emoji_str)
+        role_id = await database.get_reaction_role(payload.message_id, emoji_str, guild_id=payload.guild_id)
         if not role_id:
             return
             
@@ -39,7 +39,7 @@ class ReactionRoles(commands.Cog):
             return
             
         emoji_str = str(payload.emoji)
-        role_id = await database.get_reaction_role(payload.message_id, emoji_str)
+        role_id = await database.get_reaction_role(payload.message_id, emoji_str, guild_id=payload.guild_id)
         if not role_id:
             return
             

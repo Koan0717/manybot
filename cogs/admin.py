@@ -131,9 +131,10 @@ class StickyTemplateModal(discord.ui.Modal, title="固定テンプレートの�
         await interaction.followup.send("✅ 固定テンプレートを設定しました。", ephemeral=True)
 
 class ReactionRoleAdminView(discord.ui.View):
-    def __init__(self, target_message: discord.Message):
+    def __init__(self, target_message: discord.Message, guild_id: int = None):
         super().__init__(timeout=None)
         self.target_message = target_message
+        self.guild_id = guild_id
 
     @discord.ui.select(cls=discord.ui.RoleSelect, placeholder="付与するロールを選択してください...")
     async def select_role(self, interaction: discord.Interaction, select: discord.ui.RoleSelect):
@@ -164,7 +165,7 @@ class ReactionRoleAdminView(discord.ui.View):
         except Exception:
             pass
 
-        await database.add_reaction_role(self.target_message.id, emoji_str, selected_role.id)
+        await database.add_reaction_role(self.target_message.id, emoji_str, selected_role.id, guild_id=self.guild_id)
         await interaction.followup.send(f"✅ 追加完了！\n絵文字 {emoji_str} にロール {selected_role.mention} を紐付けました！\n続けて別のロールを設定する場合は、上のメニューから再度選択してください。", ephemeral=True)
 
 class CustomRolePanelSetupModal(discord.ui.Modal, title="任意ロールパネル設置"):
@@ -180,7 +181,7 @@ class CustomRolePanelSetupModal(discord.ui.Modal, title="任意ロールパネ�
         msg = await interaction.channel.send(embed=embed)
         await interaction.response.send_message(
             "パネルを設置しました！続けて以下のメニューから、付与するロールと絵文字を紐付けてください。",
-            view=ReactionRoleAdminView(msg),
+            view=ReactionRoleAdminView(msg, guild_id=interaction.guild_id),
             ephemeral=True
         )
 
