@@ -127,21 +127,6 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
     }
   };
 
-  const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}`, color: r.color }));
-  const channelOptions = channels.map(c => ({ value: c.id, label: `# ${c.name}` }));
-
-  const customStyles = {
-    control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white' }),
-    menu: (base: any) => ({ ...base, backgroundColor: '#27272a', zIndex: 9999 }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isFocused ? '#3f3f46' : '#27272a',
-      color: state.data?.color ? `#${state.data.color.toString(16).padStart(6, '0')}` : 'white',
-      ':active': { backgroundColor: '#52525b' }
-    }),
-    singleValue: (base: any) => ({ ...base, color: 'white' })
-  };
-
   if (loading) return <div className="text-zinc-400">読み込み中...</div>;
 
   return (
@@ -154,9 +139,25 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
         </div>
       )}
 
+<<<<<<< HEAD
       <div className="space-y-6">
         {panels.map((panel, panelIndex) => (
           <div key={panel.id} className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl relative">
+=======
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl max-w-3xl">
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-bold text-zinc-300 mb-2">送信先チャンネル <span className="text-red-500">*</span></label>
+            <ChannelSelect
+              label="送信先チャンネル"
+              placeholder="パネルを送信するチャンネルを選択..."
+              value={formData.channel_id}
+              onChange={(id) => setFormData({ ...formData, channel_id: id })}
+              channels={channels}
+              multiple={false}
+            />
+          </div>
+>>>>>>> f0d1aeb059f3c0733e50ba1fdf9848e56a4ffa41
 
             {/* パネルヘッダー */}
             <div className="flex items-center justify-between mb-5 pb-3 border-b border-zinc-700">
@@ -202,6 +203,7 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                 />
               </div>
 
+<<<<<<< HEAD
               {/* タイトル */}
               <div>
                 <label className="block text-sm font-bold text-zinc-300 mb-2">パネルのタイトル <span className="text-red-500">*</span></label>
@@ -273,6 +275,33 @@ export default function OtherPanelsSettingsPage({ params }: { params: { guild_id
                           </div>
                         )}
                       </div>
+=======
+          <div>
+            <label className="block text-sm font-bold text-zinc-300 mb-4 border-b border-zinc-700 pb-2">ロールと絵文字の設定 <span className="text-red-500">*</span></label>
+            
+            <div className="space-y-3">
+              {formData.reaction_roles.map((rr, index) => (
+                <div key={index} className="flex flex-col md:flex-row items-start md:items-center gap-3 bg-zinc-900 p-3 rounded-lg border border-zinc-700">
+                  <div className="flex-1 w-full">
+                    <RoleSelect
+                      label="付与するロール"
+                      placeholder="付与するロール..."
+                      value={rr.role_id}
+                      onChange={(id) => handleChangeReactionRole(index, 'role_id', id)}
+                      roles={roles}
+                      multiple={false}
+                    />
+                  </div>
+                  <div className="w-full md:w-64 relative">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={rr.emoji}
+                        onChange={e => handleChangeReactionRole(index, 'emoji', e.target.value)}
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500"
+                        placeholder="絵文字 (例: 🍎, <:name:id>)"
+                      />
+>>>>>>> f0d1aeb059f3c0733e50ba1fdf9848e56a4ffa41
                       <button
                         onClick={() => removeReactionRole(panel.id, index)}
                         className="p-2 text-zinc-500 hover:text-red-500 hover:bg-zinc-800 rounded transition-colors"

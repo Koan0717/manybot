@@ -19,7 +19,6 @@ type Prize = {
 };
 
 
-
 export default function GachaSettingsPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
 
@@ -55,7 +54,6 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
       .finally(() => setLoading(false));
   }, [guildId]);
 
-  const roleOptions = roles;
 
   const totalWeight = prizes.reduce((sum, p) => sum + (Number(p.weight) || 0), 0);
 

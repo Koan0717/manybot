@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
-import Select from 'react-select';
+import ChannelSelect from '@/components/ChannelSelect';
+import RoleSelect from '@/components/RoleSelect';
 import { toast } from 'react-hot-toast';
 import { ShieldAlert } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
@@ -81,23 +82,6 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
   const textChannels = channels.filter(c => c.type === 0 || c.type === 2); // Text and Voice
   const categories = channels.filter(c => c.type === 4); // Categories
 
-  const textChannelOptions = textChannels.map(c => ({ value: c.id, label: `${c.type === 0 ? '#' : '🔊'} ${c.name}` }));
-  const categoryOptions = categories.map(c => ({ value: c.id, label: `📁 ${c.name}` }));
-  const roleOptions = roles.map(r => ({ value: r.id, label: `@${r.name}` }));
-
-  const customStyles = {
-    control: (base: any) => ({ ...base, backgroundColor: '#27272a', borderColor: '#3f3f46', color: 'white' }),
-    menu: (base: any) => ({ ...base, backgroundColor: '#27272a', zIndex: 9999 }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isFocused ? '#3f3f46' : '#27272a',
-      color: 'white',
-      ':active': { backgroundColor: '#52525b' }
-    }),
-    multiValue: (base: any) => ({ ...base, backgroundColor: '#3f3f46' }),
-    multiValueLabel: (base: any) => ({ ...base, color: 'white' })
-  };
-
   if (loading) return <div className="text-zinc-400">読み込み中...</div>;
 
   return (
@@ -149,14 +133,13 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
               <label className="block text-sm font-medium text-zinc-300 mb-2">
                 対象カテゴリー
               </label>
-              <Select
-                isMulti
-                options={categoryOptions}
-                value={categoryOptions.filter(o => settings.target_category_ids.includes(o.value))}
-                onChange={(selected) => setSettings({...settings, target_category_ids: selected.map((s: any) => s.value)})}
+              <ChannelSelect
+                label="対象カテゴリー"
                 placeholder="カテゴリーを選択..."
-                styles={customStyles}
-                noOptionsMessage={() => "見つかりません"}
+                value={settings.target_category_ids}
+                onChange={(ids) => setSettings({...settings, target_category_ids: ids})}
+                channels={categories}
+                multiple={true}
               />
             </div>
 
@@ -164,14 +147,13 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
               <label className="block text-sm font-medium text-zinc-300 mb-2">
                 対象チャンネル
               </label>
-              <Select
-                isMulti
-                options={textChannelOptions}
-                value={textChannelOptions.filter(o => settings.target_channel_ids.includes(o.value))}
-                onChange={(selected) => setSettings({...settings, target_channel_ids: selected.map((s: any) => s.value)})}
+              <ChannelSelect
+                label="対象チャンネル"
                 placeholder="チャンネルを選択..."
-                styles={customStyles}
-                noOptionsMessage={() => "見つかりません"}
+                value={settings.target_channel_ids}
+                onChange={(ids) => setSettings({...settings, target_channel_ids: ids})}
+                channels={textChannels}
+                multiple={true}
               />
             </div>
 
@@ -180,14 +162,13 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
                 免除ロール
               </label>
               <p className="text-xs text-zinc-500 mb-2">このロールを持つユーザーは、荒らし対策の監視対象から外れます。</p>
-              <Select
-                isMulti
-                options={roleOptions}
-                value={roleOptions.filter(o => settings.exempt_role_ids.includes(o.value))}
-                onChange={(selected) => setSettings({...settings, exempt_role_ids: selected.map((s: any) => s.value)})}
+              <RoleSelect
+                label="免除ロール"
                 placeholder="免除ロールを選択..."
-                styles={customStyles}
-                noOptionsMessage={() => "見つかりません"}
+                value={settings.exempt_role_ids}
+                onChange={(ids) => setSettings({...settings, exempt_role_ids: ids})}
+                roles={roles}
+                multiple={true}
               />
             </div>
           </div>
