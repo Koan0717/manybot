@@ -61,20 +61,54 @@ export async function POST(
         return NextResponse.json({ error: 'channel_id is required' }, { status: 400 });
       }
 
-      await pool.query(
-        `INSERT INTO custom_ticket_panels (
-          channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (channel_id) DO UPDATE SET 
-          panel_title = $2, panel_description = $3, button_label = $4, button_emoji = $5, mention_role_ids = $6, target_role_ids = $7, ticket_prefix = $8, panel_type = $9`,
+      // テーブルとインデックスの存在を保証
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS custom_ticket_panels (
+          channel_id BIGINT,
+          panel_title TEXT NOT NULL,
+          panel_description TEXT NOT NULL,
+          button_label TEXT NOT NULL,
+          button_emoji TEXT,
+          mention_role_ids BIGINT[] NOT NULL,
+          target_role_ids BIGINT[] NOT NULL,
+          ticket_prefix TEXT NOT NULL,
+          panel_type TEXT DEFAULT 'custom_ticket'
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_ticket_panels_channel_id ON custom_ticket_panels (channel_id);
+        CREATE TABLE IF NOT EXISTS panel_requests (
+          id SERIAL PRIMARY KEY,
+          guild_id BIGINT,
+          channel_id BIGINT,
+          panel_type TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch((e) => {
+        console.warn('[Tickets] table ensure warning:', e.message);
+      });
+
+      // 制約不一致エラーを防ぐため、UPDATE -> なければ INSERT を実行
+      const updateRes = await pool.query(
+        `UPDATE custom_ticket_panels SET 
+          panel_title = $2, panel_description = $3, button_label = $4, button_emoji = $5, mention_role_ids = $6, target_role_ids = $7, ticket_prefix = $8, panel_type = $9
+         WHERE channel_id = $1`,
         [channel_id, panel_title, panel_description, button_label || 'チケット作成', button_emoji || '', mention_role_ids || [], target_role_ids || [], ticket_prefix || 'ticket', panel_type || 'custom_ticket']
       );
+
+      if (updateRes.rowCount === 0) {
+        await pool.query(
+          `INSERT INTO custom_ticket_panels (
+            channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [channel_id, panel_title, panel_description, button_label || 'チケット作成', button_emoji || '', mention_role_ids || [], target_role_ids || [], ticket_prefix || 'ticket', panel_type || 'custom_ticket']
+        );
+      }
       
       // Also request the bot to spawn the panel
       await pool.query(
         `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, $2, $3)`,
         [guildId, channel_id, panel_type || 'custom_ticket']
-      );
+      ).catch(() => {});
+
       return NextResponse.json({ success: true });
     }
     else if (action === 'delete') {

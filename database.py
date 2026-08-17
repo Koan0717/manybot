@@ -2378,40 +2378,27 @@ async def save_custom_ticket_panel(guild_id: int, channel_id: int, panel_title: 
     target_role_ids = target_role_ids or []
 
     p = await get_pool(guild_id)
-
     async with p.acquire() as conn:
-
-        await conn.execute('''
-
-            INSERT INTO custom_ticket_panels (
-
-                channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
-
-            ) 
-
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
-
-            ON CONFLICT (channel_id) 
-
-            DO UPDATE SET 
-
+        res = await conn.execute('''
+            UPDATE custom_ticket_panels SET
                 panel_title = $2,
-
                 panel_description = $3,
-
                 button_label = $4,
-
                 button_emoji = $5,
-
                 mention_role_ids = $6,
-
                 target_role_ids = $7,
-
                 ticket_prefix = $8,
-
                 panel_type = $9
-
+            WHERE channel_id = $1
         ''', channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type)
+        
+        # If no row updated, insert
+        if res.endswith(" 0"):
+            await conn.execute('''
+                INSERT INTO custom_ticket_panels (
+                    channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ''', channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type)
 
 
 
