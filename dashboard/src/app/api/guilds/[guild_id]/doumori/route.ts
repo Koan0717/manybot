@@ -152,9 +152,12 @@ export async function GET(
           miles INTEGER DEFAULT 0,
           rank_level INTEGER DEFAULT 1,
           mission_count INTEGER DEFAULT 0,
-          total_mission_count INTEGER DEFAULT 0,
-          PRIMARY KEY (guild_id, user_id)
+          total_mission_count INTEGER DEFAULT 0
         );
+        CREATE UNIQUE INDEX IF NOT EXISTS doumori_daily_missions_slot_uidx
+        ON doumori_daily_missions (guild_id, user_id, date_key, mission_slot);
+        CREATE UNIQUE INDEX IF NOT EXISTS doumori_miles_uidx
+        ON doumori_miles (guild_id, user_id);
       `);
     } catch (e) {}
 
