@@ -152,11 +152,64 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
   };
 
   const panelTypeOptions = [
-    { value: 'custom_ticket', label: '汎用お問い合わせチケット' },
-    { value: 'confession', label: '懺悔室 (告解司祭用)' },
-    { value: 'interview', label: '面接チケット' },
-    { value: 'anonymous_chat', label: '匿名チャット' }
+    { value: 'custom_ticket', label: '🎫 汎用お問い合わせチケット' },
+    { value: 'stamp', label: '🎨 スタンプ・紋章制作依頼チケット (担当製作者選択)' },
+    { value: 'confession', label: '⛪ 懺悔室・告解チケット (告解司祭用)' },
+    { value: 'interview', label: '📝 面接チケット' },
+    { value: 'anonymous_chat', label: '🎭 匿名チャットチケット' }
   ];
+
+  const handlePanelTypeChange = (newType: string) => {
+    let presetTitle = formData.panel_title;
+    let presetDesc = formData.panel_description;
+    let presetLabel = formData.button_label;
+    let presetEmoji = formData.button_emoji;
+    let presetPrefix = formData.ticket_prefix;
+
+    if (!editingPanel) {
+      if (newType === 'stamp') {
+        presetTitle = '🎨 スタンプ制作依頼';
+        presetDesc = 'スタンプや紋章の制作を依頼したい方は下のボタンを押してください。\n担当可能な製作者を選択して依頼内容を入力できます。';
+        presetLabel = 'スタンプを依頼する';
+        presetEmoji = '🎨';
+        presetPrefix = 'stamp';
+      } else if (newType === 'confession') {
+        presetTitle = '⛪ 懺悔室';
+        presetDesc = '司祭に相談や告解を行いたい方は下のボタンを押してください。';
+        presetLabel = '告解を申し込む';
+        presetEmoji = '🙏';
+        presetPrefix = 'confess';
+      } else if (newType === 'interview') {
+        presetTitle = '📝 面接・審査受付';
+        presetDesc = '面接や審査を開始する方は下のボタンを押してください。';
+        presetLabel = '面接を開始する';
+        presetEmoji = '📝';
+        presetPrefix = 'interview';
+      } else if (newType === 'anonymous_chat') {
+        presetTitle = '🎭 匿名チャット';
+        presetDesc = '匿名で質問や意見を投稿できるチケットを作成します。';
+        presetLabel = '匿名チケット作成';
+        presetEmoji = '🎭';
+        presetPrefix = 'anon';
+      } else {
+        presetTitle = 'お問い合わせ';
+        presetDesc = 'ボタンを押すとチケットが作成されます。';
+        presetLabel = 'チケット作成';
+        presetEmoji = '🎫';
+        presetPrefix = 'ticket';
+      }
+    }
+
+    setFormData({
+      ...formData,
+      panel_type: newType,
+      panel_title: presetTitle,
+      panel_description: presetDesc,
+      button_label: presetLabel,
+      button_emoji: presetEmoji,
+      ticket_prefix: presetPrefix
+    });
+  };
 
   if (loading) return <div className="text-zinc-400">読み込み中...</div>;
 
@@ -194,11 +247,16 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
               return (
                 <div key={panel.channel_id} className="bg-zinc-900 border border-zinc-700 rounded-lg p-5 hover:border-zinc-500 transition-colors">
                   <div className="flex justify-between items-start mb-3">
-                    <h3 className="text-lg font-bold text-white flex items-center font-tech">
-                      <span className="text-red-500 mr-2">#</span>
-                      {ch ? ch.name : panel.channel_id}
-                    </h3>
-                    <div className="space-x-2 font-tech">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-lg font-bold text-white flex items-center font-tech">
+                        <span className="text-red-500 mr-2">#</span>
+                        {ch ? ch.name : panel.channel_id}
+                      </h3>
+                      <span className="text-[11px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 font-tech font-bold">
+                        {panelTypeOptions.find(opt => opt.value === panel.panel_type)?.label || '🎫 汎用チケット'}
+                      </span>
+                    </div>
+                    <div className="space-x-2 font-tech flex-shrink-0">
                       <button onClick={() => openModal(panel)} className="text-blue-400 hover:text-blue-300 text-sm">編集</button>
                       <button onClick={() => handleDelete(panel.channel_id)} className="text-red-500 hover:text-red-400 text-sm">削除</button>
                     </div>
@@ -273,7 +331,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                   <label className="block text-sm text-zinc-400 mb-1 font-tech">パネルの種類（機能） <span className="text-red-500">*</span></label>
                   <select
                     value={formData.panel_type}
-                    onChange={(e) => setFormData({ ...formData, panel_type: e.target.value })}
+                    onChange={(e) => handlePanelTypeChange(e.target.value)}
                     className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-3 text-white focus:outline-none focus:border-red-500 font-tech"
                   >
                     {panelTypeOptions.map(opt => (

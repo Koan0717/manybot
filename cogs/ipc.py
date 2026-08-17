@@ -225,9 +225,13 @@ class IPC(commands.Cog):
                             custom_id_map = {
                                 "custom_ticket": "persistent_custom_ticket_panel_btn",
                                 "emblem_req": "persistent_emblem_req_btn",
+                                "stamp_req": "persistent_emblem_req_btn",
+                                "stamp": "persistent_emblem_req_btn",
                                 "confession_req": "persistent_confession_req_btn",
+                                "confession": "persistent_confession_req_btn",
                                 "inquiry_req": "persistent_inquiry_req_btn",
                                 "interview_req": "persistent_interview_btn",
+                                "interview": "persistent_interview_btn",
                                 "anonymous_chat": "persistent_anon_chat_btn"
                             }
                             cid = custom_id_map.get(ptype, "persistent_custom_ticket_panel_btn")
