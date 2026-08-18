@@ -178,12 +178,20 @@ export async function GET(
     const mergedSettings = { ...DEFAULT_SETTINGS, ...customSettings };
 
     // 2. Fetch Missions Master & Calculate Stats
-    const missionsRes = await pool.query(
+    let missionsRes = await pool.query(
       `SELECT * FROM doumori_missions_master
-       WHERE guild_id = $1 OR guild_id = 0
+       WHERE guild_id = $1
        ORDER BY is_active DESC, id ASC`,
       [guildId]
     ).catch(() => ({ rows: [] as any[] }));
+
+    if (!missionsRes.rows || missionsRes.rows.length === 0) {
+      missionsRes = await pool.query(
+        `SELECT * FROM doumori_missions_master
+         WHERE guild_id = 0 OR guild_id IS NULL
+         ORDER BY is_active DESC, id ASC`
+      ).catch(() => ({ rows: [] as any[] }));
+    }
 
     let totalAssigned = 0;
     let totalCompleted = 0;

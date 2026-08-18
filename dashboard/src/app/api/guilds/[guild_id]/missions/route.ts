@@ -31,13 +31,21 @@ export async function GET(
       );
     `).catch(() => {});
 
-    // ミッション一覧取得
-    const result = await pool.query(
+    // ミッション一覧取得（サーバー専用ミッションを最優先、未設定時のみデフォルトを取得）
+    let result = await pool.query(
       `SELECT * FROM doumori_missions_master
-       WHERE guild_id = $1 OR guild_id = 0
+       WHERE guild_id = $1
        ORDER BY is_active DESC, id ASC`,
       [guildId]
     );
+
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        `SELECT * FROM doumori_missions_master
+         WHERE guild_id = 0 OR guild_id IS NULL
+         ORDER BY is_active DESC, id ASC`
+      );
+    }
 
     // 全体統計の計算
     let totalMissions = result.rows.length;
@@ -64,8 +72,25 @@ export async function GET(
 
     const averageAssigned = totalMissions > 0 ? Math.round(totalAssigned / totalMissions) : 0;
 
+    // スロット設定を取得
+    let slotCount = 3;
+    try {
+      const sRes = await pool.query(
+        "SELECT setting_value FROM doumori_settings WHERE (guild_id = $1 OR guild_id = 0) AND setting_key = 'daily_mission_slot_count' ORDER BY guild_id DESC LIMIT 1",
+        [guildId]
+      );
+      if (sRes.rows.length > 0) {
+        let raw = sRes.rows[0].setting_value;
+        let parsed;
+        try { parsed = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { parsed = raw; }
+        const val = parseInt(parsed, 10);
+        if (!isNaN(val) && val >= 1 && val <= 10) slotCount = val;
+      }
+    } catch {}
+
     return NextResponse.json({
       missions: missionsWithStats,
+      slotCount,
       stats: {
         totalMissions,
         activeMissions,
@@ -92,7 +117,23 @@ export async function POST(
   const guildId = params.guild_id;
 
   try {
-    const { title, description, target_rank = 0, reward_miles = 100 } = await request.json();
+    const body = await request.json();
+
+    // スロット設定の保存アクション
+    if (body.action === 'save_slot_count' && body.slot_count !== undefined) {
+      const pool = await getDoumoriPool(guildId);
+      const count = Math.max(1, Math.min(10, parseInt(body.slot_count, 10) || 3));
+      await pool.query(
+        `INSERT INTO doumori_settings (guild_id, setting_key, setting_value)
+         VALUES ($1, 'daily_mission_slot_count', $2)
+         ON CONFLICT (guild_id, setting_key)
+         DO UPDATE SET setting_value = $2`,
+        [guildId, String(count)]
+      );
+      return NextResponse.json({ success: true, slotCount: count });
+    }
+
+    const { title, description, target_rank = 0, reward_miles = 100 } = body;
 
     if (!title || !description) {
       return NextResponse.json({ error: 'タイトルと達成条件の説明は必須です' }, { status: 400 });

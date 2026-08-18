@@ -44,6 +44,8 @@ export default function MissionsDashboardPage({ params }: { params: { guild_id: 
 
   const [missions, setMissions] = useState<Mission[]>([]);
   const [stats, setStats] = useState<MissionStats | null>(null);
+  const [slotCount, setSlotCount] = useState<number>(3);
+  const [savingSlot, setSavingSlot] = useState(false);
   const [loading, setLoading] = useState(true);
   const [filterRank, setFilterRank] = useState<number>(-1); // -1: 全て
 
@@ -64,6 +66,7 @@ export default function MissionsDashboardPage({ params }: { params: { guild_id: 
       if (!data.error) {
         setMissions(data.missions || []);
         setStats(data.stats || null);
+        if (data.slotCount) setSlotCount(data.slotCount);
       } else {
         toast.error('ミッション一覧の取得に失敗しました: ' + data.error);
       }
@@ -71,6 +74,31 @@ export default function MissionsDashboardPage({ params }: { params: { guild_id: 
       toast.error('ネットワークエラーが発生しました');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveSlotCount = async (newCount: number) => {
+    setSavingSlot(true);
+    try {
+      const res = await fetch(`/api/guilds/${guildId}/missions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_slot_count',
+          slot_count: newCount,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSlotCount(data.slotCount || newCount);
+        toast.success(`1日の受注枠数を ${data.slotCount || newCount} 枠に保存しました！`);
+      } else {
+        toast.error('枠数の保存に失敗しました: ' + data.error);
+      }
+    } catch {
+      toast.error('枠数の保存に失敗しました');
+    } finally {
+      setSavingSlot(false);
     }
   };
 
@@ -274,6 +302,47 @@ export default function MissionsDashboardPage({ params }: { params: { guild_id: 
           </div>
         </div>
       )}
+
+      {/* Daily Slot Count Setting Bar */}
+      <div className="mb-4 p-4 bg-neutral-900/90 border border-emerald-800/50 mecha-clip-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">📅</span>
+          <div>
+            <div className="font-tech text-xs text-emerald-400 font-bold flex items-center gap-1.5">
+              1日のデイリーミッション受注枠数 (スロット数)
+            </div>
+            <p className="font-tech text-[11px] text-zinc-400">
+              ユーザーがコマンドを実行した際に、有効なミッション一覧から毎日この枠数分が選出されます。
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-black/60 border border-zinc-700 px-2.5 py-1.5 mecha-clip-sm">
+            <span className="text-xs font-tech text-zinc-400">枠数:</span>
+            <select
+              value={slotCount}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10) || 3;
+                setSlotCount(val);
+                handleSaveSlotCount(val);
+              }}
+              disabled={savingSlot}
+              className="bg-transparent text-white font-mecha font-bold text-sm outline-none cursor-pointer"
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                <option key={num} value={num} className="bg-zinc-900 text-white">
+                  {num} 枠 / 日
+                </option>
+              ))}
+            </select>
+          </div>
+          {savingSlot && (
+            <span className="text-xs font-tech text-emerald-400 animate-pulse">
+              保存中...
+            </span>
+          )}
+        </div>
+      </div>
 
       {/* Filter bar */}
       <div className="flex items-center justify-between gap-3 mb-4 p-3 bg-neutral-900/80 border border-zinc-800 mecha-clip-sm">
