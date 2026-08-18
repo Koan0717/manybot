@@ -86,7 +86,7 @@ const MISSION_TEMPLATES = [
   { title: "魚釣り挑戦", desc: "`/釣り` で魚を1匹以上釣り上げる", miles: 100 },
   { title: "虫捕り挑戦", desc: "`/虫捕り` で虫を1匹以上捕まえる", miles: 100 },
   { title: "ショップ利用", desc: "`/ショップ` または `/両替` を1回利用する", miles: 100 },
-  { title: "生き物売却", desc: "`/売却` で重複した生き物を売却してゼニーにする", miles: 100 },
+  { title: "生き物売却", desc: "`/売却` で重複した生き物を売却してベルにする", miles: 100 },
   { title: "VC長時間滞在", desc: "VCに通算1時間以上参加してメンバーと交流する", miles: 100 },
   { title: "レア捕獲", desc: "レア度RARE以上の生き物を1匹捕獲する", miles: 100 },
   { title: "イベント参加", desc: "DIY作業台イベントや鯖内イベントに参加・告知する", miles: 100 },
@@ -622,14 +622,14 @@ export default function BotGuildDashboardPage({
             <div className="mecha-clip-sm bg-neutral-900/80 border border-purple-900/40 p-4 shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-tech text-xs text-zinc-400 flex items-center gap-1.5">
-                  <Coins className="w-3.5 h-3.5 text-purple-400" /> ゼニー・両替レート
+                  <Coins className="w-3.5 h-3.5 text-purple-400" /> ベル・両替レート
                 </span>
                 <span className="font-tech text-[10px] px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/60 text-purple-300">
-                  {settings.manybot_per_ticket || 500} ゼニー/枚
+                  {settings.manybot_per_ticket || 500} ベル/枚
                 </span>
               </div>
               <div className="font-mecha text-lg font-bold text-white">100 マイル = 1 枚</div>
-              <div className="font-tech text-[11px] text-zinc-500 mt-1">Manybot通貨 (ゼニー) 連携</div>
+              <div className="font-tech text-[11px] text-zinc-500 mt-1">Manybot通貨 (ベル) 連携</div>
             </div>
 
             <div className="mecha-clip-sm bg-neutral-900/80 border border-purple-900/40 p-4 shadow-sm">
@@ -697,8 +697,8 @@ export default function BotGuildDashboardPage({
                   tab: 'economy-exchange',
                   icon: Coins,
                   title: '🪙 通貨・両替・売却 (/両替, /売却)',
-                  desc: '重複生物のゼニー売却額（レア度別・色違い5倍）、マイル/ゼニー両替レート',
-                  badge: 'ゼニー連携',
+                  desc: '重複生物のベル売却額（レア度別・色違い5倍）、マイル/ベル両替レート',
+                  badge: 'ベル連携',
                 },
                 {
                   tab: 'missions',
@@ -1109,7 +1109,7 @@ export default function BotGuildDashboardPage({
                 🪙 通貨・両替・売却設定 (/両替, /売却)
               </h2>
               <p className="font-tech text-xs text-zinc-400 mt-1">
-                重複して捕まえた生き物の売却換金額（レア度別）および、Manybot 鯖内通貨「ゼニー」と図鑑チケットの両替レートを設定します。
+                重複して捕まえた生き物の売却換金額（レア度別）および、Manybot 鯖内通貨「ベル」と図鑑チケットの両替レートを設定します。
               </p>
             </div>
             <button
@@ -1125,14 +1125,14 @@ export default function BotGuildDashboardPage({
             <div className="space-y-4 p-4 bg-black/40 border border-purple-900/40 rounded-lg">
               <h3 className="font-mecha font-bold text-sm text-purple-300">🔀 両替レート設定 (/両替)</h3>
               <div className="space-y-2">
-                <label className="font-tech text-xs text-zinc-400">1チケットあたりのゼニー換算額</label>
+                <label className="font-tech text-xs text-zinc-400">1チケットあたりのベル換算額</label>
                 <input
                   type="number"
                   value={settings.manybot_per_ticket ?? 500}
                   onChange={(e) => updateSetting('manybot_per_ticket', parseInt(e.target.value, 10))}
                   className="w-full bg-black/60 border border-purple-900/60 rounded p-2.5 text-xs text-white font-tech mecha-input-purple outline-none"
                 />
-                <p className="font-tech text-[10px] text-zinc-500">デフォルト: **500 ゼニー** = チケット1枚</p>
+                <p className="font-tech text-[10px] text-zinc-500">デフォルト: **500 ベル** = チケット1枚</p>
               </div>
             </div>
 
@@ -1192,17 +1192,81 @@ export default function BotGuildDashboardPage({
                   📸 デイリーミッション一覧・作成・統計管理
                 </h2>
                 <p className="font-tech text-xs text-zinc-400 mt-1">
-                  1日の受注数は **3枠**（1ミッション達成につき **100マイル** 付与 / 3つで **+300マイル**）です。<br />
-                  ダッシュボード上で新しいミッションの追加、条件や報酬の設定、受注が少ないミッションの見直しが簡単に行えます。
+                  1日のデイリーミッション受注数や達成報酬を設定し、登録されたミッション一覧から毎日ランダムで選出・配信します。<br />
+                  ミッションの追加・編集・削除や、受注統計に基づいた見直しも簡単に行えます。
                 </p>
               </div>
-              <button
-                onClick={handleOpenCreateMission}
-                className="mecha-btn-sheen mecha-clip-sm bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-mecha font-bold py-2.5 px-5 border border-purple-400/40 text-xs shadow-lg flex items-center gap-2 whitespace-nowrap self-start sm:self-auto"
-              >
-                <Plus className="w-4 h-4" />
-                ＋ 新規ミッション作成
-              </button>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={saving}
+                  className="mecha-btn-sheen mecha-clip-sm bg-gradient-to-r from-purple-800 to-indigo-900 text-white font-mecha font-bold py-2.5 px-4 border border-purple-400/40 text-xs shadow-md"
+                >
+                  {saving ? '保存中...' : '⚙️ 設定を保存'}
+                </button>
+                <button
+                  onClick={handleOpenCreateMission}
+                  className="mecha-btn-sheen mecha-clip-sm bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-mecha font-bold py-2.5 px-5 border border-purple-400/40 text-xs shadow-lg flex items-center gap-2 whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  ＋ 新規ミッション作成
+                </button>
+              </div>
+            </div>
+
+            {/* Daily Slots & Rewards Setting Controls */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-black/40 border border-purple-900/40 rounded-lg">
+              <div className="space-y-1.5">
+                <label className="font-tech text-xs text-purple-300 font-bold flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5 text-purple-400" />
+                  1日のデイリーミッション受注枠数 (スロット数)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={settings.daily_mission_slot_count ?? 3}
+                    onChange={(e) => updateSetting('daily_mission_slot_count', parseInt(e.target.value, 10) || 3)}
+                    className="w-28 bg-black/60 border border-purple-900/60 rounded p-2 text-xs text-white font-mono mecha-input-purple outline-none"
+                  />
+                  <span className="font-tech text-xs text-zinc-400">
+                    枠 / 日 （デフォルト: **3枠**）
+                  </span>
+                </div>
+                <p className="font-tech text-[11px] text-zinc-500">
+                  ※ 登録されたミッション一覧から、毎日この枠数分が重複なくランダムに選出されます。
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-tech text-xs text-purple-300 font-bold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                  1ミッションあたりの基本達成報酬マイル
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={10}
+                    step={10}
+                    value={settings.daily_mission_reward_rank1 ?? 100}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 100;
+                      updateSetting('daily_mission_reward_rank1', val);
+                      updateSetting('daily_mission_reward_rank2', val);
+                      updateSetting('daily_mission_reward_rank3', val);
+                      updateSetting('daily_mission_reward_rank4', val);
+                    }}
+                    className="w-28 bg-black/60 border border-purple-900/60 rounded p-2 text-xs text-white font-mono mecha-input-purple outline-none"
+                  />
+                  <span className="font-tech text-xs text-zinc-400">
+                    マイル / 回 （デフォルト: **100pt**）
+                  </span>
+                </div>
+                <p className="font-tech text-[11px] text-zinc-500">
+                  ※ 全{settings.daily_mission_slot_count ?? 3}枠達成で合計 **{((settings.daily_mission_slot_count ?? 3) * (settings.daily_mission_reward_rank1 ?? 100)).toLocaleString()} マイル** 獲得。
+                </p>
+              </div>
             </div>
 
             {/* Overview Stats HUD */}

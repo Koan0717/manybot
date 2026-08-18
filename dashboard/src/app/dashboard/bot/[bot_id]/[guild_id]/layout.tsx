@@ -106,7 +106,7 @@ export default function BotDashboardLayout({
       items: [
         { label: '浮上・チケット獲得設定', tabKey: 'tickets', icon: Ticket, badge: '自動付与' },
         { label: 'ショップ・道具交換 (/ショップ)', tabKey: 'shop', icon: ShoppingBag },
-        { label: '通貨・両替・売却 (/両替, /売却)', tabKey: 'economy-exchange', icon: Coins, badge: 'ゼニー連携' },
+        { label: '通貨・両替・売却 (/両替, /売却)', tabKey: 'economy-exchange', icon: Coins, badge: 'ベル連携' },
       ],
     },
     {

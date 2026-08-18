@@ -39,7 +39,7 @@ const DEFAULT_SETTINGS = {
   completion_auto_award: true,
   completion_announce_channel_id: '',
 
-  // 6. 🪙 鯖内通貨 (ゼニー) 連携 (/両替, /売却)
+  // 6. 🪙 鯖内通貨 (ベル) 連携 (/両替, /売却)
   manybot_per_ticket: 500,
   allow_miles_to_ticket: true,
   allow_zeny_to_ticket: true,
@@ -471,7 +471,7 @@ export async function POST(
           },
           {
             name: '📖 🔀 💰 図鑑・両替・売却',
-            value: '・**【魚図鑑】/【虫図鑑】**: 各図鑑と完成率を確認\n・**【両替】**: マイル/ゼニー ⇄ 図鑑チケット の相互両替\n・**【ダブり売却】**: 重複した生き物をまとめてゼニーに換金',
+            value: '・**【魚図鑑】/【虫図鑑】**: 各図鑑と完成率を確認\n・**【両替】**: マイル/ベル ⇄ 図鑑チケット の相互両替\n・**【ダブり売却】**: 重複した生き物をまとめてベルに換金',
             inline: false,
           },
           {
@@ -508,7 +508,7 @@ export async function POST(
             { type: 2, style: 1, custom_id: 'btn_fishbook', label: '📖 魚図鑑' },
             { type: 2, style: 3, custom_id: 'btn_bugbook', label: '📖 虫図鑑' },
             { type: 2, style: 2, custom_id: 'btn_exchange', label: '🔀 両替' },
-            { type: 2, style: 4, custom_id: 'btn_sell', label: '💰 ダブり売却 (ゼニー)' },
+            { type: 2, style: 4, custom_id: 'btn_sell', label: '💰 ダブり売却 (ベル)' },
           ],
         },
         {
