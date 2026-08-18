@@ -1259,6 +1259,8 @@ HORSE_DATA = [
     {"num": 5, "name": "イクイノックス", "emoji": "🟪", "icon": "5️⃣"},
 ]
 
+active_horse_racers = set()
+
 def render_horse_track(positions, horses=HORSE_DATA, track_length=15):
     """各馬の位置(0〜track_length)を受け取り、トラックの文字列を作成する"""
     lines = []
@@ -1288,6 +1290,9 @@ class HorseRacingBetModal(discord.ui.Modal):
         self.add_item(self.bet_input)
 
     async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id in active_horse_racers:
+            return await interaction.response.send_message("⚠️ 現在レースが進行中です。レースが終了するまでお待ちください。", ephemeral=True)
+            
         try:
             bot = interaction.client
             max_bet = int(get_setting(bot, "GAMBLE_MAX_BET") or 100000)
@@ -1305,6 +1310,10 @@ class HorseRacingBetModal(discord.ui.Modal):
                 return await interaction.response.send_message(f"1〜{max_bet:,} {currency_name} の範囲で入力してください。", ephemeral=True)
 
             await interaction.response.defer(ephemeral=True)
+            
+            if interaction.user.id in active_horse_racers:
+                return await interaction.followup.send("⚠️ 現在レースが進行中です。レースが終了するまでお待ちください。", ephemeral=True)
+
             user_data = await database.get_user(interaction.guild.id, interaction.user.id)
             now = datetime.datetime.now(JST)
             today_str = now.strftime("%Y-%m-%d")
@@ -1374,6 +1383,8 @@ class HorseRacingSelect(discord.ui.Select):
         )
         
     async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id in active_horse_racers:
+            return await interaction.response.send_message("⚠️ 現在レースが進行中です。レースが終了するまでお待ちください。", ephemeral=True)
         val = self.values[0]
         num_str, bet_type = val.split("_")
         horse_num = int(num_str)
@@ -1385,203 +1396,211 @@ class HorseRacingBetTypeView(discord.ui.View):
         self.add_item(HorseRacingSelect(bot))
 
 async def execute_horse_race(interaction: discord.Interaction, user_horse_num: int, bet_type: str, bet: int, play_count: int, max_plays: int):
-    bot = interaction.client
-    currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
-    
-    # 確率・倍率の取得
-    p_tan = get_setting(bot, "GAMBLE_HORSE_RATE_WIN_TAN")
-    if p_tan is None: p_tan = 0.20
-    p_fuku = get_setting(bot, "GAMBLE_HORSE_RATE_WIN_FUKU")
-    if p_fuku is None: p_fuku = 0.60
-    
-    mul_tan = get_setting(bot, "GAMBLE_HORSE_MUL_TAN")
-    if mul_tan is None: mul_tan = 4.5
-    mul_fuku = get_setting(bot, "GAMBLE_HORSE_MUL_FUKU")
-    if mul_fuku is None: mul_fuku = 1.5
-    
-    user_horse = next((h for h in HORSE_DATA if h["num"] == user_horse_num), HORSE_DATA[0])
-    type_label = f"単勝 ({mul_tan}倍)" if bet_type == "tan" else f"複勝 ({mul_fuku}倍)"
-    
-    # 順位の事前抽選
-    all_nums = [h["num"] for h in HORSE_DATA]
-    other_nums = [n for n in all_nums if n != user_horse_num]
-    random.shuffle(other_nums)
-    
-    is_win = False
-    mul = 0.0
-    
-    if bet_type == "tan":
-        if random.random() < p_tan:
-            is_win = True
-            mul = mul_tan
-            final_ranking = [user_horse_num] + other_nums
-        else:
-            pos = random.randint(1, 4)
-            final_ranking = other_nums[:pos] + [user_horse_num] + other_nums[pos:]
-    else:
-        if random.random() < p_fuku:
-            is_win = True
-            mul = mul_fuku
-            pos = random.randint(0, 2)
-            final_ranking = other_nums[:pos] + [user_horse_num] + other_nums[pos:]
-        else:
-            pos = random.randint(3, 4)
-            final_ranking = other_nums[:pos] + [user_horse_num] + other_nums[pos:]
-            
-    track_len = 15
-    final_scores = {}
-    for rank_idx, h_num in enumerate(final_ranking):
-        final_scores[h_num] = track_len - rank_idx * 1
-        
-    steps_data = [
-        {
-            "phase": "🚩 【スタート！】",
-            "commentary": "各馬綺麗なスタート！一斉にゲートを飛び出しました！",
-            "progress": 0.25
-        },
-        {
-            "phase": "🏃 【第2コーナー通過】",
-            "commentary": "先頭争いが激化！激しいポジション争いが繰り広げられています！",
-            "progress": 0.55
-        },
-        {
-            "phase": "🔥 【第3〜4コーナー！】",
-            "commentary": "馬群が凝縮！各馬最後の直線に向けて仕掛け始めました！",
-            "progress": 0.80
-        },
-        {
-            "phase": "⚡ 【最後の直線！！】",
-            "commentary": "残り200m！外から強烈な追い上げ！先頭は譲らない！！",
-            "progress": 0.95
-        }
-    ]
-    
-    race_frames = []
-    for s_idx, step in enumerate(steps_data):
-        ratio = step["progress"]
-        positions = {}
-        for h in HORSE_DATA:
-            h_num = h["num"]
-            target_p = final_scores[h_num] * ratio
-            noise = random.uniform(-1.5, 1.5) if s_idx < 3 else random.uniform(-0.5, 0.5)
-            p = max(0, min(track_len - 1, int(round(target_p + noise))))
-            positions[h_num] = p
-        race_frames.append((step["phase"], step["commentary"], positions))
-        
-    goal_positions = {}
-    for rank_idx, h_num in enumerate(final_ranking):
-        goal_positions[h_num] = track_len if rank_idx == 0 else max(1, track_len - rank_idx)
-    race_frames.append(("🏆 【ゴールイン！！】", "全馬ゴールイン！白熱の勝負が決着しました！", goal_positions))
-    
-    # 1. 初期メッセージ送信
-    phase, comm, pos = race_frames[0]
-    track_str = render_horse_track(pos, HORSE_DATA, track_len)
-    
-    embed = discord.Embed(
-        title="🏇 競馬レース開催中！",
-        description=(
-            f"**あなたの選択**: {user_horse['icon']}{user_horse['emoji']} **{user_horse['name']}** 【{type_label}】\n"
-            f"**賭け金**: `{bet:,} {currency_name}` (本日 {play_count}/{max_plays if max_plays > 0 else '無制限'}回目)\n\n"
-            f"**{phase}**\n"
-            f"```\n{track_str}\n```\n"
-            f"📢 **実況**: *{comm}*"
-        ),
-        color=discord.Color.blue()
-    )
-    
-    await interaction.followup.send(embed=embed, ephemeral=True)
-    
-    # 2. 中間ステップ更新
-    for frame_idx in range(1, len(race_frames) - 1):
-        await asyncio.sleep(1.4)
-        phase, comm, pos = race_frames[frame_idx]
-        track_str = render_horse_track(pos, HORSE_DATA, track_len)
-        embed.description = (
-            f"**あなたの選択**: {user_horse['icon']}{user_horse['emoji']} **{user_horse['name']}** 【{type_label}】\n"
-            f"**賭け金**: `{bet:,} {currency_name}` (本日 {play_count}/{max_plays if max_plays > 0 else '無制限'}回目)\n\n"
-            f"**{phase}**\n"
-            f"```\n{track_str}\n```\n"
-            f"📢 **実況**: *{comm}*"
-        )
-        try:
-            await interaction.edit_original_response(embed=embed)
-        except Exception as e:
-            print(f"[WARN] Failed to edit race message frame {frame_idx}: {e}")
-            
-    # 3. ゴール結果更新
-    await asyncio.sleep(1.5)
-    phase, comm, goal_pos = race_frames[-1]
-    track_str = render_horse_track(goal_pos, HORSE_DATA, track_len)
-    
-    rank_emojis = ["🥇 1着", "🥈 2着", "🥉 3着", "4着", "5着"]
-    rank_text_lines = []
-    user_final_rank = 0
-    for r_idx, h_num in enumerate(final_ranking):
-        h = next(item for item in HORSE_DATA if item["num"] == h_num)
-        is_user_mark = " 👈 **あなたの選択馬**" if h_num == user_horse_num else ""
-        if h_num == user_horse_num:
-            user_final_rank = r_idx + 1
-        rank_text_lines.append(f"{rank_emojis[r_idx]}: {h['icon']}{h['emoji']} **{h['name']}**{is_user_mark}")
-    ranking_summary = "\n".join(rank_text_lines)
-    
-    win_amount = 0
-    tax_msg = ""
-    if is_win:
-        win_amount = int(bet * mul)
-        if get_setting(bot, "GAMBLE_TAX_ENABLED"):
-            tax_rate = get_setting(bot, "GAMBLE_TAX_RATE")
-            if tax_rate is None: tax_rate = 0.05
-            net_profit = win_amount - bet
-            tax_amount = int(net_profit * tax_rate)
-            win_amount = bet + (net_profit - tax_amount)
-            tax_msg = f"\n※ カジノ手数料 ({tax_rate*100:.1f}%) として **{tax_amount:,} {currency_name}** が引かれました。"
-        await database.add_balance(interaction.guild.id, interaction.user.id, win_amount)
-        
-    result_title = "🏆 競馬レース結果: 的中！" if is_win else "💀 競馬レース結果: 不的中"
-    result_color = discord.Color.gold() if is_win else discord.Color.red()
-    
-    if is_win:
-        outcome_text = f"🎉 **的中！** あなたの選んだ **{user_horse['name']}** は **{user_final_rank}着** でした！\n💰 **払戻金**: **+{win_amount:,} {currency_name}** (倍率: `{mul}倍`){tax_msg}"
-    else:
-        outcome_text = f"💀 **不的中...** あなたの選んだ **{user_horse['name']}** は **{user_final_rank}着** でした。\n💸 **損失額**: `-{bet:,} {currency_name}`"
-        
-    embed_result = discord.Embed(
-        title=result_title,
-        description=(
-            f"**あなたの選択**: {user_horse['icon']}{user_horse['emoji']} **{user_horse['name']}** 【{type_label}】\n"
-            f"**賭け金**: `{bet:,} {currency_name}`\n\n"
-            f"```\n{track_str}\n```\n"
-            f"**【確定着順】**\n{ranking_summary}\n\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"{outcome_text}"
-        ),
-        color=result_color
-    )
-    
+    active_horse_racers.add(interaction.user.id)
     try:
-        await interaction.edit_original_response(embed=embed_result)
-    except Exception as e:
-        print(f"[WARN] Failed to edit race final result: {e}")
+        bot = interaction.client
+        currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
         
-    embed_log = discord.Embed(
-        title="🏇 ギャンブルログ: 競馬",
-        color=result_color,
-        timestamp=discord.utils.utcnow()
-    )
-    embed_log.add_field(name="プレイヤー", value=f"{interaction.user.mention} (ID: {interaction.user.id})", inline=True)
-    embed_log.add_field(name="賭け金", value=f"{bet:,} {currency_name}", inline=True)
-    embed_log.add_field(name="馬券種別・選択馬", value=f"{user_horse['icon']}{user_horse['emoji']} {user_horse['name']} ({type_label})", inline=True)
-    
-    if is_win:
-        embed_log.add_field(name="結果", value=f"的中 🏆 ({user_final_rank}着)", inline=True)
-        embed_log.add_field(name="獲得額 (配当)", value=f"+{win_amount:,} {currency_name} (倍率: {mul}倍)", inline=True)
-    else:
-        embed_log.add_field(name="結果", value=f"ハズレ 💀 ({user_final_rank}着)", inline=True)
-        embed_log.add_field(name="損失額", value=f"-{bet:,} {currency_name}", inline=True)
+        # 確率・倍率の取得
+        p_tan = get_setting(bot, "GAMBLE_HORSE_RATE_WIN_TAN")
+        if p_tan is None: p_tan = 0.20
+        p_fuku = get_setting(bot, "GAMBLE_HORSE_RATE_WIN_FUKU")
+        if p_fuku is None: p_fuku = 0.60
         
-    top3_names = [f"{rank_emojis[idx]} {next(h['name'] for h in HORSE_DATA if h['num'] == final_ranking[idx])}" for idx in range(3)]
-    embed_log.add_field(name="確定TOP3", value="\n".join(top3_names), inline=False)
-    await send_log(bot, interaction.guild, "gambling", embed_log)
+        mul_tan = get_setting(bot, "GAMBLE_HORSE_MUL_TAN")
+        if mul_tan is None: mul_tan = 4.5
+        mul_fuku = get_setting(bot, "GAMBLE_HORSE_MUL_FUKU")
+        if mul_fuku is None: mul_fuku = 1.5
+        
+        user_horse = next((h for h in HORSE_DATA if h["num"] == user_horse_num), HORSE_DATA[0])
+        type_label = f"単勝 ({mul_tan}倍)" if bet_type == "tan" else f"複勝 ({mul_fuku}倍)"
+        
+        # 順位の事前抽選
+        all_nums = [h["num"] for h in HORSE_DATA]
+        other_nums = [n for n in all_nums if n != user_horse_num]
+        random.shuffle(other_nums)
+        
+        is_win = False
+        mul = 0.0
+        
+        if bet_type == "tan":
+            if random.random() < p_tan:
+                is_win = True
+                mul = mul_tan
+                final_ranking = [user_horse_num] + other_nums
+            else:
+                pos = random.randint(1, 4)
+                final_ranking = other_nums[:pos] + [user_horse_num] + other_nums[pos:]
+        else:
+            if random.random() < p_fuku:
+                is_win = True
+                mul = mul_fuku
+                pos = random.randint(0, 2)
+                final_ranking = other_nums[:pos] + [user_horse_num] + other_nums[pos:]
+            else:
+                pos = random.randint(3, 4)
+                final_ranking = other_nums[:pos] + [user_horse_num] + other_nums[pos:]
+                
+        track_len = 15
+        final_scores = {}
+        for rank_idx, h_num in enumerate(final_ranking):
+            final_scores[h_num] = track_len - rank_idx * 1
+            
+        steps_data = [
+            {
+                "phase": "🚩 【スタート！】",
+                "commentary": "各馬綺麗なスタート！一斉にゲートを飛び出しました！",
+                "progress": 0.25
+            },
+            {
+                "phase": "🏃 【第2コーナー通過】",
+                "commentary": "先頭争いが激化！激しいポジション争いが繰り広げられています！",
+                "progress": 0.55
+            },
+            {
+                "phase": "🔥 【第3〜4コーナー！】",
+                "commentary": "馬群が凝縮！各馬最後の直線に向けて仕掛け始めました！",
+                "progress": 0.80
+            },
+            {
+                "phase": "⚡ 【最後の直線！！】",
+                "commentary": "残り200m！外から強烈な追い上げ！先頭は譲らない！！",
+                "progress": 0.95
+            }
+        ]
+        
+        race_frames = []
+        for s_idx, step in enumerate(steps_data):
+            ratio = step["progress"]
+            positions = {}
+            for h in HORSE_DATA:
+                h_num = h["num"]
+                target_p = final_scores[h_num] * ratio
+                noise = random.uniform(-1.2, 1.2) if s_idx < 3 else random.uniform(-0.4, 0.4)
+                p = max(0, min(track_len - 1, int(round(target_p + noise))))
+                positions[h_num] = p
+            race_frames.append((step["phase"], step["commentary"], positions))
+            
+        goal_positions = {}
+        for rank_idx, h_num in enumerate(final_ranking):
+            goal_positions[h_num] = track_len if rank_idx == 0 else max(1, track_len - rank_idx)
+        race_frames.append(("🏆 【ゴールイン！！】", "全馬ゴールイン！白熱の勝負が決着しました！", goal_positions))
+        
+        # 1. 初期メッセージ送信 (deferされたオリジナルレスポンスをedit)
+        phase, comm, pos = race_frames[0]
+        track_str = render_horse_track(pos, HORSE_DATA, track_len)
+        
+        embed = discord.Embed(
+            title="🏇 競馬レース開催中！",
+            description=(
+                f"**あなたの選択**: {user_horse['icon']}{user_horse['emoji']} **{user_horse['name']}** 【{type_label}】\n"
+                f"**賭け金**: `{bet:,} {currency_name}` (本日 {play_count}/{max_plays if max_plays > 0 else '無制限'}回目)\n\n"
+                f"**{phase}**\n"
+                f"```\n{track_str}\n```\n"
+                f"📢 **実況**: *{comm}*"
+            ),
+            color=discord.Color.blue()
+        )
+        
+        await interaction.edit_original_response(embed=embed)
+        
+        # 2. 中間ステップ更新
+        for frame_idx in range(1, len(race_frames) - 1):
+            await asyncio.sleep(1.5)
+            phase, comm, pos = race_frames[frame_idx]
+            track_str = render_horse_track(pos, HORSE_DATA, track_len)
+            embed.description = (
+                f"**あなたの選択**: {user_horse['icon']}{user_horse['emoji']} **{user_horse['name']}** 【{type_label}】\n"
+                f"**賭け金**: `{bet:,} {currency_name}` (本日 {play_count}/{max_plays if max_plays > 0 else '無制限'}回目)\n\n"
+                f"**{phase}**\n"
+                f"```\n{track_str}\n```\n"
+                f"📢 **実況**: *{comm}*"
+            )
+            try:
+                await interaction.edit_original_response(embed=embed)
+            except Exception as e:
+                print(f"[WARN] Failed to edit race message frame {frame_idx}: {e}")
+                
+        # 3. ゴール結果更新
+        await asyncio.sleep(1.5)
+        phase, comm, goal_pos = race_frames[-1]
+        track_str = render_horse_track(goal_pos, HORSE_DATA, track_len)
+        
+        rank_emojis = ["🥇 1着", "🥈 2着", "🥉 3着", "4着", "5着"]
+        rank_text_lines = []
+        user_final_rank = 0
+        for r_idx, h_num in enumerate(final_ranking):
+            h = next(item for item in HORSE_DATA if item["num"] == h_num)
+            is_user_mark = " 👈 **あなたの選択馬**" if h_num == user_horse_num else ""
+            if h_num == user_horse_num:
+                user_final_rank = r_idx + 1
+            rank_text_lines.append(f"{rank_emojis[r_idx]}: {h['icon']}{h['emoji']} **{h['name']}**{is_user_mark}")
+        ranking_summary = "\n".join(rank_text_lines)
+        
+        win_amount = 0
+        tax_msg = ""
+        if is_win:
+            win_amount = int(bet * mul)
+            if get_setting(bot, "GAMBLE_TAX_ENABLED"):
+                tax_rate = get_setting(bot, "GAMBLE_TAX_RATE")
+                if tax_rate is None: tax_rate = 0.05
+                net_profit = win_amount - bet
+                tax_amount = int(net_profit * tax_rate)
+                win_amount = bet + (net_profit - tax_amount)
+                tax_msg = f"\n※ カジノ手数料 ({tax_rate*100:.1f}%) として **{tax_amount:,} {currency_name}** が引かれました。"
+            await database.add_balance(interaction.guild.id, interaction.user.id, win_amount)
+            
+        result_title = "🏆 競馬レース結果: 的中！" if is_win else "💀 競馬レース結果: 不的中"
+        result_color = discord.Color.gold() if is_win else discord.Color.red()
+        
+        if is_win:
+            outcome_text = f"🎉 **的中！** あなたの選んだ **{user_horse['name']}** は **{user_final_rank}着** でした！\n💰 **払戻金**: **+{win_amount:,} {currency_name}** (倍率: `{mul}倍`){tax_msg}"
+        else:
+            outcome_text = f"💀 **不的中...** あなたの選んだ **{user_horse['name']}** は **{user_final_rank}着** でした。\n💸 **損失額**: `-{bet:,} {currency_name}`"
+            
+        embed_result = discord.Embed(
+            title=result_title,
+            description=(
+                f"**あなたの選択**: {user_horse['icon']}{user_horse['emoji']} **{user_horse['name']}** 【{type_label}】\n"
+                f"**賭け金**: `{bet:,} {currency_name}`\n\n"
+                f"```\n{track_str}\n```\n"
+                f"**【確定着順】**\n{ranking_summary}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"{outcome_text}"
+            ),
+            color=result_color
+        )
+        
+        try:
+            await interaction.edit_original_response(embed=embed_result)
+        except Exception as e:
+            print(f"[WARN] Failed to edit race final result: {e}")
+            try:
+                await interaction.followup.send(embed=embed_result, ephemeral=True)
+            except Exception:
+                pass
+            
+        embed_log = discord.Embed(
+            title="🏇 ギャンブルログ: 競馬",
+            color=result_color,
+            timestamp=discord.utils.utcnow()
+        )
+        embed_log.add_field(name="プレイヤー", value=f"{interaction.user.mention} (ID: {interaction.user.id})", inline=True)
+        embed_log.add_field(name="賭け金", value=f"{bet:,} {currency_name}", inline=True)
+        embed_log.add_field(name="馬券種別・選択馬", value=f"{user_horse['icon']}{user_horse['emoji']} {user_horse['name']} ({type_label})", inline=True)
+        
+        if is_win:
+            embed_log.add_field(name="結果", value=f"的中 🏆 ({user_final_rank}着)", inline=True)
+            embed_log.add_field(name="獲得額 (配当)", value=f"+{win_amount:,} {currency_name} (倍率: {mul}倍)", inline=True)
+        else:
+            embed_log.add_field(name="結果", value=f"ハズレ 💀 ({user_final_rank}着)", inline=True)
+            embed_log.add_field(name="損失額", value=f"-{bet:,} {currency_name}", inline=True)
+            
+        top3_names = [f"{rank_emojis[idx]} {next(h['name'] for h in HORSE_DATA if h['num'] == final_ranking[idx])}" for idx in range(3)]
+        embed_log.add_field(name="確定TOP3", value="\n".join(top3_names), inline=False)
+        await send_log(bot, interaction.guild, "gambling", embed_log)
+    finally:
+        active_horse_racers.discard(interaction.user.id)
 
 class HorseRacingView(discord.ui.View):
     def __init__(self):
@@ -1589,6 +1608,9 @@ class HorseRacingView(discord.ui.View):
         
     @discord.ui.button(label="🏇 競馬で遊ぶ", style=discord.ButtonStyle.primary, custom_id="persistent_horse_racing_btn")
     async def play(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id in active_horse_racers:
+            return await interaction.response.send_message("⚠️ 現在レースが進行中です。レースが終了するまでお待ちください。", ephemeral=True)
+            
         bot = interaction.client
         currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
         mul_tan = get_setting(bot, "GAMBLE_HORSE_MUL_TAN") or 4.5
