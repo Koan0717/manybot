@@ -187,6 +187,35 @@ export async function ensureEvaluationPeriodsSchema(pool: any) {
 }
 
 /**
+ * room_panels テーブルを保証する
+ */
+export async function ensureRoomPanelsSchema(pool: any) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS room_panels (
+        guild_id BIGINT,
+        channel_id BIGINT,
+        message_id BIGINT,
+        panel_type VARCHAR(50) DEFAULT 'inn',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (guild_id, panel_type)
+      )
+    `);
+    const cols = [
+      'ALTER TABLE room_panels ADD COLUMN IF NOT EXISTS channel_id BIGINT',
+      'ALTER TABLE room_panels ADD COLUMN IF NOT EXISTS message_id BIGINT',
+      'ALTER TABLE room_panels ADD COLUMN IF NOT EXISTS panel_type VARCHAR(50) DEFAULT \'inn\'',
+      'ALTER TABLE room_panels ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+    ];
+    for (const sql of cols) {
+      try { await pool.query(sql); } catch {}
+    }
+  } catch (e) {
+    console.error('Failed to ensure room_panels schema:', e);
+  }
+}
+
+/**
  * すべての基本スキーマを一括保証する
  */
 export async function ensureAllSchemas(pool: any) {
@@ -196,5 +225,6 @@ export async function ensureAllSchemas(pool: any) {
     ensureEvaluationPeriodsSchema(pool),
     ensureAntigriefSettingsSchema(pool),
     ensureVcCoinsSettingsSchema(pool),
+    ensureRoomPanelsSchema(pool),
   ]);
 }

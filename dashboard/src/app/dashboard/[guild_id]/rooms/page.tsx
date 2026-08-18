@@ -41,7 +41,9 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
     ENABLE_PRICE_NEW_MEMBER: false,
     ENABLE_PRICE_DOWNGRADE: false,
     ENABLE_PRICE_VIOLATOR: false,
-    ENABLE_FREE_INN_MAIN_SUB: false
+    ENABLE_FREE_INN_MAIN_SUB: false,
+    DISABLE_12H_ROOMS: false,
+    DISABLE_24H_ROOMS: false
   });
   
   const defaultRolePrices = {
@@ -212,6 +214,32 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
     }));
   };
 
+  const handleDurationToggle = (type: '12h' | '24h', checked: boolean) => {
+    if (type === '12h') {
+      if (checked) {
+        if (toggles.DISABLE_24H_ROOMS) {
+          toast('両方をOFFにすることは出来ません。24時間OFFを解除し、12時間OFFに設定しました。', { icon: '⚠️' });
+          setToggles(prev => ({ ...prev, DISABLE_12H_ROOMS: true, DISABLE_24H_ROOMS: false }));
+        } else {
+          setToggles(prev => ({ ...prev, DISABLE_12H_ROOMS: true }));
+        }
+      } else {
+        setToggles(prev => ({ ...prev, DISABLE_12H_ROOMS: false }));
+      }
+    } else {
+      if (checked) {
+        if (toggles.DISABLE_12H_ROOMS) {
+          toast('両方をOFFにすることは出来ません。12時間OFFを解除し、24時間OFFに設定しました。', { icon: '⚠️' });
+          setToggles(prev => ({ ...prev, DISABLE_24H_ROOMS: true, DISABLE_12H_ROOMS: false }));
+        } else {
+          setToggles(prev => ({ ...prev, DISABLE_24H_ROOMS: true }));
+        }
+      } else {
+        setToggles(prev => ({ ...prev, DISABLE_24H_ROOMS: false }));
+      }
+    }
+  };
+
   const textChannels = channels.filter(c => c.type === 0);
   const categoryChannels = channels.filter(c => c.type === 4);
 
@@ -226,6 +254,95 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
           {error}
         </div>
       )}
+
+      {/* --- 利用可能時間ボタンの表示制限 (12時間OFF / 24時間OFF) --- */}
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
+        <div className="flex justify-between items-center mb-6 border-b border-zinc-700 pb-2">
+          <h2 className="text-xl font-bold text-white">利用可能時間ボタン設定 (12時間 / 24時間)</h2>
+          <button
+            onClick={handleSavePrices}
+            disabled={saving}
+            className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-6 py-2 rounded font-bold shadow-lg transition-colors text-sm"
+          >
+            {saving ? '保存中...' : '設定を保存'}
+          </button>
+        </div>
+        <p className="text-sm text-zinc-400 mb-6">
+          宿購入時・延長時に表示する時間ボタンを制限できます。<br />
+          どちらか一方をOFFにすることで、指定した時間のみ（12時間のみ、または24時間のみ）購入できるようにします。<br />
+          <span className="text-amber-400 font-semibold">※12時間と24時間の両方を同時にOFFにすることはできません。</span>
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* 12時間ボタンOFF */}
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-base text-white flex items-center gap-2">
+                  <span>12時間ボタンをOFF</span>
+                  {toggles.DISABLE_12H_ROOMS && (
+                    <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono">
+                      24時間のみ表示
+                    </span>
+                  )}
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1">
+                  有効にすると、部屋購入・延長時に12時間ボタンが出ず、<strong className="text-zinc-200">24時間のみ</strong>表示されます。
+                </p>
+              </div>
+              <label className="flex items-center cursor-pointer ml-4">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={toggles.DISABLE_12H_ROOMS}
+                    onChange={(e) => handleDurationToggle('12h', e.target.checked)}
+                  />
+                  <div className={`block w-14 h-8 rounded-full transition-colors ${toggles.DISABLE_12H_ROOMS ? 'bg-amber-500' : 'bg-zinc-600'}`}></div>
+                  <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${toggles.DISABLE_12H_ROOMS ? 'transform translate-x-6' : ''}`}></div>
+                </div>
+                <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap text-sm">
+                  {toggles.DISABLE_12H_ROOMS ? 'OFF中' : '通常'}
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* 24時間ボタンOFF */}
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-base text-white flex items-center gap-2">
+                  <span>24時間ボタンをOFF</span>
+                  {toggles.DISABLE_24H_ROOMS && (
+                    <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono">
+                      12時間のみ表示
+                    </span>
+                  )}
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1">
+                  有効にすると、部屋購入・延長時に24時間ボタンが出ず、<strong className="text-zinc-200">12時間のみ</strong>表示されます。
+                </p>
+              </div>
+              <label className="flex items-center cursor-pointer ml-4">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={toggles.DISABLE_24H_ROOMS}
+                    onChange={(e) => handleDurationToggle('24h', e.target.checked)}
+                  />
+                  <div className={`block w-14 h-8 rounded-full transition-colors ${toggles.DISABLE_24H_ROOMS ? 'bg-amber-500' : 'bg-zinc-600'}`}></div>
+                  <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${toggles.DISABLE_24H_ROOMS ? 'transform translate-x-6' : ''}`}></div>
+                </div>
+                <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap text-sm">
+                  {toggles.DISABLE_24H_ROOMS ? 'OFF中' : '通常'}
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* --- 価格設定 --- */}
       <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">

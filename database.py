@@ -603,6 +603,26 @@ async def setup_db_schema(p):
 
         ''')
 
+        await conn.execute('''
+
+            CREATE TABLE IF NOT EXISTS room_panels (
+
+                guild_id BIGINT,
+
+                channel_id BIGINT,
+
+                message_id BIGINT,
+
+                panel_type VARCHAR(50) DEFAULT 'inn',
+
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                PRIMARY KEY (guild_id, panel_type)
+
+            )
+
+        ''')
+
 
 
         await conn.execute('''
@@ -1645,6 +1665,66 @@ async def get_expired_rooms():
             pass
 
     return all_expired
+
+
+
+async def save_room_panel(guild_id: int, channel_id: int, message_id: int, panel_type: str = 'inn'):
+
+    p = await get_pool(guild_id)
+
+    async with p.acquire() as conn:
+
+        await conn.execute('''
+
+            INSERT INTO room_panels (guild_id, channel_id, message_id, panel_type)
+
+            VALUES ($1, $2, $3, $4)
+
+            ON CONFLICT (guild_id, panel_type)
+
+            DO UPDATE SET channel_id = $2, message_id = $3, created_at = CURRENT_TIMESTAMP
+
+        ''', guild_id, channel_id, message_id, panel_type)
+
+
+
+async def get_room_panels(guild_id: int):
+
+    p = await get_pool(guild_id)
+
+    async with p.acquire() as conn:
+
+        rows = await conn.fetch('SELECT channel_id, message_id, panel_type, created_at FROM room_panels WHERE guild_id = $1', guild_id)
+
+        return [dict(r) for r in rows]
+
+
+
+async def has_panel_type(guild_id: int, panel_type: str) -> bool:
+
+    p = await get_pool(guild_id)
+
+    try:
+
+        async with p.acquire() as conn:
+
+            row = await conn.fetchrow('SELECT 1 FROM room_panels WHERE guild_id = $1 AND panel_type = $2 LIMIT 1', guild_id, panel_type)
+
+            return row is not None
+
+    except Exception:
+
+        return False
+
+
+
+async def delete_room_panel(guild_id: int, panel_type: str):
+
+    p = await get_pool(guild_id)
+
+    async with p.acquire() as conn:
+
+        await conn.execute('DELETE FROM room_panels WHERE guild_id = $1 AND panel_type = $2', guild_id, panel_type)
 
 
 

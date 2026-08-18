@@ -1,4 +1,4 @@
-﻿import discord
+import discord
 from discord.ext import commands
 from discord import app_commands
 import datetime
@@ -1250,6 +1250,367 @@ class RouletteView(discord.ui.View):
     async def play(self, it, btn):
         await it.response.send_modal(RouletteBetModal())
 
+# --- 競馬 (Horse Racing) ---
+HORSE_DATA = [
+    {"num": 1, "name": "キタサンブラック", "emoji": "🟥", "icon": "1️⃣"},
+    {"num": 2, "name": "ディープインパクト", "emoji": "🟦", "icon": "2️⃣"},
+    {"num": 3, "name": "オルフェーヴル", "emoji": "🟩", "icon": "3️⃣"},
+    {"num": 4, "name": "ゴールドシップ", "emoji": "🟨", "icon": "4️⃣"},
+    {"num": 5, "name": "イクイノックス", "emoji": "🟪", "icon": "5️⃣"},
+]
+
+def render_horse_track(positions, horses=HORSE_DATA, track_length=15):
+    """各馬の位置(0〜track_length)を受け取り、トラックの文字列を作成する"""
+    lines = []
+    lines.append("🏁" + "━" * (track_length + 2) + " [START]")
+    for h in horses:
+        p = min(positions.get(h["num"], 0), track_length)
+        before = "━" * p
+        after = "━" * max(0, track_length - p)
+        horse_icon = "🏇" if p < track_length else "🏆"
+        lines.append(f"{h['icon']}{h['emoji']} ┫{before}{horse_icon}{after}┣ 🏁 ({h['name']})")
+    return "\n".join(lines)
+
+class HorseRacingBetModal(discord.ui.Modal):
+    def __init__(self, horse_num: int, bet_type: str):
+        self.horse_num = horse_num
+        self.bet_type = bet_type
+        horse_name = next((h["name"] for h in HORSE_DATA if h["num"] == horse_num), f"{horse_num}号馬")
+        type_name = "単勝(1着)" if bet_type == "tan" else "複勝(1〜3着)"
+        super().__init__(title=f'競馬賭け金: {horse_num}号馬({type_name})')
+        
+        self.bet_input = discord.ui.TextInput(
+            label='賭ける金額',
+            placeholder='例: 1000',
+            max_length=10,
+            required=True
+        )
+        self.add_item(self.bet_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            bot = interaction.client
+            max_bet = int(get_setting(bot, "GAMBLE_MAX_BET") or 100000)
+            max_plays = get_setting(bot, "GAMBLE_MAX_PLAYS")
+            if max_plays is None: max_plays = 10
+            else: max_plays = int(max_plays)
+            
+            try:
+                bet = int(self.bet_input.value)
+            except ValueError:
+                return await interaction.response.send_message("賭け金には半角数字を入力してください。", ephemeral=True)
+                
+            currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
+            if bet <= 0 or bet > max_bet:
+                return await interaction.response.send_message(f"1〜{max_bet:,} {currency_name} の範囲で入力してください。", ephemeral=True)
+
+            await interaction.response.defer(ephemeral=True)
+            user_data = await database.get_user(interaction.guild.id, interaction.user.id)
+            now = datetime.datetime.now(JST)
+            today_str = now.strftime("%Y-%m-%d")
+            count = user_data.get("chinchiro_count", 0)
+            daily_bet = user_data.get("chinchiro_daily_bet", 0)
+            
+            if user_data.get("chinchiro_last_date") != today_str:
+                await database.reset_gambling_count(interaction.guild.id, interaction.user.id, today_str)
+                count = 0
+                daily_bet = 0
+                
+            if max_plays > 0 and count >= max_plays:
+                return await interaction.followup.send(f"本日のプレイ上限({max_plays}回)に達しました。", ephemeral=True)
+                
+            daily_limit = get_setting(bot, "GAMBLE_DAILY_LIMIT")
+            if daily_limit is not None and int(daily_limit) > 0 and daily_bet + bet > int(daily_limit):
+                return await interaction.followup.send(
+                    f"1日の賭け金上限({int(daily_limit):,} {currency_name})を超えるため賭けられません。\n本日既に賭けた額: {daily_bet:,} {currency_name}",
+                    ephemeral=True
+                )
+                
+            if not await database.remove_balance(interaction.guild.id, interaction.user.id, bet):
+                return await interaction.followup.send("残高不足です。", ephemeral=True)
+                
+            await database.increment_gambling_count(interaction.guild.id, interaction.user.id, bet)
+            
+            # レース実行
+            await execute_horse_race(interaction, self.horse_num, self.bet_type, bet, count + 1, max_plays)
+        except Exception as e:
+            print(f"[ERROR] HorseRacingBetModal: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message("エラーが発生しました。", ephemeral=True)
+            else:
+                await interaction.followup.send("エラーが発生しました。", ephemeral=True)
+
+class HorseRacingSelect(discord.ui.Select):
+    def __init__(self, bot):
+        mul_tan = get_setting(bot, "GAMBLE_HORSE_MUL_TAN") or 4.5
+        mul_fuku = get_setting(bot, "GAMBLE_HORSE_MUL_FUKU") or 1.5
+        
+        options = []
+        for h in HORSE_DATA:
+            options.append(
+                discord.SelectOption(
+                    label=f"🥇 単勝: {h['num']}号馬 {h['name']} ({mul_tan}倍)",
+                    value=f"{h['num']}_tan",
+                    description=f"{h['name']} が 1着 で的中！",
+                    emoji=h["emoji"]
+                )
+            )
+        for h in HORSE_DATA:
+            options.append(
+                discord.SelectOption(
+                    label=f"🥉 複勝: {h['num']}号馬 {h['name']} ({mul_fuku}倍)",
+                    value=f"{h['num']}_fuku",
+                    description=f"{h['name']} が 1〜3着 で的中！",
+                    emoji="🎫"
+                )
+            )
+            
+        super().__init__(
+            placeholder="賭ける馬と馬券種別を選択...",
+            options=options,
+            min_values=1,
+            max_values=1,
+            custom_id="horse_racing_bet_select"
+        )
+        
+    async def callback(self, interaction: discord.Interaction):
+        val = self.values[0]
+        num_str, bet_type = val.split("_")
+        horse_num = int(num_str)
+        await interaction.response.send_modal(HorseRacingBetModal(horse_num, bet_type))
+
+class HorseRacingBetTypeView(discord.ui.View):
+    def __init__(self, bot):
+        super().__init__(timeout=60)
+        self.add_item(HorseRacingSelect(bot))
+
+async def execute_horse_race(interaction: discord.Interaction, user_horse_num: int, bet_type: str, bet: int, play_count: int, max_plays: int):
+    bot = interaction.client
+    currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
+    
+    # 確率・倍率の取得
+    p_tan = get_setting(bot, "GAMBLE_HORSE_RATE_WIN_TAN")
+    if p_tan is None: p_tan = 0.20
+    p_fuku = get_setting(bot, "GAMBLE_HORSE_RATE_WIN_FUKU")
+    if p_fuku is None: p_fuku = 0.60
+    
+    mul_tan = get_setting(bot, "GAMBLE_HORSE_MUL_TAN")
+    if mul_tan is None: mul_tan = 4.5
+    mul_fuku = get_setting(bot, "GAMBLE_HORSE_MUL_FUKU")
+    if mul_fuku is None: mul_fuku = 1.5
+    
+    user_horse = next((h for h in HORSE_DATA if h["num"] == user_horse_num), HORSE_DATA[0])
+    type_label = f"単勝 ({mul_tan}倍)" if bet_type == "tan" else f"複勝 ({mul_fuku}倍)"
+    
+    # 順位の事前抽選
+    all_nums = [h["num"] for h in HORSE_DATA]
+    other_nums = [n for n in all_nums if n != user_horse_num]
+    random.shuffle(other_nums)
+    
+    is_win = False
+    mul = 0.0
+    
+    if bet_type == "tan":
+        if random.random() < p_tan:
+            is_win = True
+            mul = mul_tan
+            final_ranking = [user_horse_num] + other_nums
+        else:
+            pos = random.randint(1, 4)
+            final_ranking = other_nums[:pos] + [user_horse_num] + other_nums[pos:]
+    else:
+        if random.random() < p_fuku:
+            is_win = True
+            mul = mul_fuku
+            pos = random.randint(0, 2)
+            final_ranking = other_nums[:pos] + [user_horse_num] + other_nums[pos:]
+        else:
+            pos = random.randint(3, 4)
+            final_ranking = other_nums[:pos] + [user_horse_num] + other_nums[pos:]
+            
+    track_len = 15
+    final_scores = {}
+    for rank_idx, h_num in enumerate(final_ranking):
+        final_scores[h_num] = track_len - rank_idx * 1
+        
+    steps_data = [
+        {
+            "phase": "🚩 【スタート！】",
+            "commentary": "各馬綺麗なスタート！一斉にゲートを飛び出しました！",
+            "progress": 0.25
+        },
+        {
+            "phase": "🏃 【第2コーナー通過】",
+            "commentary": "先頭争いが激化！激しいポジション争いが繰り広げられています！",
+            "progress": 0.55
+        },
+        {
+            "phase": "🔥 【第3〜4コーナー！】",
+            "commentary": "馬群が凝縮！各馬最後の直線に向けて仕掛け始めました！",
+            "progress": 0.80
+        },
+        {
+            "phase": "⚡ 【最後の直線！！】",
+            "commentary": "残り200m！外から強烈な追い上げ！先頭は譲らない！！",
+            "progress": 0.95
+        }
+    ]
+    
+    race_frames = []
+    for s_idx, step in enumerate(steps_data):
+        ratio = step["progress"]
+        positions = {}
+        for h in HORSE_DATA:
+            h_num = h["num"]
+            target_p = final_scores[h_num] * ratio
+            noise = random.uniform(-1.5, 1.5) if s_idx < 3 else random.uniform(-0.5, 0.5)
+            p = max(0, min(track_len - 1, int(round(target_p + noise))))
+            positions[h_num] = p
+        race_frames.append((step["phase"], step["commentary"], positions))
+        
+    goal_positions = {}
+    for rank_idx, h_num in enumerate(final_ranking):
+        goal_positions[h_num] = track_len if rank_idx == 0 else max(1, track_len - rank_idx)
+    race_frames.append(("🏆 【ゴールイン！！】", "全馬ゴールイン！白熱の勝負が決着しました！", goal_positions))
+    
+    # 1. 初期メッセージ送信
+    phase, comm, pos = race_frames[0]
+    track_str = render_horse_track(pos, HORSE_DATA, track_len)
+    
+    embed = discord.Embed(
+        title="🏇 競馬レース開催中！",
+        description=(
+            f"**あなたの選択**: {user_horse['icon']}{user_horse['emoji']} **{user_horse['name']}** 【{type_label}】\n"
+            f"**賭け金**: `{bet:,} {currency_name}` (本日 {play_count}/{max_plays if max_plays > 0 else '無制限'}回目)\n\n"
+            f"**{phase}**\n"
+            f"```\n{track_str}\n```\n"
+            f"📢 **実況**: *{comm}*"
+        ),
+        color=discord.Color.blue()
+    )
+    
+    await interaction.followup.send(embed=embed, ephemeral=True)
+    
+    # 2. 中間ステップ更新
+    for frame_idx in range(1, len(race_frames) - 1):
+        await asyncio.sleep(1.4)
+        phase, comm, pos = race_frames[frame_idx]
+        track_str = render_horse_track(pos, HORSE_DATA, track_len)
+        embed.description = (
+            f"**あなたの選択**: {user_horse['icon']}{user_horse['emoji']} **{user_horse['name']}** 【{type_label}】\n"
+            f"**賭け金**: `{bet:,} {currency_name}` (本日 {play_count}/{max_plays if max_plays > 0 else '無制限'}回目)\n\n"
+            f"**{phase}**\n"
+            f"```\n{track_str}\n```\n"
+            f"📢 **実況**: *{comm}*"
+        )
+        try:
+            await interaction.edit_original_response(embed=embed)
+        except Exception as e:
+            print(f"[WARN] Failed to edit race message frame {frame_idx}: {e}")
+            
+    # 3. ゴール結果更新
+    await asyncio.sleep(1.5)
+    phase, comm, goal_pos = race_frames[-1]
+    track_str = render_horse_track(goal_pos, HORSE_DATA, track_len)
+    
+    rank_emojis = ["🥇 1着", "🥈 2着", "🥉 3着", "4着", "5着"]
+    rank_text_lines = []
+    user_final_rank = 0
+    for r_idx, h_num in enumerate(final_ranking):
+        h = next(item for item in HORSE_DATA if item["num"] == h_num)
+        is_user_mark = " 👈 **あなたの選択馬**" if h_num == user_horse_num else ""
+        if h_num == user_horse_num:
+            user_final_rank = r_idx + 1
+        rank_text_lines.append(f"{rank_emojis[r_idx]}: {h['icon']}{h['emoji']} **{h['name']}**{is_user_mark}")
+    ranking_summary = "\n".join(rank_text_lines)
+    
+    win_amount = 0
+    tax_msg = ""
+    if is_win:
+        win_amount = int(bet * mul)
+        if get_setting(bot, "GAMBLE_TAX_ENABLED"):
+            tax_rate = get_setting(bot, "GAMBLE_TAX_RATE")
+            if tax_rate is None: tax_rate = 0.05
+            net_profit = win_amount - bet
+            tax_amount = int(net_profit * tax_rate)
+            win_amount = bet + (net_profit - tax_amount)
+            tax_msg = f"\n※ カジノ手数料 ({tax_rate*100:.1f}%) として **{tax_amount:,} {currency_name}** が引かれました。"
+        await database.add_balance(interaction.guild.id, interaction.user.id, win_amount)
+        
+    result_title = "🏆 競馬レース結果: 的中！" if is_win else "💀 競馬レース結果: 不的中"
+    result_color = discord.Color.gold() if is_win else discord.Color.red()
+    
+    if is_win:
+        outcome_text = f"🎉 **的中！** あなたの選んだ **{user_horse['name']}** は **{user_final_rank}着** でした！\n💰 **払戻金**: **+{win_amount:,} {currency_name}** (倍率: `{mul}倍`){tax_msg}"
+    else:
+        outcome_text = f"💀 **不的中...** あなたの選んだ **{user_horse['name']}** は **{user_final_rank}着** でした。\n💸 **損失額**: `-{bet:,} {currency_name}`"
+        
+    embed_result = discord.Embed(
+        title=result_title,
+        description=(
+            f"**あなたの選択**: {user_horse['icon']}{user_horse['emoji']} **{user_horse['name']}** 【{type_label}】\n"
+            f"**賭け金**: `{bet:,} {currency_name}`\n\n"
+            f"```\n{track_str}\n```\n"
+            f"**【確定着順】**\n{ranking_summary}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"{outcome_text}"
+        ),
+        color=result_color
+    )
+    
+    try:
+        await interaction.edit_original_response(embed=embed_result)
+    except Exception as e:
+        print(f"[WARN] Failed to edit race final result: {e}")
+        
+    embed_log = discord.Embed(
+        title="🏇 ギャンブルログ: 競馬",
+        color=result_color,
+        timestamp=discord.utils.utcnow()
+    )
+    embed_log.add_field(name="プレイヤー", value=f"{interaction.user.mention} (ID: {interaction.user.id})", inline=True)
+    embed_log.add_field(name="賭け金", value=f"{bet:,} {currency_name}", inline=True)
+    embed_log.add_field(name="馬券種別・選択馬", value=f"{user_horse['icon']}{user_horse['emoji']} {user_horse['name']} ({type_label})", inline=True)
+    
+    if is_win:
+        embed_log.add_field(name="結果", value=f"的中 🏆 ({user_final_rank}着)", inline=True)
+        embed_log.add_field(name="獲得額 (配当)", value=f"+{win_amount:,} {currency_name} (倍率: {mul}倍)", inline=True)
+    else:
+        embed_log.add_field(name="結果", value=f"ハズレ 💀 ({user_final_rank}着)", inline=True)
+        embed_log.add_field(name="損失額", value=f"-{bet:,} {currency_name}", inline=True)
+        
+    top3_names = [f"{rank_emojis[idx]} {next(h['name'] for h in HORSE_DATA if h['num'] == final_ranking[idx])}" for idx in range(3)]
+    embed_log.add_field(name="確定TOP3", value="\n".join(top3_names), inline=False)
+    await send_log(bot, interaction.guild, "gambling", embed_log)
+
+class HorseRacingView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+    @discord.ui.button(label="🏇 競馬で遊ぶ", style=discord.ButtonStyle.primary, custom_id="persistent_horse_racing_btn")
+    async def play(self, interaction: discord.Interaction, button: discord.ui.Button):
+        bot = interaction.client
+        currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
+        mul_tan = get_setting(bot, "GAMBLE_HORSE_MUL_TAN") or 4.5
+        mul_fuku = get_setting(bot, "GAMBLE_HORSE_MUL_FUKU") or 1.5
+        
+        horses_list_str = "\n".join([f"{h['icon']}{h['emoji']} **{h['num']}号馬: {h['name']}**" for h in HORSE_DATA])
+        
+        embed = discord.Embed(
+            title="🏇 競馬（Horse Racing）：馬券選択",
+            description=(
+                "出走する5頭の馬から賭けたい馬と馬券を選択してください。\n\n"
+                "**【出走表】**\n"
+                f"{horses_list_str}\n\n"
+                "**【馬券の種類と配当】**\n"
+                f"- 🥇 **単勝**: 選んだ馬が **1着** になれば的中！ (配当: **`{mul_tan}倍`**)\n"
+                f"- 🥉 **複勝**: 選んだ馬が **1〜3着以内** に入れば的中！ (配当: **`{mul_fuku}倍`**)\n\n"
+                "下のメニューから選択して賭け金を入力してください。"
+            ),
+            color=discord.Color.dark_teal()
+        )
+        await interaction.response.send_message(embed=embed, view=HorseRacingBetTypeView(bot), ephemeral=True)
+
 # --- ギャンブル期待値設定 管理者UI (2段階ドリルダウン) ---
 def calculate_gamble_win_rates(game_name: str, expectation: float):
     """
@@ -1298,10 +1659,17 @@ def calculate_gamble_win_rates(game_name: str, expectation: float):
             p_win = 100.0 - p_draw - p_lose
         return p_win, p_lose, p_draw
         
+    elif game_name == "horse":
+        p_tan = min(E / 4.5, 1.0) * 100
+        p_fuku = min(E / 1.5, 1.0) * 100
+        return p_tan, 100.0 - p_tan, p_fuku
+        
     return 0.0, 0.0, 0.0
 
 def get_win_rate_str(game_name: str, expectation: float):
     p_win, p_lose, p_draw = calculate_gamble_win_rates(game_name, expectation)
+    if game_name == "horse":
+        return f"単勝当選率: {p_win:.1f}% / 複勝当選率: {p_draw:.1f}%"
     if p_draw > 0:
         return f"プレイヤー勝率: {p_win:.1f}% / Bot勝率: {p_lose:.1f}% / 引き分け: {p_draw:.1f}%"
     else:
@@ -1402,6 +1770,19 @@ async def save_auto_expectation_rates(bot, interaction, game_key, E):
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_ROULETTE_WIN_RATE_2X"] = r_win_2x
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_ROULETTE_WIN_RATE_3X"] = r_win_3x
         bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_ROULETTE_WIN_RATE_36X"] = r_win_36x
+        
+    elif game_key == "horse":
+        mul_tan = get_setting(bot, "GAMBLE_HORSE_MUL_TAN") or 4.5
+        mul_fuku = get_setting(bot, "GAMBLE_HORSE_MUL_FUKU") or 1.5
+        
+        p_tan = min(1.0, E / mul_tan)
+        p_fuku = min(1.0, E / mul_fuku)
+        
+        await database.save_setting(interaction.guild.id, "GAMBLE_HORSE_RATE_WIN_TAN", p_tan)
+        await database.save_setting(interaction.guild.id, "GAMBLE_HORSE_RATE_WIN_FUKU", p_fuku)
+        
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_HORSE_RATE_WIN_TAN"] = p_tan
+        bot.bot_settings.setdefault(interaction.guild.id, {})["GAMBLE_HORSE_RATE_WIN_FUKU"] = p_fuku
 
 
 class GambleSettingsView(discord.ui.View):
@@ -1500,6 +1881,17 @@ class GambleSettingsView(discord.ui.View):
         )
         embed.add_field(name="🎡 ルーレット設定", value=roulette_str, inline=False)
 
+        # 競馬
+        p_tan = get_setting(bot, "GAMBLE_HORSE_RATE_WIN_TAN") or 0.20
+        p_fuku = get_setting(bot, "GAMBLE_HORSE_RATE_WIN_FUKU") or 0.60
+        mul_tan = get_setting(bot, "GAMBLE_HORSE_MUL_TAN") or 4.5
+        mul_fuku = get_setting(bot, "GAMBLE_HORSE_MUL_FUKU") or 1.5
+        horse_str = (
+            f"🎯 **当選確率**: 単勝: `{p_tan*100:.1f}%` / 複勝: `{p_fuku*100:.1f}%`\n"
+            f"💰 **配当倍率**: 単勝: `{mul_tan}倍` / 複勝: `{mul_fuku}倍`"
+        )
+        embed.add_field(name="🏇 競馬設定", value=horse_str, inline=False)
+
         # 共通制限など
         limit_str = ""
         currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
@@ -1531,6 +1923,7 @@ class GambleGameSelect(discord.ui.Select):
             discord.SelectOption(label="🎰 スロット設定", emoji="🎰", value="slot"),
             discord.SelectOption(label="🃏 ブラックジャック設定", emoji="🃏", value="blackjack"),
             discord.SelectOption(label="🎡 ルーレット設定", emoji="🎡", value="roulette"),
+            discord.SelectOption(label="🏇 競馬設定", emoji="🏇", value="horse"),
             discord.SelectOption(label="⚙️ 制限値・手数料(共通)設定", emoji="⚙️", value="common")
         ]
         super().__init__(placeholder="編集するゲーム/項目を選択...", options=options, custom_id="admin_gamble_game_select_main")
@@ -1640,6 +2033,25 @@ class GamblePanelSetupButton(discord.ui.Button):
             )
             await channel.send(embed=embed, view=RouletteView())
             await interaction.response.send_message("✅ ルーレットパネルを設置しました。", ephemeral=True)
+        elif val == "horse":
+            horses_str = "\n".join([f"- {h['icon']}{h['emoji']} **{h['num']}号馬: {h['name']}**" for h in HORSE_DATA])
+            embed = discord.Embed(
+                title="🏇 競馬（Horse Racing）",
+                description=(
+                    "こちらのボタンから競馬をプレイできます。\n"
+                    "出走する5頭の馬から賭けたい馬と馬券を選択してください。\n\n"
+                    "**【出走馬】**\n"
+                    f"{horses_str}\n\n"
+                    "**【配当倍率】**\n"
+                    "- 🥇 **単勝 (1着的中)**: `4.5倍`\n"
+                    "- 🥉 **複勝 (1〜3着以内的中)**: `1.5倍`\n\n"
+                    "※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n"
+                    "※ 実際の倍率は設定によって異なる場合があります。"
+                ),
+                color=discord.Color.dark_teal()
+            )
+            await channel.send(embed=embed, view=HorseRacingView())
+            await interaction.response.send_message("✅ 競馬パネルを設置しました。", ephemeral=True)
 
 
 class GambleGameSettingsView(discord.ui.View):
@@ -1675,6 +2087,7 @@ class GambleGameSettingsView(discord.ui.View):
             "slot": "🎰 スロット",
             "blackjack": "🃏 ブラックジャック",
             "roulette": "🎡 ルーレット",
+            "horse": "🏇 競馬",
             "common": "⚙️ 制限値・手数料"
         }
         embed = discord.Embed(
@@ -1781,6 +2194,17 @@ class GambleGameSettingsView(discord.ui.View):
             embed.add_field(name="💰 2倍賭配当倍率", value=f"`{r_mul_2x}倍`", inline=True)
             embed.add_field(name="💰 3倍賭配当倍率", value=f"`{r_mul_3x}倍`", inline=True)
             embed.add_field(name="💰 1点賭配当倍率", value=f"`{r_mul_36x}倍`", inline=True)
+
+        elif self.game_key == "horse":
+            p_tan = get_setting(bot, "GAMBLE_HORSE_RATE_WIN_TAN") or 0.20
+            p_fuku = get_setting(bot, "GAMBLE_HORSE_RATE_WIN_FUKU") or 0.60
+            mul_tan = get_setting(bot, "GAMBLE_HORSE_MUL_TAN") or 4.5
+            mul_fuku = get_setting(bot, "GAMBLE_HORSE_MUL_FUKU") or 1.5
+            
+            embed.add_field(name="🎯 単勝当選率 (1着)", value=f"`{p_tan*100:.1f}%`", inline=True)
+            embed.add_field(name="🎯 複勝当選率 (1〜3着)", value=f"`{p_fuku*100:.1f}%`", inline=True)
+            embed.add_field(name="💰 単勝配当倍率", value=f"`{mul_tan}倍`", inline=True)
+            embed.add_field(name="💰 複勝配当倍率", value=f"`{mul_fuku}倍`", inline=True)
             
         elif self.game_key == "common":
             max_plays = get_setting(bot, "GAMBLE_MAX_PLAYS")
@@ -1851,6 +2275,11 @@ class GambleRateSelect(discord.ui.Select):
                 discord.SelectOption(label="1️⃣ 3倍賭け当選率 (ダズン)", value="GAMBLE_ROULETTE_WIN_RATE_3X", description="12点賭け（ダズン）の当選率"),
                 discord.SelectOption(label="🎯 1点賭け当選率 (数字)", value="GAMBLE_ROULETTE_WIN_RATE_36X", description="数字1点賭けの当選率")
             ]
+        elif game_key == "horse":
+            options = [
+                discord.SelectOption(label="🥇 単勝当選率 (1着)", value="GAMBLE_HORSE_RATE_WIN_TAN", description="選んだ馬が1着になる確率"),
+                discord.SelectOption(label="🥉 複勝当選率 (1〜3着)", value="GAMBLE_HORSE_RATE_WIN_FUKU", description="選んだ馬が3着以内に入る確率")
+            ]
             
         super().__init__(placeholder="🎯 各当選確率(%)を個別に設定...", options=options, custom_id="admin_gamble_rate_select", row=1)
         
@@ -1895,6 +2324,11 @@ class GambleMultiplierSelect(discord.ui.Select):
                 discord.SelectOption(label="3倍賭け配当倍率 (3.0倍)", value="GAMBLE_ROULETTE_MUL_3X"),
                 discord.SelectOption(label="36倍賭け配当倍率 (36.0倍)", value="GAMBLE_ROULETTE_MUL_36X")
             ]
+        elif game_key == "horse":
+            options = [
+                discord.SelectOption(label="🥇 単勝配当倍率 (4.5倍)", value="GAMBLE_HORSE_MUL_TAN"),
+                discord.SelectOption(label="🥉 複勝配当倍率 (1.5倍)", value="GAMBLE_HORSE_MUL_FUKU")
+            ]
             
         super().__init__(placeholder="💰 各配当倍率を個別に設定...", options=options, custom_id="admin_gamble_mul_select", row=2)
         
@@ -1932,7 +2366,8 @@ class GambleAutoExpectationModal(discord.ui.Modal):
             "coinflip": "コイントス",
             "slot": "スロット",
             "blackjack": "ブラックジャック",
-            "roulette": "ルーレット"
+            "roulette": "ルーレット",
+            "horse": "競馬"
         }
         title = f"{game_names.get(game_key, 'ゲーム')} 期待値自動計算設定"
         super().__init__(title=title)
@@ -2237,6 +2672,7 @@ class Gambling(commands.Cog):
         self.bot.add_view(SlotView())
         self.bot.add_view(BlackjackView())
         self.bot.add_view(RouletteView())
+        self.bot.add_view(HorseRacingView())
         self.bot.tree.add_command(GambleEmployeeGroup(self.bot))
 
     async def cog_unload(self):

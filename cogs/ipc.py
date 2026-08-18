@@ -288,7 +288,12 @@ class IPC(commands.Cog):
 
                     if embed and view:
                         try:
-                            await channel.send(embed=embed, view=view)
+                            sent_msg = await channel.send(embed=embed, view=view)
+                            if panel_type in ["inn", "luxury_inn", "game_vc", "gamble_vc", "custom_vc", "inn_combined", "main_inn", "luxury_inn_single"]:
+                                try:
+                                    await database.save_room_panel(guild_id, channel.id, sent_msg.id, panel_type)
+                                except Exception as dbe:
+                                    print(f"[IPC ERROR] Failed to save room panel to DB: {dbe}")
                         except discord.Forbidden:
                             print(f"[IPC ERROR] Failed to send panel {panel_type} to {channel_id}: Forbidden (No permissions)")
                     
