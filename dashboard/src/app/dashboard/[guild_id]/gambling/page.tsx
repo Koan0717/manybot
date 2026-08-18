@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Save, AlertCircle, Settings, Dices, Coins, Cherry, Spade, Disc, Percent } from 'lucide-react';
+import { Save, AlertCircle, Settings, Dices, Coins, Cherry, Spade, Disc, Trophy, Percent } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import ChannelSelect from '@/components/ChannelSelect';
@@ -20,6 +20,7 @@ export default function GamblingSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('common');
   const [rouletteChartType, setRouletteChartType] = useState<'2x' | '3x' | '36x'>('2x');
+  const [horseChartType, setHorseChartType] = useState<'tan' | 'fuku'>('tan');
   const [channels, setChannels] = useState<any[]>([]);
   
   // Panel state
@@ -39,6 +40,7 @@ export default function GamblingSettingsPage() {
             GAMBLE_SLOT_PANEL_CHANNEL: data.GAMBLE_SLOT_PANEL_CHANNEL ?? '',
             GAMBLE_BLACKJACK_PANEL_CHANNEL: data.GAMBLE_BLACKJACK_PANEL_CHANNEL ?? '',
             GAMBLE_ROULETTE_PANEL_CHANNEL: data.GAMBLE_ROULETTE_PANEL_CHANNEL ?? '',
+            GAMBLE_HORSE_PANEL_CHANNEL: data.GAMBLE_HORSE_PANEL_CHANNEL ?? '',
             GAMBLE_MAX_PLAYS: data.GAMBLE_MAX_PLAYS ?? 10,
             GAMBLE_DAILY_LIMIT: data.GAMBLE_DAILY_LIMIT ?? 0,
             GAMBLE_MAX_BET: data.GAMBLE_MAX_BET ?? 100000,
@@ -83,7 +85,12 @@ export default function GamblingSettingsPage() {
             GAMBLE_ROULETTE_WIN_RATE_36X: data.GAMBLE_ROULETTE_WIN_RATE_36X ?? 0.0264,
             GAMBLE_ROULETTE_MUL_2X: data.GAMBLE_ROULETTE_MUL_2X ?? 2.0,
             GAMBLE_ROULETTE_MUL_3X: data.GAMBLE_ROULETTE_MUL_3X ?? 3.0,
-            GAMBLE_ROULETTE_MUL_36X: data.GAMBLE_ROULETTE_MUL_36X ?? 36.0
+            GAMBLE_ROULETTE_MUL_36X: data.GAMBLE_ROULETTE_MUL_36X ?? 36.0,
+
+            GAMBLE_HORSE_RATE_WIN_TAN: data.GAMBLE_HORSE_RATE_WIN_TAN ?? 0.20,
+            GAMBLE_HORSE_RATE_WIN_FUKU: data.GAMBLE_HORSE_RATE_WIN_FUKU ?? 0.60,
+            GAMBLE_HORSE_MUL_TAN: data.GAMBLE_HORSE_MUL_TAN ?? 4.5,
+            GAMBLE_HORSE_MUL_FUKU: data.GAMBLE_HORSE_MUL_FUKU ?? 1.5
           });
         }
         if (!channelsData.error && Array.isArray(channelsData)) {
@@ -178,6 +185,7 @@ export default function GamblingSettingsPage() {
     { id: 'slot', label: 'スロット', icon: Cherry },
     { id: 'blackjack', label: 'ブラックジャック', icon: Spade },
     { id: 'roulette', label: 'ルーレット', icon: Disc },
+    { id: 'horse', label: '競馬', icon: Trophy },
   ];
 
   // Pie chart data generation
@@ -227,6 +235,18 @@ export default function GamblingSettingsPage() {
       pieData = [
         { name: '1点賭け当たり', value: settings.GAMBLE_ROULETTE_WIN_RATE_36X },
         { name: '1点賭けハズレ', value: Math.max(0, 1 - settings.GAMBLE_ROULETTE_WIN_RATE_36X) },
+      ];
+    }
+  } else if (activeTab === 'horse') {
+    if (horseChartType === 'tan') {
+      pieData = [
+        { name: '単勝的中 (1着)', value: settings.GAMBLE_HORSE_RATE_WIN_TAN },
+        { name: '不的中', value: Math.max(0, 1 - settings.GAMBLE_HORSE_RATE_WIN_TAN) },
+      ];
+    } else if (horseChartType === 'fuku') {
+      pieData = [
+        { name: '複勝的中 (1〜3着)', value: settings.GAMBLE_HORSE_RATE_WIN_FUKU },
+        { name: '不的中', value: Math.max(0, 1 - settings.GAMBLE_HORSE_RATE_WIN_FUKU) },
       ];
     }
   }
@@ -419,6 +439,23 @@ export default function GamblingSettingsPage() {
                 </div>
               </div>
             )}
+
+            {activeTab === 'horse' && (
+              <div className="space-y-6">
+                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4">確率設定 (%)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {renderInput('🥇 単勝当選確率 (1着)', 'GAMBLE_HORSE_RATE_WIN_TAN', true)}
+                  {renderInput('🥉 複勝当選確率 (1〜3着)', 'GAMBLE_HORSE_RATE_WIN_FUKU', true)}
+                  <div className="text-xs text-gray-500 col-span-2">※ 出走5頭のうち、ユーザーが選んだ馬が1着になる確率（単勝）および1〜3着以内に入る確率（複勝）です。</div>
+                </div>
+
+                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">倍率設定 (倍)</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {renderInput('🥇 単勝配当倍率', 'GAMBLE_HORSE_MUL_TAN', false, '0.1')}
+                  {renderInput('🥉 複勝配当倍率', 'GAMBLE_HORSE_MUL_FUKU', false, '0.1')}
+                </div>
+              </div>
+            )}
           </motion.div>
         </div>
 
@@ -440,6 +477,23 @@ export default function GamblingSettingsPage() {
                       }`}
                     >
                       {type === '2x' ? '2倍賭け' : type === '3x' ? '3倍賭け' : '1点賭け'}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {activeTab === 'horse' && (
+                <div className="flex justify-center gap-2 mb-4">
+                  {(['tan', 'fuku'] as const).map(type => (
+                    <button
+                      key={type}
+                      onClick={() => setHorseChartType(type)}
+                      className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${
+                        horseChartType === type 
+                        ? 'bg-purple-600 text-white' 
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                      }`}
+                    >
+                      {type === 'tan' ? '🥇 単勝' : '🥉 複勝'}
                     </button>
                   ))}
                 </div>
@@ -506,6 +560,7 @@ export default function GamblingSettingsPage() {
               <option value="slot">🎰 スロット</option>
               <option value="blackjack">🃏 ブラックジャック</option>
               <option value="roulette">🎡 ルーレット</option>
+              <option value="horse">🏇 競馬</option>
             </select>
           </div>
           <div className="flex-1 w-full">

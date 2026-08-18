@@ -5,7 +5,8 @@ const GAME_TITLES: Record<string, string> = {
   coinflip: "🪙 コイントス",
   slot: "🎰 スロット",
   blackjack: "🃏 ブラックジャック",
-  roulette: "🎡 ルーレット"
+  roulette: "🎡 ルーレット",
+  horse: "🏇 競馬"
 };
 
 const GAME_DESCRIPTIONS: Record<string, string> = {
@@ -13,7 +14,8 @@ const GAME_DESCRIPTIONS: Record<string, string> = {
   coinflip: "こちらのボタンからコイントスをプレイできます。\n表か裏かを当ててください。\n\n**【配当倍率】**\n- **的中**: `2.0倍`\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率は設定によって異なる場合があります。",
   slot: "こちらのボタンからスロットをプレイできます。\n\n**【配当倍率】**\n- **7️⃣7️⃣7️⃣**: `10.0倍`\n- **⭐⭐⭐**: `5.0倍`\n- **その他絵柄3つ揃い**: `3.0倍`\n- **絵柄2つ揃い**: `1.5倍`\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率は設定によって異なる場合があります。",
   blackjack: "こちらのボタンからブラックジャックをプレイできます。\n\n**【配当倍率】**\n- **通常勝利**: `2.0倍`\n- **ブラックジャック(BJ)勝利**: `2.5倍`\n- **引き分け**: `1.0倍` (返還)\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率は設定によって異なる場合があります。",
-  roulette: "こちらのボタンからルーレットをプレイできます。\n\n**【配当倍率】**\n- **2倍賭け的中**: `2.0倍`\n- **3倍賭け的中**: `3.0倍`\n- **1点掛け的中**: `36.0倍`\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率は設定によって異なる場合があります。"
+  roulette: "こちらのボタンからルーレットをプレイできます。\n\n**【配当倍率】**\n- **2倍賭け的中**: `2.0倍`\n- **3倍賭け的中**: `3.0倍`\n- **1点掛け的中**: `36.0倍`\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率は設定によって異なる場合があります。",
+  horse: "こちらのボタンから競馬をプレイできます。\n出走する5頭の馬から賭けたい馬と馬券を選択してください。\n\n**【出走馬】**\n- 1️⃣ 🟥 **1号馬: キタサンブラック**\n- 2️⃣ 🟦 **2号馬: ディープインパクト**\n- 3️⃣ 🟩 **3号馬: オルフェーヴル**\n- 4️⃣ 🟨 **4号馬: ゴールドシップ**\n- 5️⃣ 🟪 **5号馬: イクイノックス**\n\n**【配当倍率】**\n- 🥇 **単勝 (1着的中)**: `4.5倍`\n- 🥉 **複勝 (1〜3着以内的中)**: `1.5倍`\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率は設定によって異なる場合があります。"
 };
 
 const GAME_COLORS: Record<string, number> = {
@@ -21,7 +23,8 @@ const GAME_COLORS: Record<string, number> = {
   coinflip: 3447003, // discord.Color.blue()
   slot: 16766720, // discord.Color.gold()
   blackjack: 10038562, // discord.Color.dark_red()
-  roulette: 15158332 // discord.Color.red()
+  roulette: 15158332, // discord.Color.red()
+  horse: 1102720 // discord.Color.dark_teal()
 };
 
 const GAME_CUSTOM_IDS: Record<string, string> = {
@@ -29,7 +32,8 @@ const GAME_CUSTOM_IDS: Record<string, string> = {
   coinflip: "persistent_coinflip_btn",
   slot: "persistent_slot_btn",
   blackjack: "persistent_blackjack_btn",
-  roulette: "persistent_roulette_btn"
+  roulette: "persistent_roulette_btn",
+  horse: "persistent_horse_racing_btn"
 };
 
 const GAME_EMOJIS: Record<string, string> = {
@@ -37,7 +41,8 @@ const GAME_EMOJIS: Record<string, string> = {
   coinflip: "🪙",
   slot: "🎰",
   blackjack: "🃏",
-  roulette: "🎡"
+  roulette: "🎡",
+  horse: "🏇"
 };
 
 export async function POST(
