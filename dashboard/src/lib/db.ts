@@ -99,11 +99,12 @@ export async function getDoumoriDbUrl(guildId: string | number): Promise<string 
 
   try {
     const res = await masterPool.query(
-      'SELECT doumori_database_url FROM guild_databases WHERE guild_id = $1',
+      'SELECT database_url, doumori_database_url FROM guild_databases WHERE guild_id = $1',
       [parsedId]
     );
-    if (res.rows.length > 0 && res.rows[0].doumori_database_url) {
-      return res.rows[0].doumori_database_url;
+    if (res.rows.length > 0) {
+      if (res.rows[0].doumori_database_url) return res.rows[0].doumori_database_url;
+      if (res.rows[0].database_url) return res.rows[0].database_url;
     }
   } catch (error: any) {
     if (error.code !== '42P01') {
