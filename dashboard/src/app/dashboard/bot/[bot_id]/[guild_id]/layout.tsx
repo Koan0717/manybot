@@ -23,6 +23,7 @@ import {
   Bot,
   Activity,
   Users,
+  Crown,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -115,6 +116,17 @@ export default function BotDashboardLayout({
         { label: '採集＆出現率 (/釣り, /虫捕り)', tabKey: 'gathering', icon: Fish, badge: '✨色違い' },
         { label: '図鑑表示 (/魚図鑑, /虫図鑑)', tabKey: 'encyclopedia', icon: BookOpen },
         { label: '限定コンプリートロール付与', tabKey: 'completion-roles', icon: Trophy, badge: 'ゴールド' },
+      ],
+    },
+    {
+      section: '👑 権限＆通知チャンネル設定',
+      items: [
+        {
+          label: '管理者・各種ロール権限＆通知先',
+          tabKey: 'roles-permissions',
+          icon: Crown,
+          badge: '設定パネル連動',
+        },
       ],
     },
     {
