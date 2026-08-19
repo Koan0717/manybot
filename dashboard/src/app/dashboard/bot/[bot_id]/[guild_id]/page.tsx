@@ -539,7 +539,9 @@ export default function BotGuildDashboardPage({
     );
   }
 
-  const textChannels = data?.channels.filter((c) => c.type === 0 || c.type === 5) || [];
+  const roles = data?.roles || [];
+  const channels = data?.channels || [];
+  const textChannels = channels.filter((c: any) => c.type === 0 || c.type === 5) || [];
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-12">
