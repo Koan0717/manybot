@@ -241,8 +241,16 @@ class AdminGroup(app_commands.Group):
         if count <= 0:
             return await interaction.response.send_message("1以上の件数を指定してください。", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
-        deleted = await interaction.channel.purge(limit=count)
-        await interaction.followup.send(f"🧹 メッセージを {len(deleted)} 件削除しました。", ephemeral=True)
+        ch_perms = interaction.channel.permissions_for(interaction.guild.me)
+        if not ch_perms.manage_messages:
+            return await interaction.followup.send("❌ エラー: Botにこのチャンネルの「メッセージの管理」権限がありません。", ephemeral=True)
+        try:
+            deleted = await interaction.channel.purge(limit=count)
+            await interaction.followup.send(f"🧹 メッセージを {len(deleted)} 件削除しました。", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.followup.send("❌ エラー: メッセージの削除権限がありません。", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ メッセージ削除中にエラーが発生しました: {e}", ephemeral=True)
 
     @app_commands.command(name="手動付与", description="【運営専用】指定したユーザー（複数）またはロール全員に通貨を直接発行して付与します")
     @is_admin_or_banker()
@@ -487,22 +495,22 @@ class DowngradeGroup(app_commands.Group):
             return await interaction.response.send_message("このコマンドを実行する権限がありません（運営専用）。", ephemeral=True)
             
         await interaction.response.defer(ephemeral=True)
-        await trigger_evaluation_failure(interaction.guild, target, reason, interaction.user, self.bot)
-        await interaction.followup.send(f"✅ {target.mention} を評価落ちさせました（理由: {reason}）。", ephemeral=True)
+        try:
+            await trigger_evaluation_failure(interaction.guild, target, reason, interaction.user, self.bot)
+            await interaction.followup.send(f"✅ {target.mention} を評価落ちさせました（理由: {reason}）。", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.followup.send("❌ ロール操作権限が不足しています（Botのロール順位または「ロールの管理」権限を確認してください）。", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
 class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     async def cog_load(self):
-        
         # コマンドグループの追加
         self.bot.tree.add_command(AdminGroup(self.bot))
         self.bot.tree.add_command(DowngradeGroup(self.bot))
-
-        # 招待キャッシュの初期化 (コグリロード時の対応)
-        for guild in self.bot.guilds:
-            self.bot.loop.create_task(self.update_invite_cache(guild))
 
     async def cog_unload(self):
         self.bot.tree.remove_command("運営")

@@ -1225,7 +1225,7 @@ export default function BotGuildDashboardPage({
                   <input
                     type="number"
                     min={1}
-                    max={10}
+                    max={30}
                     value={settings.daily_mission_slot_count ?? 3}
                     onChange={(e) => updateSetting('daily_mission_slot_count', parseInt(e.target.value, 10) || 3)}
                     className="w-28 bg-black/60 border border-purple-900/60 rounded p-2 text-xs text-white font-mono mecha-input-purple outline-none"

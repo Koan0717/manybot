@@ -37,7 +37,6 @@ class EconomyBot(commands.Bot):
         self.invite_cache = {}         # {guild_id: {invite_code: uses}}
         self.antigrief_settings_cache = {} # {guild_id: {"categories": set, "channels": set, "exempt_roles": set}}
 
-
     def get_evaluation_config(self, guild_id: int) -> dict:
         if guild_id not in self.evaluation_settings:
             forum_vals = get_setting(self, "EVALUATION_FORUM_CHANNEL_IDS") or []
@@ -126,7 +125,6 @@ class EconomyBot(commands.Bot):
             "exempt_roles": set(data.get("exempt_roles", []))
         }
         return self.antigrief_settings_cache[guild_id]
-
 
     async def setup_hook(self):
         await database.setup_db()
@@ -222,7 +220,6 @@ class EconomyBot(commands.Bot):
                 "show_panel": True
             }
 
-
         # ロール別部屋価格のキャッシュロード
         try:
             db_role_prices = await database.get_all_role_room_prices()
@@ -265,7 +262,6 @@ class EconomyBot(commands.Bot):
 
         try:
             # Sync to the specific guild to avoid the 50240 Entry Point global error
-            # 同期先ギルドIDは .env の SYNC_GUILD_ID で指定（未設定時は従来の値をフォールバック）
             sync_guild_id = int(os.getenv("SYNC_GUILD_ID", "1500185499929804983"))
             guild = discord.Object(id=sync_guild_id)
             self.tree.copy_global_to(guild=guild)
@@ -301,11 +297,20 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     print(f"[AppCommandError] {interaction.command.name if interaction.command else 'Unknown'}: {error}\n{tb}")
     
-    error_msg = f"❌ エラーが発生しました: `{error}`"
-    if isinstance(error, app_commands.CommandNotFound):
+    original = getattr(error, 'original', error)
+    if isinstance(original, discord.Forbidden):
+        error_msg = (
+            "❌ **Discord権限エラー (403 Forbidden: Missing Permissions)**\n"
+            "Botに必要な権限がないか、またはBotのロール順位が不足しています。\n"
+            "・サーバー設定 > ロール でBotのロールを操作対象ロールより上位に移動してください。\n"
+            "・必要な権限（ロールの管理、メッセージの管理、チャンネルの管理等）がBotに付与されているか確認してください。"
+        )
+    elif isinstance(error, app_commands.CommandNotFound):
         guild_cmds = list(interaction.client.tree._guild_commands.get(interaction.guild_id, {}).keys())
         global_cmds = list(interaction.client.tree._global_commands.keys())
-        error_msg += f"\n\n[DEBUG DATA]\nGuild ID: {interaction.guild_id}\nGuild keys: {guild_cmds}\nGlobal keys: {global_cmds}"
+        error_msg = f"❌ コマンドが見つかりませんでした: `{error}`\n\n[DEBUG DATA]\nGuild ID: {interaction.guild_id}\nGuild keys: {guild_cmds}\nGlobal keys: {global_cmds}"
+    else:
+        error_msg = f"❌ エラーが発生しました: `{error}`"
         
     try:
         if interaction.response.is_done():
@@ -361,9 +366,6 @@ async def on_ready():
 
     # setup_hook時点では未参加guildの一覧が取得できないため、
     # ここで改めて【現在参加している全サーバー】にコマンドを同期する。
-    # (以前は起動時に固定の1サーバーのみへ同期しており、それ以外のサーバーは
-    #  新規参加時にしかコマンドが更新されず、後からコマンドを追加・変更しても
-    #  反映されないままになる不具合があった)
     guild_count = len(bot.guilds)
     print(f"[OK] Syncing slash commands to all {guild_count} joined guilds...")
     synced_count = 0
@@ -388,8 +390,6 @@ async def on_message(message):
 @bot.event
 async def on_voice_state_update(member, before, after):
     try:
-        if member.bot: return
-        # VCログはcogs/logging_cog.pyで処理するため削除
         if member.bot: return
         user_id = member.id
         now_aware = datetime.datetime.now(JST)

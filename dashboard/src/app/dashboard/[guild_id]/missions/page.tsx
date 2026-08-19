@@ -36,6 +36,27 @@ const TEMPLATES = [
   { title: "VC長時間滞在", desc: "VCに通算1時間以上参加してメンバーと交流する", miles: 100 },
   { title: "レア捕獲", desc: "レア度RARE以上の生き物を1匹捕獲する", miles: 100 },
   { title: "イベント告知・参加", desc: "DIY作業台イベントや鯖内イベントに参加・告知する", miles: 100 },
+  { title: "図鑑チェック", desc: "`/魚図鑑` または `/虫図鑑` を確認してコレクションを増やす", miles: 100 },
+  { title: "朝のあいさつ", desc: "朝または昼の時間帯に雑談チャンネルでメッセージを送信する", miles: 100 },
+  { title: "夜の団らん", desc: "夜20時以降にVCまたはチャットでメンバーと会話する", miles: 100 },
+  { title: "大物釣り上げ", desc: "`/釣り` で魚を3匹以上釣り上げる", miles: 100 },
+  { title: "昆虫ハンター", desc: "`/虫捕り` で虫を3匹以上捕獲する", miles: 100 },
+  { title: "住民カード確認", desc: "`/住民カード` で現在のマイルやランクを確認する", miles: 100 },
+  { title: "スタンプ・リアクション", desc: "サーバー内のメッセージにスタンプやリアクションを3回以上つける", miles: 100 },
+  { title: "マイル残高チェック", desc: "`/マイル` で次のランク昇格までの必要ポイントを確認する", miles: 100 },
+  { title: "ランキング閲覧", desc: "`/ランキング` で図鑑収集ランキングを確認する", miles: 100 },
+  { title: "自己紹介・プロフィール", desc: "`/プロフィール` で自分のステータスを確認する", miles: 100 },
+  { title: "道具補充", desc: "`/ショップ` でつりざおまたは虫取り網を新調する", miles: 100 },
+  { title: "新人歓迎", desc: "新しく参加したメンバーにあいさつやリアクションを送る", miles: 100 },
+  { title: "音楽・動画鑑賞VC", desc: "VCでメンバーと一緒に音楽や画面共有を楽しむ", miles: 100 },
+  { title: "ゲーム交流", desc: "メンバーと一緒にゲームを遊ぶか配信を視聴する", miles: 100 },
+  { title: "両替体験", desc: "`/両替` でベルとマイル・チケットを交換する", miles: 100 },
+  { title: "ヘルプ確認", desc: "`/ヘルプ` でBotのコマンド一覧や遊び方を確認する", miles: 100 },
+  { title: "DIY作業台利用", desc: "`/DIY作業台` でイベント開催または告知を行う", miles: 100 },
+  { title: "生き物まとめ売り", desc: "重複した生き物を2匹以上まとめて売却する", miles: 100 },
+  { title: "VCメンバー招待", desc: "VCチャンネルで他のメンバーに声をかけて一緒に話す", miles: 100 },
+  { title: "色違い生き物探索", desc: "`/釣り` または `/虫捕り` でレア・色違いの生き物を探す", miles: 100 },
+  { title: "デイリー完全制覇", desc: "本日の他のミッションを達成して報告を完了する", miles: 100 },
 ];
 
 export default function MissionsDashboardPage({ params }: { params: { guild_id: string } }) {
@@ -329,7 +350,7 @@ export default function MissionsDashboardPage({ params }: { params: { guild_id: 
               disabled={savingSlot}
               className="bg-transparent text-white font-mecha font-bold text-sm outline-none cursor-pointer"
             >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+              {Array.from({ length: 30 }, (_, i) => i + 1).map((num) => (
                 <option key={num} value={num} className="bg-zinc-900 text-white">
                   {num} 枠 / 日
                 </option>

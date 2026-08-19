@@ -84,7 +84,7 @@ export async function GET(
         let parsed;
         try { parsed = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { parsed = raw; }
         const val = parseInt(parsed, 10);
-        if (!isNaN(val) && val >= 1 && val <= 10) slotCount = val;
+        if (!isNaN(val) && val >= 1 && val <= 30) slotCount = val;
       }
     } catch {}
 
@@ -122,7 +122,7 @@ export async function POST(
     // スロット設定の保存アクション
     if (body.action === 'save_slot_count' && body.slot_count !== undefined) {
       const pool = await getDoumoriPool(guildId);
-      const count = Math.max(1, Math.min(10, parseInt(body.slot_count, 10) || 3));
+      const count = Math.max(1, Math.min(30, parseInt(body.slot_count, 10) || 3));
       await pool.query(
         `INSERT INTO doumori_settings (guild_id, setting_key, setting_value)
          VALUES ($1, 'daily_mission_slot_count', $2)
