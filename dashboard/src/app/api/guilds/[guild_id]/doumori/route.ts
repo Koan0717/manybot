@@ -55,12 +55,18 @@ const DEFAULT_SETTINGS = {
   mission_report_channel_id: '',
   mission_staff_role_ids: [] as string[],
   mission_auto_card_preview: true,
+  daily_mission_slot_count: 3,
   daily_mission_reward_rank1: 30,
   daily_mission_reward_rank2: 50,
   daily_mission_reward_rank3: 70,
   daily_mission_reward_rank4: 100,
 
-  // 8. 🃏 住民カード＆階級ステップアップ
+  // 8. 👑 ロール権限管理 (/設定パネル連動)
+  admin_role_ids: [] as string[],
+  mile_grant_role_ids: [] as string[],
+  ticket_grant_role_ids: [] as string[],
+
+  // 9. 🃏 住民カード＆階級ステップアップ
   rank1_name: '🌱 新規住人',
   rank1_miles: 0,
   rank1_color: '#A8E6CF',

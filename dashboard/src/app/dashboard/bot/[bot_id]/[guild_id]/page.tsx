@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import ChannelSelect from '@/components/ChannelSelect';
+import RoleSelect from '@/components/RoleSelect';
 import {
   Bot,
   Activity,
@@ -23,6 +24,7 @@ import {
   Trophy,
   Coins,
   Camera,
+  Crown,
   CreditCard,
   Wrench,
   Gamepad2,
@@ -734,6 +736,13 @@ export default function BotGuildDashboardPage({
                   title: '🎮 総合操作パネル (/パネル設置)',
                   desc: '全機能がボタン操作できる【総合操作パネル】の指定チャンネル送信',
                   badge: '即時送信',
+                },
+                {
+                  tab: 'roles-permissions',
+                  icon: Crown,
+                  title: '👑 管理者・各種ロール権限＆通知先設定',
+                  desc: '管理者ロール・マイル付与・チケット付与・ミッション承認ロール・通知チャンネル設定 (/設定パネル連動)',
+                  badge: '権限管理',
                 },
                 {
                   tab: 'accounts',
@@ -1828,6 +1837,146 @@ export default function BotGuildDashboardPage({
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 👑 TAB: 👑 管理者・権限ロール＆通知先設定 */}
+      {currentTab === 'roles-permissions' && (
+        <div className="mecha-corners-purple bg-neutral-900/80 border border-purple-900/40 mecha-clip p-6 md:p-8 space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-purple-900/30">
+            <div>
+              <h2 className="font-mecha text-xl font-bold text-white flex items-center gap-2">
+                <Crown className="w-5 h-5 text-amber-400" />
+                👑 管理者・各種ロール権限＆通知先設定 (/設定パネル連動)
+              </h2>
+              <p className="font-tech text-xs text-zinc-400 mt-1">
+                Botの全権限・マイル操作・チケット操作・ミッション承認を行うロールと、各種通知先チャンネルを設定します。Discord上の `/設定パネル` コマンドともリアルタイムに連動します。
+              </p>
+            </div>
+            <button
+              onClick={handleSaveSettings}
+              disabled={saving}
+              className="mecha-btn-sheen mecha-clip-sm bg-gradient-to-r from-purple-700 to-indigo-800 text-white font-mecha font-bold py-2.5 px-6 border border-purple-400/40 text-xs shadow-md"
+            >
+              {saving ? '保存中...' : '設定を保存'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 1. 管理者ロール */}
+            <div className="space-y-2 p-4 bg-black/40 border border-amber-900/40 rounded-lg">
+              <label className="font-tech text-xs text-amber-300 font-bold uppercase flex items-center gap-1.5">
+                <Crown className="w-4 h-4 text-amber-400" />
+                👑 管理者ロール (Bot全権限・設定変更)
+              </label>
+              <RoleSelect
+                label="管理者ロール"
+                placeholder="未設定 (サーバー管理者権限者のみ)"
+                roles={roles}
+                value={settings.admin_role_ids || []}
+                onChange={(ids: any) => updateSetting('admin_role_ids', ids)}
+                multiple={true}
+              />
+              <p className="font-tech text-[10px] text-zinc-500">
+                ※ このロールを持つメンバーは `/設定パネル` やBotのすべての管理操作・コマンドを実行できます。
+              </p>
+            </div>
+
+            {/* 2. マイル付与ロール */}
+            <div className="space-y-2 p-4 bg-black/40 border border-blue-900/40 rounded-lg">
+              <label className="font-tech text-xs text-blue-300 font-bold uppercase flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-blue-400" />
+                🌟 マイル付与スタッフロール (手動マイル付与・没収)
+              </label>
+              <RoleSelect
+                label="マイル付与ロール"
+                placeholder="未設定 (管理者のみ)"
+                roles={roles}
+                value={settings.mile_grant_role_ids || []}
+                onChange={(ids: any) => updateSetting('mile_grant_role_ids', ids)}
+                multiple={true}
+              />
+              <p className="font-tech text-[10px] text-zinc-500">
+                ※ このロールを持つメンバーは `/マイル付与` や `/マイル没収` を実行できます。
+              </p>
+            </div>
+
+            {/* 3. チケット付与ロール */}
+            <div className="space-y-2 p-4 bg-black/40 border border-orange-900/40 rounded-lg">
+              <label className="font-tech text-xs text-orange-300 font-bold uppercase flex items-center gap-1.5">
+                <Ticket className="w-4 h-4 text-orange-400" />
+                🎫 チケット付与スタッフロール (手動チケット付与・没収)
+              </label>
+              <RoleSelect
+                label="チケット付与ロール"
+                placeholder="未設定 (管理者のみ)"
+                roles={roles}
+                value={settings.ticket_grant_role_ids || []}
+                onChange={(ids: any) => updateSetting('ticket_grant_role_ids', ids)}
+                multiple={true}
+              />
+              <p className="font-tech text-[10px] text-zinc-500">
+                ※ このロールを持つメンバーは `/チケット付与` や `/チケット没収` を実行できます。
+              </p>
+            </div>
+
+            {/* 4. ミッション承認スタッフロール */}
+            <div className="space-y-2 p-4 bg-black/40 border border-emerald-900/40 rounded-lg">
+              <label className="font-tech text-xs text-emerald-300 font-bold uppercase flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                📸 ミッション承認スタッフロール (報告承認)
+              </label>
+              <RoleSelect
+                label="ミッション承認ロール"
+                placeholder="未設定 (管理者のみ)"
+                roles={roles}
+                value={settings.mission_staff_role_ids || []}
+                onChange={(ids: any) => updateSetting('mission_staff_role_ids', ids)}
+                multiple={true}
+              />
+              <p className="font-tech text-[10px] text-zinc-500">
+                ※ このロールを持つメンバーは `/ミッション報告` の「✅ 承認する」ボタンでマイルを付与できます。
+              </p>
+            </div>
+
+            {/* 5. チケット獲得通知チャンネル */}
+            <div className="space-y-2 p-4 bg-black/40 border border-purple-900/40 rounded-lg">
+              <label className="font-tech text-xs text-purple-300 font-bold uppercase flex items-center gap-1.5">
+                <Ticket className="w-4 h-4 text-purple-400" />
+                🎫 チケット獲得通知チャンネル
+              </label>
+              <ChannelSelect
+                label="チケット通知チャンネル"
+                placeholder="発言したチャンネル / DM (デフォルト)"
+                channels={textChannels}
+                value={settings.ticket_notify_channel_id || ''}
+                onChange={(id: any) => updateSetting('ticket_notify_channel_id', id || '')}
+                multiple={false}
+              />
+              <p className="font-tech text-[10px] text-zinc-500">
+                ※ 住民が浮上達成で図鑑チケットを獲得した際の通知メッセージの送信先です。
+              </p>
+            </div>
+
+            {/* 6. ミッション報告受付チャンネル */}
+            <div className="space-y-2 p-4 bg-black/40 border border-purple-900/40 rounded-lg">
+              <label className="font-tech text-xs text-purple-300 font-bold uppercase flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-purple-400" />
+                📸 ミッション報告受付チャンネル
+              </label>
+              <ChannelSelect
+                label="ミッション報告受付チャンネル"
+                placeholder="未設定 (コマンド実行チャンネルに返信)"
+                channels={textChannels}
+                value={settings.mission_report_channel_id || ''}
+                onChange={(id: any) => updateSetting('mission_report_channel_id', id || '')}
+                multiple={false}
+              />
+              <p className="font-tech text-[10px] text-zinc-500">
+                ※ 住民が `/ミッション報告` で提出したスクリーンショットと承認ボタンが届くチャンネルです。
+              </p>
             </div>
           </div>
         </div>
