@@ -122,6 +122,13 @@ class IPC(commands.Cog):
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to process reload_call_board: {e}")
 
+                        elif panel_type == "reload_othello_settings":
+                            try:
+                                self.bot.bot_settings = await database.load_settings()
+                                print(f"[IPC] Reloaded othello settings for guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to reload othello settings: {e}")
+
                         elif panel_type.startswith("apply_room_access_deny:") or panel_type.startswith("apply_room_access_allow:"):
                             try:
                                 from helpers import get_setting
@@ -288,7 +295,14 @@ class IPC(commands.Cog):
                             color=discord.Color.blurple()
                         )
                         view = CallBoardPanelView()
-
+                    elif panel_type == "othello":
+                        from cogs.othello import OthelloPanelView
+                        embed = discord.Embed(
+                            title="🎯 オセロ対戦",
+                            description="オセロで対戦しましょう！\n「PvP対戦」でプレイヤーと、「AI対戦」でAIと対戦できます。",
+                            color=discord.Color.green()
+                        )
+                        view = OthelloPanelView()
 
                     if embed and view:
                         try:

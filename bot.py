@@ -252,6 +252,7 @@ class EconomyBot(commands.Bot):
             "cogs.self_intro_roles",
             "cogs.call_board",
             "cogs.gacha",
+            "cogs.othello",
         ]
         for cog in cogs_to_load:
             try:

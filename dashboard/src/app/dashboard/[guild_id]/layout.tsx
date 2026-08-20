@@ -31,6 +31,7 @@ import {
   CircuitBoard,
   PhoneCall,
   Activity,
+  Gamepad2,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -119,6 +120,12 @@ export default function DashboardLayout({
         { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'], icon: Dices, group: '評価鯖' },
         { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'], icon: Gift, group: '評価鯖' },
         { label: '福引ガチャ設定', path: `/dashboard/${guildId}/gacha`, roles: ['admin', 'subadmin'], icon: Gift, group: '雑談鯖' },
+      ],
+    },
+    {
+      section: 'ゲーム',
+      items: [
+        { label: 'ゲーム設定', path: `/dashboard/${guildId}/games`, roles: ['admin', 'subadmin'], icon: Gamepad2, group: '雑談鯖' },
       ],
     },
     {

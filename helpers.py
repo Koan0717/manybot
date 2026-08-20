@@ -249,7 +249,15 @@ DEFAULT_SETTINGS = {
     "GAMBLE_VIOLATOR_ROLE_ID": 123456789012345678,
     "GAMBLE_VIOLATOR_ROLE_IDS": [],
     "MINUS_PUNISHMENT_TYPE": "evaluation_failure",
-    "ENABLE_ANTIGRIEF": True
+    "ENABLE_ANTIGRIEF": True,
+    # --- オセロゲーム設定 ---
+    "OTHELLO_BET_ENABLED": False,
+    "OTHELLO_DEFAULT_BET": 100,
+    "OTHELLO_PANEL_CHANNEL": "",
+    "OTHELLO_AUTO_VC_ENABLED": False,
+    "OTHELLO_VC_CATEGORY_ID": "",
+    "OTHELLO_VC_NAME": "オセロ対戦",
+    "OTHELLO_GAME_CHANNEL": "",
 }
 
 import sys

@@ -7,6 +7,8 @@ const DEFAULT_SETTINGS = {
   ticket_required_minutes: 60,
   ticket_chat_activity_seconds: 60,
   ticket_chat_cooldown_seconds: 60,
+  ticket_notify_enabled: true,
+  ticket_notify_destination: 'last_channel', // 'dm' | 'channel' | 'last_channel'
   ticket_notify_channel_id: '',
   ticket_notify_dm: false,
   ticket_notify_message: '🎉 **【浮上特典】** {user} さんがアクティビティを達成し、**図鑑チケット ×{tickets}** を獲得しました！（所持数: {total}枚）',
