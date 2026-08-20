@@ -272,6 +272,10 @@ class IPC(commands.Cog):
                         from cogs.rooms import MainInnPanelView
                         embed = discord.Embed(title="🛖 一般宿 (本/準メン専用)", description="本/準メン専用の一般宿(無料・無制限)の作成はこちらのボタンからどうぞ。", color=discord.Color.green())
                         view = MainInnPanelView()
+                    elif panel_type == "main_luxury_inn":
+                        from cogs.rooms import MainLuxuryInnPanelView
+                        embed = discord.Embed(title="🏰 高級宿 (本/準メン専用)", description="本/準メン専用の高級宿の作成はこちらのボタンからどうぞ。", color=discord.Color.purple())
+                        view = MainLuxuryInnPanelView()
                     elif panel_type == "luxury_inn_single":
                         from cogs.rooms import LuxuryInnPanelView
                         embed = discord.Embed(title="🏰 高級宿", description="高級宿の作成はこちらのボタンからどうぞ。", color=discord.Color.purple())
@@ -289,7 +293,7 @@ class IPC(commands.Cog):
                     if embed and view:
                         try:
                             sent_msg = await channel.send(embed=embed, view=view)
-                            if panel_type in ["inn", "luxury_inn", "game_vc", "gamble_vc", "custom_vc", "inn_combined", "main_inn", "luxury_inn_single"]:
+                            if panel_type in ["inn", "luxury_inn", "game_vc", "gamble_vc", "custom_vc", "inn_combined", "main_inn", "main_luxury_inn", "luxury_inn_single"]:
                                 try:
                                     await database.save_room_panel(guild_id, channel.id, sent_msg.id, panel_type)
                                 except Exception as dbe:

@@ -31,7 +31,7 @@ class LimitModal(discord.ui.Modal, title='人数制限の設定'):
             await interaction.response.send_message("数字を正しく入力してください。", ephemeral=True)
 
 # --- 時間制限ボタン適用ヘルパー ---
-def apply_duration_restrictions(view, bot, member=None, guild=None):
+def apply_duration_restrictions(view, bot, room_type: str = "宿", member=None, guild=None):
     guild_id = None
     if member and hasattr(member, 'guild') and member.guild:
         guild_id = member.guild.id
@@ -40,8 +40,22 @@ def apply_duration_restrictions(view, bot, member=None, guild=None):
     elif hasattr(bot, 'guilds') and len(bot.guilds) > 0:
         guild_id = bot.guilds[0].id
 
-    disable_12h = get_setting(bot, "DISABLE_12H_ROOMS", guild_id)
-    disable_24h = get_setting(bot, "DISABLE_24H_ROOMS", guild_id)
+    if room_type == "高級宿":
+        disable_12h = get_setting(bot, "DISABLE_12H_LUXURY", guild_id)
+        disable_24h = get_setting(bot, "DISABLE_24H_LUXURY", guild_id)
+        if disable_12h is None and disable_24h is None:
+            disable_12h = get_setting(bot, "DISABLE_12H_ROOMS", guild_id)
+            disable_24h = get_setting(bot, "DISABLE_24H_ROOMS", guild_id)
+    elif room_type == "宿":
+        disable_12h = get_setting(bot, "DISABLE_12H_INN", guild_id)
+        disable_24h = get_setting(bot, "DISABLE_24H_INN", guild_id)
+        if disable_12h is None and disable_24h is None:
+            disable_12h = get_setting(bot, "DISABLE_12H_ROOMS", guild_id)
+            disable_24h = get_setting(bot, "DISABLE_24H_ROOMS", guild_id)
+    else:
+        disable_12h = get_setting(bot, "DISABLE_12H_ROOMS", guild_id)
+        disable_24h = get_setting(bot, "DISABLE_24H_ROOMS", guild_id)
+
     is_12h_off = str(disable_12h).lower() == "true" or disable_12h is True
     is_24h_off = str(disable_24h).lower() == "true" or disable_24h is True
 
@@ -73,7 +87,7 @@ class ExtendInnSelectView(discord.ui.View):
         if is_free:
             self.twelve.label = "12時間 (無料)"
             self.twenty_four.label = "24時間 (無料)"
-        apply_duration_restrictions(self, self.bot, self.member)
+        apply_duration_restrictions(self, self.bot, "宿", self.member)
             
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success)
     async def twelve(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -99,7 +113,7 @@ class ExtendLuxuryInnSelectView(discord.ui.View):
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four.label = f"24時間 ({p24:,} {currency_name})"
-        apply_duration_restrictions(self, self.bot, self.member)
+        apply_duration_restrictions(self, self.bot, "高級宿", self.member)
         
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success)
     async def twelve(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -125,7 +139,7 @@ class ExtendGameVCSelectView(discord.ui.View):
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four.label = f"24時間 ({p24:,} {currency_name})"
-        apply_duration_restrictions(self, self.bot, self.member)
+        apply_duration_restrictions(self, self.bot, "ゲームVC", self.member)
         
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success)
     async def twelve(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -151,7 +165,7 @@ class ExtendGambleVCSelectView(discord.ui.View):
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four.label = f"24時間 ({p24:,} {currency_name})"
-        apply_duration_restrictions(self, self.bot, self.member)
+        apply_duration_restrictions(self, self.bot, "賭博VC", self.member)
         
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success)
     async def twelve(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -485,6 +499,14 @@ async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
         except Exception:
             pass
 
+    # --- 本準メン専用の高級宿パネル(main_luxury_inn)が設置されている場合、一般高級宿パネル系は本準メン利用不可 ---
+    if panel_id in ["luxury_inn", "luxury_inn_single", "inn_combined"] and is_main_or_sub_member(bot, member):
+        try:
+            if await database.has_panel_type(guild.id, "main_luxury_inn"):
+                return False
+        except Exception:
+            pass
+
     # --- 既存のパネル別設定チェック ---
     configs = get_setting(bot, "ROOM_PANEL_CONFIGS", guild.id)
     if not configs or not isinstance(configs, dict) or panel_id not in configs:
@@ -677,7 +699,7 @@ class GameVCDurationSelectView(discord.ui.View):
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve_hours.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four_hours.label = f"24時間 ({p24:,} {currency_name})"
-        apply_duration_restrictions(self, self.bot, self.member)
+        apply_duration_restrictions(self, self.bot, "ゲームVC", self.member)
 
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success, emoji="🎮")
     async def twelve_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -701,7 +723,7 @@ class GambleVCDurationSelectView(discord.ui.View):
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve_hours.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four_hours.label = f"24時間 ({p24:,} {currency_name})"
-        apply_duration_restrictions(self, self.bot, self.member)
+        apply_duration_restrictions(self, self.bot, "賭博VC", self.member)
 
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success, emoji="🎲")
     async def twelve_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -747,7 +769,7 @@ class InnDurationSelectView(discord.ui.View):
         if is_free:
             self.twelve_hours.label = "12時間 (無料)"
             self.twenty_four_hours.label = "24時間 (無料)"
-        apply_duration_restrictions(self, self.bot, self.member)
+        apply_duration_restrictions(self, self.bot, "宿", self.member)
 
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success, emoji="🛖")
     async def twelve_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -772,7 +794,7 @@ class LuxuryInnDurationSelectView(discord.ui.View):
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve_hours.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four_hours.label = f"24時間 ({p24:,} {currency_name})"
-        apply_duration_restrictions(self, self.bot, self.member)
+        apply_duration_restrictions(self, self.bot, "高級宿", self.member)
 
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success, emoji="🏰")
     async def twelve_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -832,6 +854,9 @@ class LuxuryRoomView(discord.ui.View):
         await it.response.defer(ephemeral=True)
         bot = it.client
         member = it.user
+        # 本準メン専用の高級宿パネルが設置されている場合、本準メンは一般高級宿パネル系を利用不可
+        if is_main_or_sub_member(bot, member) and await database.has_panel_type(it.guild.id, "main_luxury_inn"):
+            return await it.followup.send("本・準メンバーの方は専用の高級宿パネルをご利用ください。", ephemeral=True)
         if not await check_panel_permission(bot, it.guild, member, "luxury_inn_single"):
             return await it.followup.send("こちらの宿はご利用になれません。", ephemeral=True)
         if not (has_admin_role(bot, member) or is_main_or_sub_member(bot, member) or is_new_member(bot, member) or is_downgrade_member(bot, member)):
@@ -862,6 +887,9 @@ class InnCombinedView(discord.ui.View):
         await it.response.defer(ephemeral=True)
         bot = it.client
         member = it.user
+        # 本準メン専用の高級宿パネルが設置されている場合、本準メンは一般高級宿パネル系を利用不可
+        if is_main_or_sub_member(bot, member) and await database.has_panel_type(it.guild.id, "main_luxury_inn"):
+            return await it.followup.send("本・準メンバーの方は専用の高級宿パネルをご利用ください。", ephemeral=True)
         if not await check_panel_permission(bot, it.guild, member, "inn_combined"):
             return await it.followup.send("こちらの宿はご利用になれません。", ephemeral=True)
         if not (has_admin_role(bot, member) or is_main_or_sub_member(bot, member) or is_new_member(bot, member) or is_downgrade_member(bot, member)):
@@ -887,7 +915,7 @@ class TempInnDurationSelectView(discord.ui.View):
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
         self.twelve_hours.label = f"12時間 ({p12:,} {currency_name})"
         self.twenty_four_hours.label = f"24時間 ({p24:,} {currency_name})"
-        apply_duration_restrictions(self, self.bot, self.member)
+        apply_duration_restrictions(self, self.bot, "宿", self.member)
 
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success, emoji="🛖")
     async def twelve_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -950,11 +978,28 @@ class LuxuryInnPanelView(discord.ui.View):
     async def luxury(self, it, btn):
         bot = it.client
         member = it.user
+        # 本準メン専用の高級宿パネルが設置されている場合、本準メンは一般高級宿パネル系を利用不可
+        if is_main_or_sub_member(bot, member) and await database.has_panel_type(it.guild.id, "main_luxury_inn"):
+            return await it.response.send_message("本・準メンバーの方は専用の高級宿パネルをご利用ください。", ephemeral=True)
         if not await check_panel_permission(bot, it.guild, member, "luxury_inn_single"):
             return await it.response.send_message("こちらの宿はご利用になれません。", ephemeral=True)
         if not (has_admin_role(bot, member) or is_main_or_sub_member(bot, member) or is_new_member(bot, member) or is_downgrade_member(bot, member)):
             return await it.response.send_message("ロールがありません。", ephemeral=True)
         await it.response.send_message("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user, "luxury_inn_single"), ephemeral=True)
+
+class MainLuxuryInnPanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+    @discord.ui.button(label="高級宿を作成 (本/準メン専用)", style=discord.ButtonStyle.primary, emoji="🏰", custom_id="persistent_main_luxury_inn_btn")
+    async def main_luxury(self, it, btn):
+        bot = it.client
+        member = it.user
+        if not await check_panel_permission(bot, it.guild, member, "main_luxury_inn"):
+            return await it.response.send_message("こちらの宿はご利用になれません。", ephemeral=True)
+        if not (is_main_or_sub_member(bot, member) or has_admin_role(bot, member)):
+            return await it.response.send_message("このパネルは対象ロール(本・準メンバー)をお持ちの方のみ利用可能です。", ephemeral=True)
+        await it.response.send_message("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user, "main_luxury_inn"), ephemeral=True)
 
 # --- Cogの定義 ---
 class Rooms(commands.Cog):
@@ -977,6 +1022,7 @@ class Rooms(commands.Cog):
         self.bot.add_view(VCRenamePanelView())
         self.bot.add_view(VCInvitePanelView())
         self.bot.add_view(MainInnPanelView())
+        self.bot.add_view(MainLuxuryInnPanelView())
         self.bot.add_view(TempInnPanelView())
         self.bot.add_view(LuxuryInnPanelView())
         self.bot.add_view(GameRoomPanelView())
