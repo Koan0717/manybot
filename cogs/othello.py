@@ -635,6 +635,16 @@ class MoveSelectView(discord.ui.View):
         self.confirm_button = confirm
         self.add_item(confirm)
 
+        # 「降伏・終了」ボタン
+        resign_btn = discord.ui.Button(
+            label="🏳️ 降伏・終了",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"othello_modal_resign_{session.channel_id}",
+            row=4
+        )
+        resign_btn.callback = self._resign_callback
+        self.add_item(resign_btn)
+
     def _make_select_callback(self, idx: int):
         async def callback(interaction: discord.Interaction):
             # 本人チェック
@@ -684,6 +694,25 @@ class MoveSelectView(discord.ui.View):
 
         await process_move(interaction, self.session, row, col)
 
+    async def _resign_callback(self, interaction: discord.Interaction):
+        """降伏・強制終了ボタンのコールバック。"""
+        if interaction.user.id != self.session.current_player_id:
+            return await interaction.response.send_message("あなたのターンではありません。", ephemeral=True)
+
+        self.stop()
+        confirm_view = ConfirmResignView(self.session, interaction.user.id)
+        if self.session.is_ai:
+            desc = "本当にAI対戦を途中で終了（降伏）しますか？\n※賭け金がある場合は没収されます。"
+        else:
+            desc = "本当に降伏してゲームを終了しますか？\n※相手プレイヤーの勝利となり、賭け金がある場合は相手に付与されます。"
+
+        embed = discord.Embed(
+            title="⚠️ ゲーム終了・降伏の確認",
+            description=desc,
+            color=discord.Color.red()
+        )
+        await interaction.response.edit_message(content=None, embed=embed, view=confirm_view)
+
     async def on_timeout(self):
         """タイムアウト時は自動的にランダムな手を選択する。"""
         if self.session and self.valid_moves:
@@ -715,10 +744,63 @@ class MoveSelectView(discord.ui.View):
 
 
 # ============================================================
-# MoveRequestView: 「手を選ぶ」ボタン
+# ConfirmResignView: 強制終了・降伏確認 View (エフェメラル)
+# ============================================================
+class ConfirmResignView(discord.ui.View):
+    """ゲーム降伏・強制終了の確認View。"""
+
+    def __init__(self, session: OthelloSession, user_id: int):
+        super().__init__(timeout=60)
+        self.session = session
+        self.user_id = user_id
+
+    @discord.ui.button(label="🏳️ 降伏して終了する", style=discord.ButtonStyle.danger)
+    async def confirm_resign(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("あなた専用の確認画面ではありません。", ephemeral=True)
+
+        key = self.session.session_key()
+        if key not in game_sessions:
+            self.stop()
+            return await interaction.response.edit_message(
+                content="❌ 既にゲームは終了しています。", embed=None, view=None
+            )
+
+        self.stop()
+        await interaction.response.edit_message(
+            content="🏳️ ゲームを終了しました。", embed=None, view=None
+        )
+
+        channel = interaction.channel
+        # 勝者の決定: 降伏した側の反対が勝者
+        if self.session.is_ai:
+            winner = 2  # AIの勝利
+            await channel.send(f"🏳️ <@{self.user_id}> がゲームを降伏・終了しました。")
+        else:
+            if self.user_id == self.session.black_id:
+                winner = 2  # 白の勝利
+                await channel.send(f"🏳️ ⚫ <@{self.user_id}> が降伏しました。")
+            else:
+                winner = 1  # 黒の勝利
+                await channel.send(f"🏳️ ⬜ <@{self.user_id}> が降伏しました。")
+
+        await end_game(channel, self.session, winner)
+
+    @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            return await interaction.response.send_message("あなた専用の確認画面ではありません。", ephemeral=True)
+        self.stop()
+        await interaction.response.edit_message(
+            content="ゲームを継続します。", embed=None, view=None
+        )
+
+
+# ============================================================
+# MoveRequestView: 「手を選ぶ」「強制終了」ボタン
 # ============================================================
 class MoveRequestView(discord.ui.View):
-    """「手を選ぶ」ボタンを盤面メッセージに付けるView。"""
+    """「手を選ぶ」「強制終了」ボタンを盤面メッセージに付けるView。"""
 
     def __init__(self, session: OthelloSession):
         super().__init__(timeout=180)
@@ -752,6 +834,38 @@ class MoveRequestView(discord.ui.View):
             color=discord.Color.blurple()
         )
         await interaction.response.send_message(embed=embed, view=move_view, ephemeral=True)
+
+    @discord.ui.button(label="🏳️ 降伏・終了", style=discord.ButtonStyle.danger)
+    async def resign_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """ゲーム参加者が降伏・強制終了するボタン。"""
+        key = self.session.session_key()
+        if key not in game_sessions:
+            return await interaction.response.send_message("ゲームが終了しています。", ephemeral=True)
+
+        session = game_sessions[key]
+
+        # 参加者チェック
+        valid_players = [session.black_id]
+        if not session.is_ai and session.white_id:
+            valid_players.append(session.white_id)
+
+        if interaction.user.id not in valid_players:
+            return await interaction.response.send_message(
+                "このゲームの対戦プレイヤーではありません。", ephemeral=True
+            )
+
+        confirm_view = ConfirmResignView(session, interaction.user.id)
+        if session.is_ai:
+            desc = "本当にAI対戦を途中で終了（降伏）しますか？\n※賭け金がある場合は没収されます。"
+        else:
+            desc = "本当に降伏してゲームを終了しますか？\n※相手プレイヤーの勝利となり、賭け金がある場合は相手に付与されます。"
+
+        embed = discord.Embed(
+            title="⚠️ ゲーム終了・降伏の確認",
+            description=desc,
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, view=confirm_view, ephemeral=True)
 
 
 # ============================================================
