@@ -367,7 +367,7 @@ class OthelloSession:
         self.is_dm: bool = is_dm
         self.is_ai: bool = is_ai
         self.ai_level: int = ai_level
-        self.board_message_id = None         # 盤面メッセージのID
+        self.board_message_ids: list[int] = []  # 進行中盤面メッセージの履歴IDリスト
         self.pending_move = None             # 選択中の手
 
     @property
@@ -391,7 +391,7 @@ class OthelloSession:
 # 盤面表示 (内部共通関数)
 # ============================================================
 async def show_game_board(channel, session: OthelloSession):
-    """盤面メッセージを更新または新規送信する (MoveRequestView付き)。"""
+    """盤面メッセージを新規送信し、古いメッセージを整理する (MoveRequestView付き)。"""
     valid_moves = session.board.get_valid_moves(session.current_color)
     board_file = generate_board_image(session.board, valid_moves)
 
@@ -419,14 +419,6 @@ async def show_game_board(channel, session: OthelloSession):
 
     embed.set_image(url="attachment://othello_board.png")
 
-    # 既存の盤面メッセージを削除
-    try:
-        if session.board_message_id:
-            old_msg = await channel.fetch_message(session.board_message_id)
-            await old_msg.delete()
-    except Exception:
-        pass
-
     # AIターン中はボタン不要
     if session.is_ai and session.current_color == 2:
         view = None
@@ -434,7 +426,16 @@ async def show_game_board(channel, session: OthelloSession):
         view = MoveRequestView(session)
 
     msg = await channel.send(embed=embed, file=board_file, view=view)
-    session.board_message_id = msg.id
+    session.board_message_ids.append(msg.id)
+
+    # 次の次のパネルが表示された際に古いパネルを削除（直近2件を残し、3件以上前の古いパネルを削除）
+    while len(session.board_message_ids) > 2:
+        old_id = session.board_message_ids.pop(0)
+        try:
+            old_msg = await channel.fetch_message(old_id)
+            await old_msg.delete()
+        except Exception:
+            pass
 
 
 # ============================================================
@@ -519,9 +520,18 @@ async def process_move(interaction: discord.Interaction, session: OthelloSession
 
 
 async def end_game(channel, session: OthelloSession, winner: int):
-    """ゲーム終了処理。結果表示と賭け精算を行う。"""
+    """ゲーム終了処理。進行状況パネルをすべて削除し、結果パネルを表示して賭け精算を行う。"""
     bot = _bot_instance
     black, white = session.board.count_stones()
+
+    # 進行状況パネルをすべて削除
+    for mid in session.board_message_ids:
+        try:
+            old_msg = await channel.fetch_message(mid)
+            await old_msg.delete()
+        except Exception:
+            pass
+    session.board_message_ids.clear()
 
     # 最終盤面を表示
     final_file = generate_board_image(session.board, [])
@@ -533,15 +543,15 @@ async def end_game(channel, session: OthelloSession, winner: int):
     embed.add_field(name="⬜ 白", value=f"{white} 石", inline=True)
 
     if winner == 0:
-        embed.description = "🤝 引き分け！"
+        embed.description = "🤝 **引き分け！**"
         embed.color = discord.Color.light_grey()
     elif winner == 1:
-        embed.description = f"🏆 ⚫ 黒 <@{session.black_id}> の勝利！"
+        embed.description = f"🏆🎉 **⚫ 黒 <@{session.black_id}> が勝利（優勝）しました！**"
     else:
         if session.is_ai:
-            embed.description = "🤖 AI (白) の勝利！"
+            embed.description = "🤖 **AI (白) の勝利！** 次回のリベンジをお待ちしています！"
         else:
-            embed.description = f"🏆 ⬜ 白 <@{session.white_id}> の勝利！"
+            embed.description = f"🏆🎉 **⬜ 白 <@{session.white_id}> が勝利（優勝）しました！**"
 
     embed.set_image(url="attachment://othello_board.png")
 
