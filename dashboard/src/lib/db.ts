@@ -263,7 +263,7 @@ export async function setupDbSchema(client: any) {
             guild_id BIGINT PRIMARY KEY,
             is_enabled BOOLEAN DEFAULT FALSE,
             channel_id BIGINT,
-            auto_generate BOOLEAN DEFAULT FALSE
+            auto_generate_period BOOLEAN DEFAULT TRUE
         );
         CREATE TABLE IF NOT EXISTS rank_settings (
             guild_id BIGINT PRIMARY KEY,

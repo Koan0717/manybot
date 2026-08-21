@@ -341,7 +341,7 @@ export async function GET(
 
     // 9) 評価関連設定 (Evaluation / Sheet)
     try {
-      const evalRes = await pool.query('SELECT is_enabled, auto_generate FROM evaluation_settings WHERE guild_id = $1', [guildId]);
+      const evalRes = await pool.query('SELECT is_enabled FROM evaluation_settings WHERE guild_id = $1', [guildId]);
       const evalRow = evalRes.rows[0];
       modules['eval_sheet'] = {
         configured: evalRow ? (evalRow.is_enabled !== false) : false,

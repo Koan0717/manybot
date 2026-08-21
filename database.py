@@ -536,7 +536,8 @@ async def setup_db_schema(p):
                 guild_id BIGINT PRIMARY KEY,
                 allowed_role_ids BIGINT[] DEFAULT '{}',
                 pull_cost INTEGER DEFAULT 0,
-                is_enabled BOOLEAN DEFAULT TRUE
+                is_enabled BOOLEAN DEFAULT TRUE,
+                panel_channel_id BIGINT DEFAULT NULL
             )
         ''')
 
@@ -1307,6 +1308,11 @@ async def setup_db_schema(p):
             await conn.execute('ALTER TABLE gacha_prizes ADD COLUMN IF NOT EXISTS reward_role_duration_days INTEGER DEFAULT 0')
         except Exception as e:
             print(f"[Migration] gacha_prizes reward_role_duration_days warning: {e}")
+
+        try:
+            await conn.execute('ALTER TABLE gacha_settings ADD COLUMN IF NOT EXISTS panel_channel_id BIGINT DEFAULT NULL')
+        except Exception as e:
+            print(f"[Migration] gacha_settings panel_channel_id warning: {e}")
 
 
 
@@ -4368,7 +4374,7 @@ async def get_gacha_settings(guild_id: int) -> dict:
     p = await get_pool(guild_id)
     async with p.acquire() as conn:
         row = await conn.fetchrow(
-            'SELECT allowed_role_ids, pull_cost, is_enabled FROM gacha_settings WHERE guild_id = $1',
+            'SELECT allowed_role_ids, pull_cost, is_enabled, panel_channel_id FROM gacha_settings WHERE guild_id = $1',
             guild_id
         )
         if row:
@@ -4376,19 +4382,20 @@ async def get_gacha_settings(guild_id: int) -> dict:
                 "allowed_role_ids": [str(r) for r in (row["allowed_role_ids"] or [])],
                 "pull_cost": row["pull_cost"],
                 "is_enabled": row["is_enabled"],
+                "panel_channel_id": str(row["panel_channel_id"]) if row["panel_channel_id"] else "",
             }
-        return {"allowed_role_ids": [], "pull_cost": 0, "is_enabled": True}
+        return {"allowed_role_ids": [], "pull_cost": 0, "is_enabled": True, "panel_channel_id": ""}
 
 
-async def save_gacha_settings(guild_id: int, allowed_role_ids: list[int], pull_cost: int, is_enabled: bool):
+async def save_gacha_settings(guild_id: int, allowed_role_ids: list[int], pull_cost: int, is_enabled: bool, panel_channel_id: int = None):
     p = await get_pool(guild_id)
     async with p.acquire() as conn:
         await conn.execute('''
-            INSERT INTO gacha_settings (guild_id, allowed_role_ids, pull_cost, is_enabled)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO gacha_settings (guild_id, allowed_role_ids, pull_cost, is_enabled, panel_channel_id)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (guild_id) DO UPDATE
-            SET allowed_role_ids = $2, pull_cost = $3, is_enabled = $4
-        ''', guild_id, allowed_role_ids, pull_cost, is_enabled)
+            SET allowed_role_ids = $2, pull_cost = $3, is_enabled = $4, panel_channel_id = $5
+        ''', guild_id, allowed_role_ids, pull_cost, is_enabled, panel_channel_id)
 
 
 async def get_gacha_prizes(guild_id: int) -> list[dict]:

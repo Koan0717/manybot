@@ -1,11 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { Gift, Plus, Trash2, Save, Loader2, Percent } from 'lucide-react';
+import { Gift, Plus, Trash2, Save, Loader2, Percent, Send } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import PageHeader from '@/components/PageHeader';
 import RoleSelect from '@/components/RoleSelect';
+import ChannelSelect from '@/components/ChannelSelect';
 import type { RoleOption } from '@/components/RoleSelect';
+import type { ChannelOption } from '@/components/ChannelSelect';
 
 const COLORS = ['#8b5cf6', '#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#14b8a6', '#a3e635'];
 
@@ -24,12 +26,15 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
   const guildId = params.guild_id;
 
   const [roles, setRoles] = useState<RoleOption[]>([]);
+  const [channels, setChannels] = useState<ChannelOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deploying, setDeploying] = useState(false);
 
   const [isEnabled, setIsEnabled] = useState(true);
   const [allowedRoleIds, setAllowedRoleIds] = useState<string[]>([]);
   const [pullCost, setPullCost] = useState(0);
+  const [panelChannelId, setPanelChannelId] = useState('');
   const [currencyName, setCurrencyName] = useState('通貨');
   const [prizes, setPrizes] = useState<Prize[]>([
     { prize_number: 1, prize_name: '', weight: 1, reward_coins: 0, reward_role_id: null, reward_role_duration_days: 0 },
@@ -38,15 +43,20 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
   useEffect(() => {
     Promise.all([
       fetch(`/api/guilds/${guildId}/roles`).then(r => (r.ok ? r.json() : [])),
+      fetch(`/api/guilds/${guildId}/channels`).then(r => (r.ok ? r.json() : [])),
       fetch(`/api/guilds/${guildId}/gacha`).then(r => (r.ok ? r.json() : null)),
       fetch(`/api/guilds/${guildId}/settings`).then(r => (r.ok ? r.json() : null)),
     ])
-      .then(([rolesData, gachaData, settingsData]) => {
+      .then(([rolesData, channelsData, gachaData, settingsData]) => {
         if (!rolesData.error) setRoles(rolesData.filter((r: any) => r.id !== guildId));
+        if (!channelsData.error && Array.isArray(channelsData)) {
+          setChannels(channelsData);
+        }
         if (gachaData && !gachaData.error) {
           setIsEnabled(gachaData.is_enabled);
           setAllowedRoleIds(gachaData.allowed_role_ids || []);
           setPullCost(gachaData.pull_cost || 0);
+          setPanelChannelId(gachaData.panel_channel_id || '');
           if (gachaData.prizes && gachaData.prizes.length > 0) setPrizes(gachaData.prizes);
         }
         if (settingsData && settingsData.CURRENCY_NAME) setCurrencyName(settingsData.CURRENCY_NAME);
@@ -94,6 +104,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
           is_enabled: isEnabled,
           allowed_role_ids: allowedRoleIds,
           pull_cost: pullCost,
+          panel_channel_id: panelChannelId || null,
           prizes,
         }),
       });
@@ -107,6 +118,33 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
     }
   };
 
+  const handleDeploy = async () => {
+    if (!panelChannelId) {
+      toast.error('パネルを設置するチャンネルを選択してください');
+      return;
+    }
+    if (!confirm('指定したチャンネルに「福引パネル」を送信して設置しますか？')) return;
+
+    setDeploying(true);
+    try {
+      const res = await fetch(`/api/guilds/${guildId}/gacha`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'deploy',
+          channel_id: panelChannelId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+      toast.success('福引パネルの設置リクエストを送信しました！数秒内にDiscordへ反映されます。');
+    } catch (e: any) {
+      toast.error(`設置に失敗しました: ${e.message}`);
+    } finally {
+      setDeploying(false);
+    }
+  };
+
   if (loading) {
     return <div className="text-zinc-400 p-8">読み込み中...</div>;
   }
@@ -114,7 +152,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
   return (
     <div className="max-w-4xl mx-auto pb-24 space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
-        <PageHeader icon={Gift} title="福引ガチャ設定" subtitle="/ガチャ コマンドで引ける福引の景品・確率・報酬を設定します" guildId={guildId} healthKey="gacha" />
+        <PageHeader icon={Gift} title="福引ガチャ設定" subtitle="/ガチャ コマンドやパネルから引ける福引の景品・確率・設置チャンネルを設定します" guildId={guildId} healthKey="gacha" />
         <button
           onClick={handleSave}
           disabled={saving}
@@ -130,7 +168,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
         <div className="flex items-center justify-between">
           <div>
             <p className="font-tech text-sm text-white font-semibold">福引ガチャを有効にする</p>
-            <p className="text-xs text-zinc-500 mt-0.5">OFFにすると /ガチャ コマンドが利用できなくなります</p>
+            <p className="text-xs text-zinc-500 mt-0.5">OFFにすると /ガチャ コマンドおよびパネルボタンが利用できなくなります</p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
             <input type="checkbox" className="sr-only peer" checked={isEnabled} onChange={() => setIsEnabled(v => !v)} />
@@ -159,6 +197,37 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
             value={pullCost}
             onChange={e => setPullCost(Number(e.target.value))}
             className="w-full md:w-48 bg-black/40 border border-zinc-700 rounded px-3 py-2 text-sm text-white focus:border-red-600 outline-none"
+          />
+        </div>
+      </div>
+
+      {/* パネル設置設定 */}
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p className="font-tech text-sm text-white font-semibold">福引きパネル設置</p>
+            <p className="text-xs text-zinc-500 mt-0.5">指定したチャンネルに「🎁 福引を引く」ボタン付きのパネルメッセージを設置します</p>
+          </div>
+          <button
+            onClick={handleDeploy}
+            disabled={deploying || !panelChannelId}
+            className="flex items-center gap-2 bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-xs font-bold transition-all shadow-md shadow-red-900/20"
+          >
+            {deploying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            パネルを設置
+          </button>
+        </div>
+
+        <div>
+          <label className="block font-tech text-xs text-zinc-400 mb-1.5">設置先チャンネル</label>
+          <ChannelSelect
+            label="福引きパネル設置チャンネル"
+            channels={channels}
+            value={panelChannelId}
+            onChange={(val: string) => setPanelChannelId(val)}
+            placeholder="設置するチャンネルを選択..."
+            multiple={false}
+            loading={loading}
           />
         </div>
       </div>

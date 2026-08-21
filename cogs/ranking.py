@@ -242,7 +242,10 @@ class Ranking(commands.Cog):
         is_ephemeral = settings.get("ephemeral_rank_commands", False)
         await interaction.response.defer(ephemeral=is_ephemeral)
         try:
-            top_users = await database.get_top_users(interaction.guild_id, mode, 10)
+            # サーバーを退出したユーザーを除外するため、多めに取得してフィルタリングする
+            DISPLAY_COUNT = 10
+            FETCH_COUNT = 50  # フィルタリング後に10名を確保するため多めに取得
+            top_users = await database.get_top_users(interaction.guild_id, mode, FETCH_COUNT)
             
             embed = discord.Embed(
                 title="💬 TCランキング上位10名" if mode == "tc" else "🎙️ VCランキング上位10名",
@@ -250,10 +253,16 @@ class Ranking(commands.Cog):
             )
             
             desc = ""
-            for i, u in enumerate(top_users):
+            rank = 1
+            for u in top_users:
+                if rank > DISPLAY_COUNT:
+                    break
                 member = interaction.guild.get_member(u["user_id"])
-                name = member.display_name if member else f"不明なユーザー({u['user_id']})"
-                desc += f"**{i+1}位** {name} - Lv.{u['level']} ({u['xp']} XP)\n"
+                # サーバーに存在しないユーザーはスキップ
+                if member is None:
+                    continue
+                desc += f"**{rank}位** {member.display_name} - Lv.{u['level']} ({u['xp']} XP)\n"
+                rank += 1
                 
             if not desc:
                 desc = "データがありません。"

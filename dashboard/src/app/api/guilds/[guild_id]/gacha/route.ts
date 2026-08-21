@@ -7,7 +7,8 @@ async function ensureTables(pool: any) {
       guild_id BIGINT PRIMARY KEY,
       allowed_role_ids BIGINT[] DEFAULT '{}',
       pull_cost INTEGER DEFAULT 0,
-      is_enabled BOOLEAN DEFAULT TRUE
+      is_enabled BOOLEAN DEFAULT TRUE,
+      panel_channel_id BIGINT DEFAULT NULL
     );
   `);
   await pool.query(`
@@ -42,6 +43,13 @@ async function ensureTables(pool: any) {
   } catch (e) {
     // ignore if already exists
   }
+  try {
+    await pool.query(`
+      ALTER TABLE gacha_settings ADD COLUMN IF NOT EXISTS panel_channel_id BIGINT DEFAULT NULL;
+    `);
+  } catch (e) {
+    // ignore if already exists
+  }
 }
 
 export async function GET(
@@ -54,7 +62,7 @@ export async function GET(
     await ensureTables(pool);
 
     const settingsRes = await pool.query(
-      `SELECT allowed_role_ids, pull_cost, is_enabled FROM gacha_settings WHERE guild_id = $1`,
+      `SELECT allowed_role_ids, pull_cost, is_enabled, panel_channel_id FROM gacha_settings WHERE guild_id = $1`,
       [guildId]
     );
     const prizesRes = await pool.query(
@@ -62,12 +70,13 @@ export async function GET(
       [guildId]
     );
 
-    const settings = settingsRes.rows[0] || { allowed_role_ids: [], pull_cost: 0, is_enabled: true };
+    const settings = settingsRes.rows[0] || { allowed_role_ids: [], pull_cost: 0, is_enabled: true, panel_channel_id: null };
 
     return NextResponse.json({
       allowed_role_ids: (settings.allowed_role_ids || []).map((id: any) => id.toString()),
       pull_cost: settings.pull_cost ?? 0,
       is_enabled: settings.is_enabled ?? true,
+      panel_channel_id: settings.panel_channel_id?.toString() ?? '',
       prizes: prizesRes.rows.map((p: any) => ({
         id: p.id,
         prize_number: p.prize_number,
@@ -93,7 +102,30 @@ export async function POST(
     const pool = await getPool(guildId);
     await ensureTables(pool);
     const body = await request.json();
-    const { allowed_role_ids, pull_cost, is_enabled, prizes } = body;
+
+    // パネル設置アクションの処理
+    if (body.action === 'deploy') {
+      const channelId = body.channel_id || body.panel_channel_id;
+      if (!channelId) {
+        return NextResponse.json({ error: 'パネル設置チャンネルが指定されていません' }, { status: 400 });
+      }
+
+      await pool.query(
+        `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, $2, 'gacha')`,
+        [guildId, channelId]
+      );
+
+      await pool.query(
+        `INSERT INTO gacha_settings (guild_id, panel_channel_id)
+         VALUES ($1, $2)
+         ON CONFLICT (guild_id) DO UPDATE SET panel_channel_id = $2`,
+        [guildId, channelId]
+      );
+
+      return NextResponse.json({ success: true });
+    }
+
+    const { allowed_role_ids, pull_cost, is_enabled, prizes, panel_channel_id } = body;
 
     if (!Array.isArray(prizes)) {
       return NextResponse.json({ error: 'prizes は配列である必要があります' }, { status: 400 });
@@ -112,11 +144,11 @@ export async function POST(
       await client.query('BEGIN');
 
       await client.query(
-        `INSERT INTO gacha_settings (guild_id, allowed_role_ids, pull_cost, is_enabled)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO gacha_settings (guild_id, allowed_role_ids, pull_cost, is_enabled, panel_channel_id)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (guild_id) DO UPDATE
-         SET allowed_role_ids = $2, pull_cost = $3, is_enabled = $4`,
-        [guildId, allowed_role_ids || [], pull_cost || 0, is_enabled !== false]
+         SET allowed_role_ids = $2, pull_cost = $3, is_enabled = $4, panel_channel_id = $5`,
+        [guildId, allowed_role_ids || [], pull_cost || 0, is_enabled !== false, panel_channel_id || null]
       );
 
       await client.query(`DELETE FROM gacha_prizes WHERE guild_id = $1`, [guildId]);

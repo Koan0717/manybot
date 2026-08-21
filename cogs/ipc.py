@@ -303,6 +303,10 @@ class IPC(commands.Cog):
                             color=discord.Color.green()
                         )
                         view = OthelloPanelView()
+                    elif panel_type == "gacha":
+                        from cogs.gacha import GachaPanelView, create_gacha_panel_embed
+                        embed = await create_gacha_panel_embed(self.bot, guild_id)
+                        view = GachaPanelView()
 
                     if embed and view:
                         try:
