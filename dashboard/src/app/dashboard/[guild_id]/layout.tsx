@@ -32,6 +32,8 @@ import {
   PhoneCall,
   Activity,
   Gamepad2,
+  Sparkles,
+  Bell,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -120,6 +122,14 @@ export default function DashboardLayout({
         { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'], icon: Dices, group: '評価鯖' },
         { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'], icon: Gift, group: '評価鯖' },
         { label: '福引ガチャ設定', path: `/dashboard/${guildId}/gacha`, roles: ['admin', 'subadmin'], icon: Gift, group: '雑談鯖' },
+      ],
+    },
+    {
+      section: 'どうぶつの森',
+      items: [
+        { label: '浮上・チケット通知設定', path: `/dashboard/${guildId}/doumori-tickets`, roles: ['admin', 'subadmin'], icon: Ticket, group: '雑談鯖' },
+        { label: 'デイリーミッション設定', path: `/dashboard/${guildId}/missions`, roles: ['admin', 'subadmin'], icon: Sparkles, group: '雑談鯖' },
+        { label: '階級・ランク設定', path: `/dashboard/${guildId}/doumori-rank`, roles: ['admin', 'subadmin'], icon: Trophy, group: '雑談鯖' },
       ],
     },
     {

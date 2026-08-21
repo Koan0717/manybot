@@ -48,6 +48,13 @@ import {
   Eye,
   EyeOff,
   UserCheck,
+  Bell,
+  BellOff,
+  Mail,
+  MessageSquare,
+  Clock,
+  MessageCircle,
+  Hash,
 } from 'lucide-react';
 
 interface Mission {
@@ -788,10 +795,10 @@ export default function BotGuildDashboardPage({
             <div>
               <h2 className="font-mecha text-xl font-bold text-white flex items-center gap-2">
                 <Ticket className="w-5 h-5 text-purple-400" />
-                🎫 浮上・チケット獲得システム設定
+                🎫 浮上・チケット獲得＆通知設定
               </h2>
               <p className="font-tech text-xs text-zinc-400 mt-1">
-                VC（ボイスチャンネル）およびチャットでの浮上時間を計測し、累計時間に応じて「図鑑チケット」を自動付与します。
+                VC（ボイスチャンネル）およびチャットでの浮上時間を計測し、累計時間に応じて「図鑑チケット」を自動付与・通知します。
               </p>
             </div>
             <button
@@ -803,64 +810,222 @@ export default function BotGuildDashboardPage({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="font-tech text-xs text-purple-300 font-bold uppercase">
-                チケット1枚獲得に必要な累計浮上時間 (分)
+          {/* 1. 通知ON/OFF */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="font-tech text-xs text-purple-300 font-bold uppercase flex items-center gap-1.5">
+                <Bell className="w-4 h-4 text-purple-400" />
+                浮上特典通知の送信 (ON / OFF)
               </label>
-              <input
-                type="number"
-                value={settings.ticket_required_minutes ?? 60}
-                onChange={(e) => updateSetting('ticket_required_minutes', parseInt(e.target.value, 10))}
-                className="w-full bg-black/60 border border-purple-900/60 focus:border-purple-400 rounded p-3 text-sm text-white font-tech mecha-input-purple outline-none"
-              />
-              <p className="font-tech text-[10px] text-zinc-500">
-                デフォルト: **60 分** (累計1時間で図鑑チケット×1自動付与)
-              </p>
+              <span
+                className={`font-tech text-[10px] px-2.5 py-0.5 rounded mecha-clip-sm font-bold border ${
+                  settings.ticket_notify_enabled !== false
+                    ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                    : 'bg-zinc-800 border-zinc-600 text-zinc-400'
+                }`}
+              >
+                {settings.ticket_notify_enabled !== false ? '● 通知中 (ON)' : '○ 停止中 (OFF)'}
+              </span>
             </div>
 
-            <div className="space-y-2">
-              <label className="font-tech text-xs text-purple-300 font-bold uppercase">
-                チャット1発言あたりの加算秒数 (秒)
-              </label>
-              <input
-                type="number"
-                value={settings.ticket_chat_activity_seconds ?? 60}
-                onChange={(e) => updateSetting('ticket_chat_activity_seconds', parseInt(e.target.value, 10))}
-                className="w-full bg-black/60 border border-purple-900/60 focus:border-purple-400 rounded p-3 text-sm text-white font-tech mecha-input-purple outline-none"
-              />
-              <p className="font-tech text-[10px] text-zinc-500">
-                デフォルト: **60 秒** (発言すると60秒分のアクティビティとして加算)
-              </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => updateSetting('ticket_notify_enabled', true)}
+                className={`p-4 mecha-clip text-left transition-all border-2 ${
+                  settings.ticket_notify_enabled !== false
+                    ? 'bg-gradient-to-br from-emerald-950/60 to-purple-950/40 border-emerald-500 shadow-md'
+                    : 'bg-black/40 border-zinc-800 hover:border-zinc-600 opacity-60 hover:opacity-100'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-emerald-400" />
+                    <span className="font-mecha font-bold text-white text-sm">🔔 通知を行う (ON)</span>
+                  </div>
+                  {settings.ticket_notify_enabled !== false && (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  )}
+                </div>
+                <p className="font-tech text-[11px] text-zinc-400">
+                  1時間達成時にお祝いメッセージを自動送信します。
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => updateSetting('ticket_notify_enabled', false)}
+                className={`p-4 mecha-clip text-left transition-all border-2 ${
+                  settings.ticket_notify_enabled === false
+                    ? 'bg-gradient-to-br from-zinc-900 to-black border-red-500 shadow-md'
+                    : 'bg-black/40 border-zinc-800 hover:border-zinc-600 opacity-60 hover:opacity-100'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <BellOff className="w-4 h-4 text-red-400" />
+                    <span className="font-mecha font-bold text-white text-sm">🔕 通知を行わない (OFF)</span>
+                  </div>
+                  {settings.ticket_notify_enabled === false && (
+                    <CheckCircle2 className="w-4 h-4 text-red-400" />
+                  )}
+                </div>
+                <p className="font-tech text-[11px] text-zinc-400">
+                  通知は送信せず、チケットのみを自動付与します（サイレント付与）。
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. 送信先選択 */}
+          <div
+            className={`space-y-3 pt-2 ${
+              settings.ticket_notify_enabled === false ? 'opacity-40 pointer-events-none' : ''
+            }`}
+          >
+            <label className="font-tech text-xs text-purple-300 font-bold uppercase flex items-center gap-1.5">
+              <Send className="w-4 h-4 text-purple-400" />
+              通知メッセージの送信先
+            </label>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => updateSetting('ticket_notify_destination', 'dm')}
+                className={`p-3.5 mecha-clip text-left transition-all border-2 ${
+                  (settings.ticket_notify_destination || 'last_channel') === 'dm'
+                    ? 'bg-purple-950/60 border-purple-400 shadow-md'
+                    : 'bg-black/40 border-zinc-800 hover:border-zinc-600'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <Mail className="w-4 h-4 text-purple-300" />
+                  <input
+                    type="radio"
+                    name="bot_dest"
+                    checked={(settings.ticket_notify_destination || 'last_channel') === 'dm'}
+                    onChange={() => updateSetting('ticket_notify_destination', 'dm')}
+                    className="cursor-pointer"
+                  />
+                </div>
+                <div className="font-mecha font-bold text-white text-xs mb-0.5">📩 メンバーのDM</div>
+                <p className="font-tech text-[10px] text-zinc-400">達成者の個人DM宛に送信</p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => updateSetting('ticket_notify_destination', 'channel')}
+                className={`p-3.5 mecha-clip text-left transition-all border-2 ${
+                  (settings.ticket_notify_destination || 'last_channel') === 'channel'
+                    ? 'bg-purple-950/60 border-purple-400 shadow-md'
+                    : 'bg-black/40 border-zinc-800 hover:border-zinc-600'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <Hash className="w-4 h-4 text-purple-300" />
+                  <input
+                    type="radio"
+                    name="bot_dest"
+                    checked={(settings.ticket_notify_destination || 'last_channel') === 'channel'}
+                    onChange={() => updateSetting('ticket_notify_destination', 'channel')}
+                    className="cursor-pointer"
+                  />
+                </div>
+                <div className="font-mecha font-bold text-white text-xs mb-0.5">📢 特定のチャンネル</div>
+                <p className="font-tech text-[10px] text-zinc-400">指定した固定チャンネルに送信</p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => updateSetting('ticket_notify_destination', 'last_channel')}
+                className={`p-3.5 mecha-clip text-left transition-all border-2 ${
+                  (settings.ticket_notify_destination || 'last_channel') === 'last_channel'
+                    ? 'bg-purple-950/60 border-purple-400 shadow-md'
+                    : 'bg-black/40 border-zinc-800 hover:border-zinc-600'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <MessageSquare className="w-4 h-4 text-purple-300" />
+                  <input
+                    type="radio"
+                    name="bot_dest"
+                    checked={(settings.ticket_notify_destination || 'last_channel') === 'last_channel'}
+                    onChange={() => updateSetting('ticket_notify_destination', 'last_channel')}
+                    className="cursor-pointer"
+                  />
+                </div>
+                <div className="font-mecha font-bold text-white text-xs mb-0.5">💬 最後に発言したチャンネル</div>
+                <p className="font-tech text-[10px] text-zinc-400">直近発言チャンネル上に返信</p>
+              </button>
             </div>
 
+            {settings.ticket_notify_destination === 'channel' && (
+              <div className="p-3 bg-black/60 border border-purple-900/50 mecha-clip-sm space-y-1.5 animate-fade-in">
+                <label className="font-tech text-xs text-purple-300 font-bold">
+                  通知先チャンネル選択
+                </label>
+                <ChannelSelect
+                  label="通知先チャンネル"
+                  placeholder="チャンネルを選択してください..."
+                  channels={textChannels}
+                  value={settings.ticket_notify_channel_id || ''}
+                  onChange={(id: any) => updateSetting('ticket_notify_channel_id', id || '')}
+                  multiple={false}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* 3. メッセージ内容＆浮上パラメータ */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
             <div className="space-y-2">
               <label className="font-tech text-xs text-purple-300 font-bold uppercase">
                 チケット獲得通知メッセージテンプレート
               </label>
               <textarea
-                rows={2}
+                rows={3}
                 value={settings.ticket_notify_message || ''}
                 onChange={(e) => updateSetting('ticket_notify_message', e.target.value)}
                 className="w-full bg-black/60 border border-purple-900/60 focus:border-purple-400 rounded p-3 text-xs text-white font-tech mecha-input-purple outline-none"
+                placeholder="🎉 **【浮上特典】** {user} さんがアクティビティを達成し、**図鑑チケット ×{tickets}** を獲得しました！（所持数: {total}枚）"
               />
               <p className="font-tech text-[10px] text-zinc-500">
-                使用可能タグ: `&#123;user&#125;` (ユーザー名), `&#123;tickets&#125;` (付与枚数), `&#123;total&#125;` (所持数)
+                使用可能タグ: `&#123;user&#125;`, `&#123;tickets&#125;`, `&#123;total&#125;`
               </p>
             </div>
 
-            <div className="space-y-2">
-              <label className="font-tech text-xs text-purple-300 font-bold uppercase">
-                チケット通知先チャンネル
-              </label>
-              <ChannelSelect
-                label="チケット通知先チャンネル"
-                placeholder="発言したチャンネル / DM (デフォルト)"
-                channels={textChannels}
-                value={settings.ticket_notify_channel_id || ''}
-                onChange={(id: any) => updateSetting('ticket_notify_channel_id', id || '')}
-                multiple={false}
-              />
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="font-tech text-xs text-purple-300 font-bold uppercase">
+                  チケット1枚獲得に必要な累計浮上時間 (分)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={settings.ticket_required_minutes ?? 60}
+                  onChange={(e) => updateSetting('ticket_required_minutes', parseInt(e.target.value, 10) || 60)}
+                  className="w-full bg-black/60 border border-purple-900/60 focus:border-purple-400 rounded p-2.5 text-sm text-white font-tech mecha-input-purple outline-none"
+                />
+                <p className="font-tech text-[10px] text-zinc-500">
+                  デフォルト: **60 分** (累計1時間で図鑑チケット×1自動付与)
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-tech text-xs text-purple-300 font-bold uppercase">
+                  チャット1発言あたりの加算秒数 (秒)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={settings.ticket_chat_activity_seconds ?? 60}
+                  onChange={(e) => updateSetting('ticket_chat_activity_seconds', parseInt(e.target.value, 10) || 60)}
+                  className="w-full bg-black/60 border border-purple-900/60 focus:border-purple-400 rounded p-2.5 text-sm text-white font-tech mecha-input-purple outline-none"
+                />
+                <p className="font-tech text-[10px] text-zinc-500">
+                  デフォルト: **60 秒** (発言すると60秒分のアクティビティとして加算)
+                </p>
+              </div>
             </div>
           </div>
         </div>

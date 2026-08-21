@@ -549,6 +549,20 @@ async def setup_db_schema(p):
                 weight INTEGER NOT NULL DEFAULT 1,
                 reward_coins INTEGER DEFAULT 0,
                 reward_role_id BIGINT,
+                reward_role_duration_days INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS gacha_user_roles (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                user_id BIGINT NOT NULL,
+                role_id BIGINT NOT NULL,
+                prize_id INTEGER,
+                expires_at TIMESTAMP NOT NULL,
+                role_removed BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -1288,6 +1302,12 @@ async def setup_db_schema(p):
             )
 
         ''')
+
+        try:
+            await conn.execute('ALTER TABLE gacha_prizes ADD COLUMN IF NOT EXISTS reward_role_duration_days INTEGER DEFAULT 0')
+        except Exception as e:
+            print(f"[Migration] gacha_prizes reward_role_duration_days warning: {e}")
+
 
 
 
@@ -4336,6 +4356,7 @@ async def delete_user_data(guild_id: int, user_id: int):
             await conn.execute('DELETE FROM user_items WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
             await conn.execute('DELETE FROM user_vc_durations WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
             await conn.execute('DELETE FROM self_intro_welcome_messages WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
+            await conn.execute('DELETE FROM gacha_user_roles WHERE guild_id = $1 AND user_id = $2', guild_id, user_id)
             print(f"[UserData Cleanup] Successfully deleted data for user {user_id} in guild {guild_id} upon leave.")
         except Exception as e:
             print(f"[UserData Cleanup] Error deleting user data for user {user_id} in guild {guild_id}: {e}")
@@ -4374,7 +4395,7 @@ async def get_gacha_prizes(guild_id: int) -> list[dict]:
     p = await get_pool(guild_id)
     async with p.acquire() as conn:
         rows = await conn.fetch(
-            'SELECT id, prize_number, prize_name, weight, reward_coins, reward_role_id FROM gacha_prizes WHERE guild_id = $1 ORDER BY prize_number ASC',
+            'SELECT id, prize_number, prize_name, weight, reward_coins, reward_role_id, reward_role_duration_days FROM gacha_prizes WHERE guild_id = $1 ORDER BY prize_number ASC',
             guild_id
         )
         return [dict(r) for r in rows]
@@ -4388,10 +4409,10 @@ async def replace_gacha_prizes(guild_id: int, prizes: list[dict]):
             await conn.execute('DELETE FROM gacha_prizes WHERE guild_id = $1', guild_id)
             for prize in prizes:
                 await conn.execute('''
-                    INSERT INTO gacha_prizes (guild_id, prize_number, prize_name, weight, reward_coins, reward_role_id)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO gacha_prizes (guild_id, prize_number, prize_name, weight, reward_coins, reward_role_id, reward_role_duration_days)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ''', guild_id, prize["prize_number"], prize["prize_name"], prize.get("weight", 1),
-                    prize.get("reward_coins", 0), prize.get("reward_role_id"))
+                    prize.get("reward_coins", 0), prize.get("reward_role_id"), prize.get("reward_role_duration_days", 0))
 
 
 async def add_gacha_history(guild_id: int, user_id: int, prize_id: int, prize_number: int, prize_name: str):
@@ -4401,3 +4422,59 @@ async def add_gacha_history(guild_id: int, user_id: int, prize_id: int, prize_nu
             INSERT INTO gacha_history (guild_id, user_id, prize_id, prize_number, prize_name)
             VALUES ($1, $2, $3, $4, $5)
         ''', guild_id, user_id, prize_id, prize_number, prize_name)
+
+
+async def add_gacha_user_role(guild_id: int, user_id: int, role_id: int, duration_days: int, prize_id: int = None) -> datetime.datetime:
+    """有効期限付きロールのレコードを追加または既存期限を延長する"""
+    now = get_now_naive()
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        existing = await conn.fetchrow('''
+            SELECT id, expires_at FROM gacha_user_roles
+            WHERE guild_id = $1 AND user_id = $2 AND role_id = $3 AND role_removed = FALSE AND expires_at > $4
+            ORDER BY expires_at DESC LIMIT 1
+        ''', guild_id, user_id, role_id, now)
+
+        if existing:
+            base_time = max(existing['expires_at'], now)
+            new_expires_at = base_time + datetime.timedelta(days=duration_days)
+            await conn.execute('''
+                UPDATE gacha_user_roles
+                SET expires_at = $1, prize_id = COALESCE($2, prize_id)
+                WHERE id = $3
+            ''', new_expires_at, prize_id, existing['id'])
+            return new_expires_at
+        else:
+            new_expires_at = now + datetime.timedelta(days=duration_days)
+            await conn.execute('''
+                INSERT INTO gacha_user_roles (guild_id, user_id, role_id, prize_id, expires_at, role_removed)
+                VALUES ($1, $2, $3, $4, $5, FALSE)
+            ''', guild_id, user_id, role_id, prize_id, new_expires_at)
+            return new_expires_at
+
+
+async def get_expired_gacha_user_roles() -> list[dict]:
+    """期限切れになった福引ロールを全設定プールから取得"""
+    now = get_now_naive()
+    all_expired = []
+    for p in await get_all_configured_pools():
+        try:
+            rows = await p.fetch('''
+                SELECT id, guild_id, user_id, role_id, prize_id, expires_at
+                FROM gacha_user_roles
+                WHERE expires_at < $1 AND role_removed = FALSE
+            ''', now)
+            all_expired.extend([dict(r) for r in rows])
+        except Exception:
+            pass
+    return all_expired
+
+
+async def mark_gacha_user_role_removed(record_id: int):
+    """ロール剥奪完了フラグを更新"""
+    for p in await get_all_configured_pools():
+        try:
+            await p.execute('UPDATE gacha_user_roles SET role_removed = TRUE WHERE id = $1', record_id)
+        except Exception:
+            pass
+

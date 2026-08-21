@@ -16,6 +16,7 @@ type Prize = {
   weight: number;
   reward_coins: number;
   reward_role_id: string | null;
+  reward_role_duration_days?: number;
 };
 
 
@@ -31,7 +32,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
   const [pullCost, setPullCost] = useState(0);
   const [currencyName, setCurrencyName] = useState('通貨');
   const [prizes, setPrizes] = useState<Prize[]>([
-    { prize_number: 1, prize_name: '', weight: 1, reward_coins: 0, reward_role_id: null },
+    { prize_number: 1, prize_name: '', weight: 1, reward_coins: 0, reward_role_id: null, reward_role_duration_days: 0 },
   ]);
 
   useEffect(() => {
@@ -66,7 +67,7 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
 
   const addPrize = () => {
     const nextNumber = prizes.length > 0 ? Math.max(...prizes.map(p => p.prize_number)) + 1 : 1;
-    setPrizes([...prizes, { prize_number: nextNumber, prize_name: '', weight: 1, reward_coins: 0, reward_role_id: null }]);
+    setPrizes([...prizes, { prize_number: nextNumber, prize_name: '', weight: 1, reward_coins: 0, reward_role_id: null, reward_role_duration_days: 0 }]);
   };
 
   const removePrize = (index: number) => {
@@ -226,17 +227,31 @@ export default function GachaSettingsPage({ params }: { params: { guild_id: stri
                       />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-[11px] text-zinc-500 mb-1">報酬ロール(任意)</label>
-                    <RoleSelect
-                      label="報酬ロール"
-                      multiple={false}
-                      roles={roles}
-                      value={prize.reward_role_id || ''}
-                      onChange={(val: string) => updatePrize(i, 'reward_role_id', val || null)}
-                      loading={loading}
-                      placeholder="未設定（ロールなし）"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] text-zinc-500 mb-1">報酬ロール(任意)</label>
+                      <RoleSelect
+                        label="報酬ロール"
+                        multiple={false}
+                        roles={roles}
+                        value={prize.reward_role_id || ''}
+                        onChange={(val: string) => updatePrize(i, 'reward_role_id', val || null)}
+                        loading={loading}
+                        placeholder="未設定（ロールなし）"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-zinc-500 mb-1">有効期限 (日数, 0で無期限)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={prize.reward_role_duration_days || 0}
+                        onChange={e => updatePrize(i, 'reward_role_duration_days', Math.max(0, Number(e.target.value)))}
+                        placeholder="0 (無期限)"
+                        disabled={!prize.reward_role_id}
+                        className="w-full bg-black/40 border border-zinc-700 rounded px-2.5 py-1.5 text-sm text-white focus:border-red-600 outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                      />
+                    </div>
                   </div>
                 </div>
               );

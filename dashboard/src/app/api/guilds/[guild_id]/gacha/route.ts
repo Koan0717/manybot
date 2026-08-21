@@ -19,9 +19,29 @@ async function ensureTables(pool: any) {
       weight INTEGER NOT NULL DEFAULT 1,
       reward_coins INTEGER DEFAULT 0,
       reward_role_id BIGINT,
+      reward_role_duration_days INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gacha_user_roles (
+      id SERIAL PRIMARY KEY,
+      guild_id BIGINT NOT NULL,
+      user_id BIGINT NOT NULL,
+      role_id BIGINT NOT NULL,
+      prize_id INTEGER,
+      expires_at TIMESTAMP NOT NULL,
+      role_removed BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  try {
+    await pool.query(`
+      ALTER TABLE gacha_prizes ADD COLUMN IF NOT EXISTS reward_role_duration_days INTEGER DEFAULT 0;
+    `);
+  } catch (e) {
+    // ignore if already exists
+  }
 }
 
 export async function GET(
@@ -38,7 +58,7 @@ export async function GET(
       [guildId]
     );
     const prizesRes = await pool.query(
-      `SELECT id, prize_number, prize_name, weight, reward_coins, reward_role_id FROM gacha_prizes WHERE guild_id = $1 ORDER BY prize_number ASC`,
+      `SELECT id, prize_number, prize_name, weight, reward_coins, reward_role_id, reward_role_duration_days FROM gacha_prizes WHERE guild_id = $1 ORDER BY prize_number ASC`,
       [guildId]
     );
 
@@ -55,6 +75,7 @@ export async function GET(
         weight: p.weight,
         reward_coins: p.reward_coins,
         reward_role_id: p.reward_role_id?.toString() ?? null,
+        reward_role_duration_days: p.reward_role_duration_days ?? 0,
       })),
     });
   } catch (error: any) {
@@ -101,9 +122,9 @@ export async function POST(
       await client.query(`DELETE FROM gacha_prizes WHERE guild_id = $1`, [guildId]);
       for (const p of prizes) {
         await client.query(
-          `INSERT INTO gacha_prizes (guild_id, prize_number, prize_name, weight, reward_coins, reward_role_id)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [guildId, p.prize_number, p.prize_name, p.weight, p.reward_coins || 0, p.reward_role_id || null]
+          `INSERT INTO gacha_prizes (guild_id, prize_number, prize_name, weight, reward_coins, reward_role_id, reward_role_duration_days)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [guildId, p.prize_number, p.prize_name, p.weight, p.reward_coins || 0, p.reward_role_id || null, p.reward_role_duration_days || 0]
         );
       }
 
