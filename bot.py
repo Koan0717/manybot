@@ -469,15 +469,37 @@ if __name__ == "__main__":
         keep_alive()
         import time
         import os
-        retry_wait = 300  # 初回待機300秒（5分）: 60秒だとDiscordのブロック期間がリセットされず延長されるため
+        import datetime
         try:
             bot.run(TOKEN)
         except discord.errors.HTTPException as e:
             if e.status == 429:
-                print(f"[WARNING] Discord レート制限(429)が発生しました。{retry_wait}秒(5分)後に再起動します...")
-                time.sleep(retry_wait)
-                print("[INFO] 再起動します...")
-                os._exit(1)  # Flaskスレッドを含め強制終了 → Renderが新プロセスで再起動
+                # Discord の 429 エラーから待機時間を取得
+                retry_after_sec = 600  # デフォルト10分 (600秒)
+                if hasattr(e, 'response') and e.response is not None:
+                    # response headers から retry-after を試行取得
+                    try:
+                        ra = e.response.headers.get('Retry-After') or e.response.headers.get('retry-after')
+                        if ra:
+                            retry_after_sec = float(ra)
+                    except Exception:
+                        pass
+                
+                # JST（日本時間）での解除予定時刻を計算
+                jst_now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
+                unlock_time = jst_now + datetime.timedelta(seconds=retry_after_sec)
+                
+                print("=================================================================")
+                print("⚠️ [Discord 429 レート制限検知]")
+                print(f"現在時刻 (JST): {jst_now.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"解除予定時刻 (JST): 【 {unlock_time.strftime('%H:%M:%S')} 】（約 {int(retry_after_sec // 60)} 分後）")
+                print("※ 自動再起動は行いません。上記の解除予定時刻を過ぎてから、")
+                print("   GitHub Actions (Run workflow > restart_active) または手動で再起動してください。")
+                print("=================================================================")
+                
+                # Webサーバー(Flask)を生かしたまま待機（プロセスを落とさない）
+                while True:
+                    time.sleep(3600)
             else:
                 print(f"[ERROR] Discord HTTPエラー: {e}")
                 raise
