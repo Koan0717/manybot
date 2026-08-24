@@ -469,12 +469,12 @@ if __name__ == "__main__":
         keep_alive()
         import time
         import os
-        retry_wait = 60  # 初回待機60秒
+        retry_wait = 300  # 初回待機300秒（5分）: 60秒だとDiscordのブロック期間がリセットされず延長されるため
         try:
             bot.run(TOKEN)
         except discord.errors.HTTPException as e:
             if e.status == 429:
-                print(f"[WARNING] Discord レート制限(429)が発生しました。{retry_wait}秒後に再起動します...")
+                print(f"[WARNING] Discord レート制限(429)が発生しました。{retry_wait}秒(5分)後に再起動します...")
                 time.sleep(retry_wait)
                 print("[INFO] 再起動します...")
                 os._exit(1)  # Flaskスレッドを含め強制終了 → Renderが新プロセスで再起動
