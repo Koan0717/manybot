@@ -466,50 +466,47 @@ async def clear_sync(ctx):
 if __name__ == "__main__":
     if TOKEN:
         discord.utils.setup_logging()
-        keep_alive()
+        keep_alive()  # Flask は一度だけ起動（以後ずっと別スレッドで動き続ける）
         import time
         import os
         import datetime
-        try:
-            bot.run(TOKEN)
-        except discord.errors.HTTPException as e:
-            if e.status == 429:
-                # Discord の 429 エラーから待機時間を取得
-                retry_after_sec = 600  # デフォルト10分 (600秒)
-                if hasattr(e, 'response') and e.response is not None:
-                    # response headers から retry-after を試行取得
-                    try:
-                        ra = e.response.headers.get('Retry-After') or e.response.headers.get('retry-after')
-                        if ra:
-                            retry_after_sec = float(ra)
-                    except Exception:
-                        pass
-                
-                # JST（日本時間）での解除予定時刻を計算
-                jst_now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
-                unlock_time = jst_now + datetime.timedelta(seconds=retry_after_sec)
-                
-                print("=================================================================")
-                print("⚠️ [Discord 429 レート制限検知]")
-                print(f"現在時刻 (JST): {jst_now.strftime('%Y-%m-%d %H:%M:%S')}")
-                print(f"解除予定時刻 (JST): 【 {unlock_time.strftime('%H:%M:%S')} 】（約 {int(retry_after_sec // 60)} 分後）")
-                print("※ 自動再起動は行いません。上記の解除予定時刻を過ぎてから、")
-                print("   GitHub Actions (Run workflow > restart_active) または手動で再起動してください。")
-                print("=================================================================")
-                
-                # レート制限解除まで待機してから自動再起動
-                # Flask は別スレッドで生き続けるのでヘルスチェックは通る
-                wait_sec = retry_after_sec + 90  # 解除時間 + 90秒の余裕
-                print(f"[INFO] {int(wait_sec)} 秒後に自動再起動します...")
-                time.sleep(wait_sec)
-                print("[INFO] レート制限解除 → Render に再起動を要求します")
-                import sys
-                sys.exit(1)  # Render はプロセス終了を検知して自動再起動する
-            else:
-                print(f"[ERROR] Discord HTTPエラー: {e}")
+
+        while True:  # 429 検知時に自動リトライするループ
+            try:
+                bot.run(TOKEN)
+                break  # 正常終了ならループを抜ける
+            except discord.errors.HTTPException as e:
+                if e.status == 429:
+                    # Discord の 429 エラーから待機時間を取得
+                    retry_after_sec = 1800  # デフォルト30分（安全側）
+                    if hasattr(e, 'response') and e.response is not None:
+                        try:
+                            ra = e.response.headers.get('Retry-After') or e.response.headers.get('retry-after')
+                            if ra:
+                                retry_after_sec = float(ra)
+                        except Exception:
+                            pass
+
+                    # JST（日本時間）での解除予定時刻を計算
+                    jst_now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
+                    unlock_time = jst_now + datetime.timedelta(seconds=retry_after_sec)
+                    wait_sec = retry_after_sec + 90  # 解除時間 + 90秒の余裕
+
+                    print("=================================================================")
+                    print("⚠️ [Discord 429 レート制限検知]")
+                    print(f"現在時刻 (JST): {jst_now.strftime('%Y-%m-%d %H:%M:%S')}")
+                    print(f"解除予定時刻 (JST): 【 {unlock_time.strftime('%H:%M:%S')} 】（約 {int(retry_after_sec // 60)} 分後）")
+                    print(f"[INFO] Flask は稼働継続中。{int(wait_sec)} 秒後に Discord へ自動再接続します")
+                    print("=================================================================")
+
+                    time.sleep(wait_sec)
+                    print("[INFO] レート制限解除 → Discord に再接続します")
+                    # while True に戻り bot.run() を再実行
+                else:
+                    print(f"[ERROR] Discord HTTPエラー: {e}")
+                    raise
+            except Exception as e:
+                print(f"[ERROR] 予期しないエラー: {e}")
                 raise
-        except Exception as e:
-            print(f"[ERROR] 予期しないエラー: {e}")
-            raise
     else:
         print("Error: DISCORD_BOT_TOKEN is not set in .env")
