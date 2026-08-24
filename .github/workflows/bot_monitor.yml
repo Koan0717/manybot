@@ -1,9 +1,9 @@
-﻿name: Bot Health Monitor
+name: Bot Health Monitor
 
 on:
   schedule:
-    # 10分ごとに実行（UTC基準）
-    - cron: '*/10 * * * *'
+    # 14分ごとに実行（Renderの15分スリープより前にpingする）
+    - cron: '*/14 * * * *'
   # 手動実行も可能
   workflow_dispatch:
 
@@ -13,6 +13,21 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      - name: Keep bots awake (ping to prevent Render sleep)
+        env:
+          BOT_HEALTH_URL_A: ${{ secrets.BOT_HEALTH_URL_A }}
+          BOT_HEALTH_URL_B: ${{ secrets.BOT_HEALTH_URL_B }}
+        run: |
+          echo "=== スリープ防止ping ==="
+          # 稼働中のBotにpingを送ってスリープさせない
+          echo "Bot A ping..."
+          curl -s -o /dev/null -w "Bot A HTTP: %{http_code}\n" \
+            --max-time 30 --connect-timeout 10 "$BOT_HEALTH_URL_A" || echo "Bot A: 応答なし（停止中の可能性）"
+          echo "Bot B ping..."
+          curl -s -o /dev/null -w "Bot B HTTP: %{http_code}\n" \
+            --max-time 30 --connect-timeout 10 "$BOT_HEALTH_URL_B" || echo "Bot B: 応答なし（停止中の可能性）"
+          echo "ping完了"
+
       - name: Check and switch bot if needed
         env:
           RENDER_API_KEY_A: ${{ secrets.RENDER_API_KEY_A }}
