@@ -497,9 +497,14 @@ if __name__ == "__main__":
                 print("   GitHub Actions (Run workflow > restart_active) または手動で再起動してください。")
                 print("=================================================================")
                 
-                # Webサーバー(Flask)を生かしたまま待機（プロセスを落とさない）
-                while True:
-                    time.sleep(3600)
+                # レート制限解除まで待機してから自動再起動
+                # Flask は別スレッドで生き続けるのでヘルスチェックは通る
+                wait_sec = retry_after_sec + 90  # 解除時間 + 90秒の余裕
+                print(f"[INFO] {int(wait_sec)} 秒後に自動再起動します...")
+                time.sleep(wait_sec)
+                print("[INFO] レート制限解除 → Render に再起動を要求します")
+                import sys
+                sys.exit(1)  # Render はプロセス終了を検知して自動再起動する
             else:
                 print(f"[ERROR] Discord HTTPエラー: {e}")
                 raise
