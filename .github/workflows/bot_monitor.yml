@@ -1,35 +1,29 @@
-name: Bot Health Monitor
+name: Bot Switch & Health Monitor
 
 on:
-  schedule:
-    # 14分ごとに実行（Renderの15分スリープより前にpingする）
-    - cron: '*/14 * * * *'
-  # 手動実行も可能
+  # 手動実行専用（定期実行は行わない）
   workflow_dispatch:
+    inputs:
+      target:
+        description: '実行するアクションを選択してください'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - 'auto'
+          - 'switch_to_a'
+          - 'switch_to_b'
+          - 'restart_active'
 
 jobs:
-  monitor:
+  switch_and_monitor:
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
-      - name: Keep bots awake (ping to prevent Render sleep)
+      - name: Switch or Restart Bot
         env:
-          BOT_HEALTH_URL_A: ${{ secrets.BOT_HEALTH_URL_A }}
-          BOT_HEALTH_URL_B: ${{ secrets.BOT_HEALTH_URL_B }}
-        run: |
-          echo "=== スリープ防止ping ==="
-          # 稼働中のBotにpingを送ってスリープさせない
-          echo "Bot A ping..."
-          curl -s -o /dev/null -w "Bot A HTTP: %{http_code}\n" \
-            --max-time 30 --connect-timeout 10 "$BOT_HEALTH_URL_A" || echo "Bot A: 応答なし（停止中の可能性）"
-          echo "Bot B ping..."
-          curl -s -o /dev/null -w "Bot B HTTP: %{http_code}\n" \
-            --max-time 30 --connect-timeout 10 "$BOT_HEALTH_URL_B" || echo "Bot B: 応答なし（停止中の可能性）"
-          echo "ping完了"
-
-      - name: Check and switch bot if needed
-        env:
+          TARGET: ${{ github.event.inputs.target || 'auto' }}
           RENDER_API_KEY_A: ${{ secrets.RENDER_API_KEY_A }}
           RENDER_API_KEY_B: ${{ secrets.RENDER_API_KEY_B }}
           SERVICE_ID_A: ${{ secrets.RENDER_SERVICE_ID_A }}
@@ -39,7 +33,8 @@ jobs:
         run: |
           set -e
 
-          echo "=== Bot Health Monitor ==="
+          echo "=== Bot Manual Switcher ==="
+          echo "Target Action: $TARGET"
           echo "Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 
           get_service_status() {
@@ -59,14 +54,6 @@ jobs:
           except Exception as e:
               print('error: ' + str(e))
           "
-          }
-
-          check_health() {
-            local url=$1
-            local status
-            status=$(curl -s -o /dev/null -w "%{http_code}" \
-              --max-time 20 --connect-timeout 10 "$url" 2>/dev/null || echo "000")
-            echo "$status"
           }
 
           suspend_service() {
@@ -93,6 +80,20 @@ jobs:
             echo "  OK ${label} を起動しました"
           }
 
+          redeploy_service() {
+            local api_key=$1
+            local service_id=$2
+            local label=$3
+            echo "  -> ${label} を再デプロイ(再起動)中..."
+            curl -s --max-time 10 \
+              -X POST "https://api.render.com/v1/services/${service_id}/deploys" \
+              -H "Authorization: Bearer ${api_key}" \
+              -H "Accept: application/json" \
+              -H "Content-Type: application/json" \
+              -d '{"clearCache": "do_not_clear"}' > /dev/null
+            echo "  OK ${label} の再起動をトリガーしました"
+          }
+
           echo ""
           echo "--- Render サービス状態確認 ---"
           STATUS_A=$(get_service_status "$RENDER_API_KEY_A" "$SERVICE_ID_A")
@@ -101,40 +102,48 @@ jobs:
           echo "Bot B: $STATUS_B"
 
           echo ""
-          echo "--- 判定ロジック ---"
+          echo "--- 実行処理 ---"
 
-          if [ "$STATUS_A" = "not_suspended" ] && [ "$STATUS_B" = "not_suspended" ]; then
-            echo "両方が起動中 -> Bot B を停止してBot A を優先"
-            suspend_service "$RENDER_API_KEY_B" "$SERVICE_ID_B" "Bot B"
-
-          elif [ "$STATUS_A" = "not_suspended" ]; then
-            echo "Bot A が起動中 -> ヘルスチェック..."
-            HEALTH_A=$(check_health "$BOT_HEALTH_URL_A")
-            echo "  Bot A HTTP: $HEALTH_A"
-            if [ "$HEALTH_A" = "200" ]; then
-              echo "Bot A は正常稼働中"
-            else
-              echo "Bot A が応答なし -> Bot B に切り替え"
-              suspend_service "$RENDER_API_KEY_A" "$SERVICE_ID_A" "Bot A"
-              resume_service  "$RENDER_API_KEY_B" "$SERVICE_ID_B" "Bot B"
-            fi
-
-          elif [ "$STATUS_B" = "not_suspended" ]; then
-            echo "Bot B が起動中 -> ヘルスチェック..."
-            HEALTH_B=$(check_health "$BOT_HEALTH_URL_B")
-            echo "  Bot B HTTP: $HEALTH_B"
-            if [ "$HEALTH_B" = "200" ]; then
-              echo "Bot B は正常稼働中"
-            else
-              echo "Bot B が応答なし -> Bot A に切り替え"
+          if [ "$TARGET" = "switch_to_a" ]; then
+            echo "【Bot A に切り替え】"
+            if [ "$STATUS_B" = "not_suspended" ]; then
               suspend_service "$RENDER_API_KEY_B" "$SERVICE_ID_B" "Bot B"
-              resume_service  "$RENDER_API_KEY_A" "$SERVICE_ID_A" "Bot A"
+            fi
+            resume_service "$RENDER_API_KEY_A" "$SERVICE_ID_A" "Bot A"
+
+          elif [ "$TARGET" = "switch_to_b" ]; then
+            echo "【Bot B に切り替え】"
+            if [ "$STATUS_A" = "not_suspended" ]; then
+              suspend_service "$RENDER_API_KEY_A" "$SERVICE_ID_A" "Bot A"
+            fi
+            resume_service "$RENDER_API_KEY_B" "$SERVICE_ID_B" "Bot B"
+
+          elif [ "$TARGET" = "restart_active" ]; then
+            echo "【現在動いているBotを再起動】"
+            if [ "$STATUS_A" = "not_suspended" ]; then
+              redeploy_service "$RENDER_API_KEY_A" "$SERVICE_ID_A" "Bot A"
+            elif [ "$STATUS_B" = "not_suspended" ]; then
+              redeploy_service "$RENDER_API_KEY_B" "$SERVICE_ID_B" "Bot B"
+            else
+              echo "両方停止中のため、Bot A を起動します"
+              resume_service "$RENDER_API_KEY_A" "$SERVICE_ID_A" "Bot A"
             fi
 
           else
-            echo "両方が停止中 -> Bot A をフォールバック起動"
-            resume_service "$RENDER_API_KEY_A" "$SERVICE_ID_A" "Bot A"
+            # auto モード
+            echo "【自動切替・起動】"
+            if [ "$STATUS_A" = "not_suspended" ] && [ "$STATUS_B" = "not_suspended" ]; then
+              echo "両方起動中 -> Bot B を停止して Bot A を優先"
+              suspend_service "$RENDER_API_KEY_B" "$SERVICE_ID_B" "Bot B"
+            elif [ "$STATUS_A" = "not_suspended" ]; then
+              echo "Bot A が現在稼働中です"
+            elif [ "$STATUS_B" = "not_suspended" ]; then
+              echo "Bot B が現在稼働中です"
+            else
+              echo "両方停止中 -> Bot A を起動"
+              resume_service "$RENDER_API_KEY_A" "$SERVICE_ID_A" "Bot A"
+            fi
           fi
 
           echo ""
-          echo "=== 監視完了 ==="
+          echo "=== 処理完了 ==="
