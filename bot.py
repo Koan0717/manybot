@@ -468,22 +468,22 @@ if __name__ == "__main__":
         discord.utils.setup_logging()
         keep_alive()
         import time
+        import sys
         retry_wait = 60  # 初回待機60秒
         max_wait = 600   # 最大10分
-        while True:
-            try:
-                bot.run(TOKEN)
-                break  # 正常終了なら抜ける
-            except discord.errors.HTTPException as e:
-                if e.status == 429:
-                    print(f"[WARNING] Discord レート制限(429)が発生しました。{retry_wait}秒後に再試行します...")
-                    time.sleep(retry_wait)
-                    retry_wait = min(retry_wait * 2, max_wait)  # 指数バックオフ
-                else:
-                    print(f"[ERROR] Discord HTTPエラー: {e}")
-                    raise
-            except Exception as e:
-                print(f"[ERROR] 予期しないエラー: {e}")
+        try:
+            bot.run(TOKEN)
+        except discord.errors.HTTPException as e:
+            if e.status == 429:
+                print(f"[WARNING] Discord レート制限(429)が発生しました。{retry_wait}秒後に再起動します...")
+                time.sleep(retry_wait)  # Flaskは別スレッドで生きているのでRenderは再起動しない
+                print("[INFO] 再起動します...")
+                sys.exit(1)  # Renderが新しいプロセスで再起動 → セッションがリセットされる
+            else:
+                print(f"[ERROR] Discord HTTPエラー: {e}")
                 raise
+        except Exception as e:
+            print(f"[ERROR] 予期しないエラー: {e}")
+            raise
     else:
         print("Error: DISCORD_BOT_TOKEN is not set in .env")
