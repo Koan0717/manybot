@@ -467,6 +467,23 @@ if __name__ == "__main__":
     if TOKEN:
         discord.utils.setup_logging()
         keep_alive()
-        bot.run(TOKEN)
+        import time
+        retry_wait = 60  # 初回待機60秒
+        max_wait = 600   # 最大10分
+        while True:
+            try:
+                bot.run(TOKEN)
+                break  # 正常終了なら抜ける
+            except discord.errors.HTTPException as e:
+                if e.status == 429:
+                    print(f"[WARNING] Discord レート制限(429)が発生しました。{retry_wait}秒後に再試行します...")
+                    time.sleep(retry_wait)
+                    retry_wait = min(retry_wait * 2, max_wait)  # 指数バックオフ
+                else:
+                    print(f"[ERROR] Discord HTTPエラー: {e}")
+                    raise
+            except Exception as e:
+                print(f"[ERROR] 予期しないエラー: {e}")
+                raise
     else:
         print("Error: DISCORD_BOT_TOKEN is not set in .env")
