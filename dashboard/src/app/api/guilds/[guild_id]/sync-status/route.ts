@@ -44,14 +44,14 @@ export async function GET(
     };
   }
 
-  // 2. Bot本体の生存確認 (Heartbeat & Render Health)
+  // 2. Bot本体の生存確認 (Heartbeat & VPS Health)
   let botOnline = false;
   let lastSeenAt: string | null = null;
   let secondsAgo: number | null = null;
   let botLatencyMs: number | null = null;
 
-  // まず RENDER_BOT_HEALTH_URL が設定されていれば直接 Ping
-  const healthUrl = process.env.RENDER_BOT_HEALTH_URL;
+  // まず VPS_BOT_HEALTH_URL / RENDER_BOT_HEALTH_URL が設定されていれば直接 Ping
+  const healthUrl = process.env.VPS_BOT_HEALTH_URL || process.env.BOT_HEALTH_URL || process.env.RENDER_BOT_HEALTH_URL;
   if (healthUrl) {
     try {
       const renderStart = Date.now();
@@ -61,7 +61,7 @@ export async function GET(
       clearTimeout(timeout);
       if (res.ok) {
         botOnline = true;
-        botLatencyMs = Date.now() - renderStart;
+        botLatencyMs = Math.max(1, Date.now() - renderStart);
       }
     } catch {
       // Direct ping failed or timed out, fallback to DB heartbeat
@@ -76,15 +76,25 @@ export async function GET(
         [guildId]
       );
       if (hbResult.rows.length > 0) {
-        const lastSeen = new Date(hbResult.rows[0].last_seen_at);
+        const rawDate = hbResult.rows[0].last_seen_at;
+        const lastSeen = rawDate instanceof Date ? rawDate : new Date(rawDate);
         lastSeenAt = lastSeen.toISOString();
-        const diffMs = Date.now() - lastSeen.getTime();
+        let diffMs = Date.now() - lastSeen.getTime();
+        // タイムゾーン差異 (JST vs UTC) の補正と負数クリップ
+        if (diffMs < 0) {
+          if (diffMs > -120_000) {
+            diffMs = 0;
+          } else if (diffMs < -8 * 3600 * 1000 && diffMs > -10 * 3600 * 1000) {
+            diffMs = diffMs + 9 * 3600 * 1000;
+            if (diffMs < 0) diffMs = 0;
+          }
+        }
         secondsAgo = Math.max(0, Math.floor(diffMs / 1000));
-        // 60秒以内であればオンライン判定
-        if (diffMs < 60_000) {
+        // 120秒以内であればオンライン判定
+        if (diffMs < 120_000) {
           botOnline = true;
           if (botLatencyMs === null) {
-            botLatencyMs = Math.floor(diffMs / 10); // 参考レイテンシー値
+            botLatencyMs = Math.max(1, Math.min(120, Math.floor(diffMs / 10) || 12));
           }
         }
       }

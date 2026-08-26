@@ -215,13 +215,13 @@ export function SyncStatusCards({ sync, className = '', showSyncCard = true }: S
         </div>
       </div>
 
-      {/* 2. Render (Bot本体) */}
+      {/* 2. VPS (Bot本体) */}
       <div className="mecha-clip-sm bg-black/40 border border-zinc-800 p-4 flex items-center gap-3">
         <div className="w-9 h-9 rounded-full bg-zinc-900 flex items-center justify-center flex-shrink-0">
           <Server className="w-4 h-4 text-zinc-400" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-tech text-xs text-zinc-500">Render (Bot本体)</div>
+          <div className="font-tech text-xs text-zinc-500">VPS接続状況（本体）</div>
           {loading ? (
             <div className="text-sm text-zinc-500 flex items-center gap-1.5 font-tech">
               <Loader2 className="w-3.5 h-3.5 animate-spin" /> 確認中...

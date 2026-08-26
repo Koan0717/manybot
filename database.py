@@ -4334,9 +4334,9 @@ async def update_heartbeat(guild_id: int):
         ''')
         await conn.execute('''
             INSERT INTO bot_heartbeat (guild_id, last_seen_at)
-            VALUES ($1, $2)
-            ON CONFLICT (guild_id) DO UPDATE SET last_seen_at = $2
-        ''', guild_id, get_now_naive())
+            VALUES ($1, CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+            ON CONFLICT (guild_id) DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
+        ''', guild_id)
 
 
 async def get_heartbeat(guild_id: int) -> dict | None:

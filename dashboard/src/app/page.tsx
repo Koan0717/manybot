@@ -185,17 +185,17 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Render / Bot */}
+          {/* VPS / Bot */}
           <div className="mecha-clip-sm bg-black/40 border border-zinc-800 p-4 flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-zinc-900 flex items-center justify-center flex-shrink-0">
               <Server className="w-4 h-4 text-zinc-400" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="font-tech text-xs text-zinc-500">Render (Bot本体)</div>
+              <div className="font-tech text-xs text-zinc-500">VPS接続状況（本体）</div>
               {statusLoading ? (
                 <div className="text-sm text-zinc-500 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> 確認中...</div>
               ) : !status?.render.configured ? (
-                <div className="text-sm text-zinc-500" title="Vercelの環境変数 RENDER_BOT_HEALTH_URL が未設定です">未設定</div>
+                <div className="text-sm text-zinc-500" title="Vercelの環境変数 VPS_BOT_HEALTH_URL または RENDER_BOT_HEALTH_URL が未設定です">未設定</div>
               ) : status.render.ok ? (
                 <div className="text-sm text-green-400 font-semibold flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4" /> 稼働中 {status.render.latencyMs !== undefined && <span className="text-zinc-500 font-normal">({status.render.latencyMs}ms)</span>}

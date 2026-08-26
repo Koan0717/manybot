@@ -12,14 +12,14 @@ export async function GET() {
     supabase = { ok: false, error: e?.message || String(e) };
   }
 
-  // --- Render (Bot本体) 接続確認 ---
-  // RENDER_BOT_HEALTH_URL (例: https://manybot.onrender.com) を設定すると、
+  // --- VPS (Bot本体) 接続確認 ---
+  // VPS_BOT_HEALTH_URL, BOT_HEALTH_URL, または RENDER_BOT_HEALTH_URL を設定すると、
   // Bot本体の keep_alive エンドポイント(Flask) に到達できるか確認する。
   let render: { ok: boolean; latencyMs?: number; error?: string; configured: boolean } = {
     ok: false,
     configured: false,
   };
-  const healthUrl = process.env.RENDER_BOT_HEALTH_URL;
+  const healthUrl = process.env.VPS_BOT_HEALTH_URL || process.env.BOT_HEALTH_URL || process.env.RENDER_BOT_HEALTH_URL;
   if (healthUrl) {
     render.configured = true;
     try {
@@ -29,7 +29,7 @@ export async function GET() {
       const res = await fetch(healthUrl, { signal: controller.signal, cache: 'no-store' });
       clearTimeout(timeout);
       render.ok = res.ok;
-      render.latencyMs = Date.now() - start;
+      render.latencyMs = Math.max(1, Date.now() - start);
       if (!res.ok) render.error = `HTTP ${res.status}`;
     } catch (e: any) {
       render.ok = false;

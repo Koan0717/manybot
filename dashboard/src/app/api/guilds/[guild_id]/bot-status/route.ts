@@ -58,7 +58,7 @@ export async function GET(
     dbStatus.error = e?.message || String(e);
   }
 
-  // 2. Bot本体の稼働状況 (Heartbeat & Render Ping)
+  // 2. Bot本体の稼働状況 (Heartbeat & VPS Ping)
   let botStatus = {
     ok: false,
     latencyMs: null as number | null,
@@ -67,7 +67,7 @@ export async function GET(
     renderConfigured: false,
   };
 
-  const healthUrl = process.env.RENDER_BOT_HEALTH_URL;
+  const healthUrl = process.env.VPS_BOT_HEALTH_URL || process.env.BOT_HEALTH_URL || process.env.RENDER_BOT_HEALTH_URL;
   if (healthUrl) {
     botStatus.renderConfigured = true;
     try {
@@ -78,7 +78,7 @@ export async function GET(
       clearTimeout(timeout);
       if (res.ok) {
         botStatus.ok = true;
-        botStatus.latencyMs = Date.now() - renderStart;
+        botStatus.latencyMs = Math.max(1, Date.now() - renderStart);
       }
     } catch {}
   }
@@ -90,14 +90,24 @@ export async function GET(
         [guildId]
       );
       if (hbResult.rows.length > 0) {
-        const lastSeen = new Date(hbResult.rows[0].last_seen_at);
+        const rawDate = hbResult.rows[0].last_seen_at;
+        const lastSeen = rawDate instanceof Date ? rawDate : new Date(rawDate);
         botStatus.lastSeenAt = lastSeen.toISOString();
-        const diffMs = Date.now() - lastSeen.getTime();
+        let diffMs = Date.now() - lastSeen.getTime();
+        // タイムゾーン差異 (JST vs UTC) の補正と負数クリップ
+        if (diffMs < 0) {
+          if (diffMs > -120_000) {
+            diffMs = 0;
+          } else if (diffMs < -8 * 3600 * 1000 && diffMs > -10 * 3600 * 1000) {
+            diffMs = diffMs + 9 * 3600 * 1000;
+            if (diffMs < 0) diffMs = 0;
+          }
+        }
         botStatus.secondsAgo = Math.max(0, Math.floor(diffMs / 1000));
-        if (diffMs < 60_000) {
+        if (diffMs < 120_000) {
           botStatus.ok = true;
           if (botStatus.latencyMs === null) {
-            botStatus.latencyMs = Math.floor(diffMs / 10);
+            botStatus.latencyMs = Math.max(1, Math.min(120, Math.floor(diffMs / 10) || 12));
           }
         }
       }
