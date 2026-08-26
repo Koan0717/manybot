@@ -300,10 +300,47 @@ class AccessManageView(discord.ui.View):
     async def allow_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.selected_users:
             return await interaction.response.send_message("ユーザーが選択されていません。", ephemeral=True)
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        guild = interaction.guild
+        jump_url = f"https://discord.com/channels/{guild.id}/{self.target_channel.id}"
+        
+        embed_dm = discord.Embed(
+            title="📨 VCへの招待が届きました",
+            description=(
+                f"**{guild.name}** にて、{interaction.user.mention} さんから **{self.target_channel.name}** へ招待されました！\n\n"
+                f"👉 [ここをタップしてチャンネルへ移動]({jump_url})"
+            ),
+            color=discord.Color.gold(),
+            timestamp=discord.utils.utcnow()
+        )
+        if guild.icon:
+            embed_dm.set_thumbnail(url=guild.icon.url)
+        embed_dm.set_footer(text=guild.name)
+
+        dm_view = discord.ui.View()
+        dm_view.add_item(discord.ui.Button(label="チャンネルへ移動", style=discord.ButtonStyle.link, url=jump_url, emoji="🔗"))
+
+        dm_failed_users = []
+        allowed_count = 0
+
         for user in self.selected_users:
             if isinstance(user, discord.Member):
                 await self.target_channel.set_permissions(user, view_channel=True, connect=True)
-        await interaction.response.send_message("✅ 選択したユーザーのアクセスを許可しました。", ephemeral=True)
+                allowed_count += 1
+                try:
+                    await user.send(embed=embed_dm, view=dm_view)
+                except (discord.Forbidden, discord.HTTPException):
+                    dm_failed_users.append(user.display_name)
+
+        msg = f"✅ {allowed_count}名のアクセスを許可しました。"
+        if dm_failed_users:
+            msg += f"\n⚠️ 次のユーザーはDM受信が許可されていないため、招待DMを送信できませんでした: {', '.join(dm_failed_users)}"
+        else:
+            msg += "\n📨 選択したユーザーへ招待DMを送信しました！"
+
+        await interaction.followup.send(msg, ephemeral=True)
 
     @discord.ui.button(label="拒否する", style=discord.ButtonStyle.danger)
     async def deny_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
