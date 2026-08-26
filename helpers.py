@@ -268,6 +268,7 @@ DEFAULT_SETTINGS = {
     "OTHELLO_VC_CATEGORY_ID": "",
     "OTHELLO_VC_NAME": "オセロ対戦",
     "OTHELLO_GAME_CHANNEL": "",
+    "ROOM_ACCESS_LOW_EVAL_INN_TEXT": True,
 }
 
 import sys
@@ -424,18 +425,108 @@ def is_free_inn_member(bot, user: discord.Member):
     return False
 
 def is_main_or_sub_member(bot, user: discord.Member) -> bool:
-    main_sub_role_ids = get_setting(bot, "MAIN_SUB_MEMBER_ROLE_IDS") or []
+    main_sub_role_ids = get_setting(bot, "MAIN_SUB_MEMBER_ROLE_IDS", user.guild.id if hasattr(user, "guild") and user.guild else None) or []
+    if isinstance(main_sub_role_ids, (int, str)):
+        main_sub_role_ids = [main_sub_role_ids]
     user_role_ids = [r.id for r in user.roles]
-    if any(rid in main_sub_role_ids for rid in user_role_ids):
+    if any(str(rid) in [str(u) for u in user_role_ids] for rid in main_sub_role_ids):
         return True
     user_role_names = [r.name for r in user.roles]
     if any(name in MAIN_SUB_MEMBER_ROLE_NAMES for name in user_role_names):
         return True
     return False
 
+def get_main_sub_member_role_ids(bot, guild_id: int = None) -> list:
+    """
+    本メンバー・準メンバーロールのID一覧を返す。
+    """
+    result = []
+    seen = set()
+    ids = get_setting(bot, "MAIN_SUB_MEMBER_ROLE_IDS", guild_id)
+    if ids:
+        if isinstance(ids, (int, str)):
+            ids = [ids]
+        for rid in ids:
+            try:
+                if rid:
+                    val = int(rid)
+                    if val not in seen:
+                        result.append(val)
+                        seen.add(val)
+            except (TypeError, ValueError):
+                pass
+    return result
+
+def get_main_sub_member_roles(bot, guild: discord.Guild) -> list:
+    """
+    設定された本メンバー・準メンバーロールの discord.Role オブジェクト一覧を返す。
+    IDで見つからない場合はデフォルト名 (MAIN_SUB_MEMBER_ROLE_NAMES) でフォールバック検索する。
+    """
+    roles = []
+    seen_ids = set()
+    role_ids = get_main_sub_member_role_ids(bot, guild.id)
+    for rid in role_ids:
+        r = guild.get_role(rid)
+        if r and r.id not in seen_ids:
+            roles.append(r)
+            seen_ids.add(r.id)
+            
+    if not roles:
+        for name in MAIN_SUB_MEMBER_ROLE_NAMES:
+            r = discord.utils.get(guild.roles, name=name)
+            if r and r.id not in seen_ids:
+                roles.append(r)
+                seen_ids.add(r.id)
+    return roles
+
+def get_downgrade_role_ids(bot, guild_id: int = None) -> list:
+    """
+    評価落ちロールのID一覧を返す。
+    """
+    result = []
+    seen = set()
+    for key in ["DOWNGRADE_ROLE_ID", "EVALUATION_FAILED_ROLE_ID"]:
+        rid = get_setting(bot, key, guild_id)
+        if rid:
+            try:
+                val = int(rid)
+                if val not in seen:
+                    result.append(val)
+                    seen.add(val)
+            except (TypeError, ValueError):
+                pass
+    return result
+
+def get_downgrade_roles(bot, guild: discord.Guild) -> list:
+    """
+    設定された評価落ちロールの discord.Role オブジェクト一覧を返す。
+    IDで見つからない場合はデフォルト名 (EVALUATION_FAILED_ROLE_NAME / "評価落ち") でフォールバック検索する。
+    """
+    roles = []
+    seen_ids = set()
+    role_ids = get_downgrade_role_ids(bot, guild.id)
+    for rid in role_ids:
+        r = guild.get_role(rid)
+        if r and r.id not in seen_ids:
+            roles.append(r)
+            seen_ids.add(r.id)
+            
+    if not roles:
+        for name in [EVALUATION_FAILED_ROLE_NAME, "評価落ち"]:
+            r = discord.utils.get(guild.roles, name=name)
+            if r and r.id not in seen_ids:
+                roles.append(r)
+                seen_ids.add(r.id)
+    return roles
+
 def is_downgrade_member(bot, user: discord.Member) -> bool:
-    downgrade_role_id = get_setting(bot, "DOWNGRADE_ROLE_ID")
-    if downgrade_role_id and any(r.id == downgrade_role_id for r in user.roles):
+    downgrade_role_ids = get_downgrade_role_ids(bot, user.guild.id if hasattr(user, "guild") and user.guild else None)
+    if downgrade_role_ids:
+        user_role_ids = {r.id for r in user.roles}
+        if any(rid in user_role_ids for rid in downgrade_role_ids):
+            return True
+    user_role_names = [r.name for r in user.roles]
+    if any(name in [EVALUATION_FAILED_ROLE_NAME, "評価落ち"] for name in user_role_names):
         return True
     return False
 
@@ -1023,6 +1114,9 @@ def create_game_stats_embed(user: discord.User or discord.Member, game_type: str
     }
 
     meta = game_meta.get(game_type, {"name": game_type, "emoji": "🎮", "color": discord.Color.blurple()})
+
+    if not stats:
+        stats = {}
 
     plays = stats.get("plays", 0)
     wins = stats.get("wins", 0)

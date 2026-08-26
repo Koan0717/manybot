@@ -131,36 +131,71 @@ class IPC(commands.Cog):
 
                         elif panel_type.startswith("apply_room_access_deny:") or panel_type.startswith("apply_room_access_allow:"):
                             try:
-                                from helpers import get_setting
+                                from helpers import get_setting, get_downgrade_roles
                                 is_deny = panel_type.startswith("apply_room_access_deny:")
                                 room_types_str = panel_type.split(":", 1)[1]
                                 target_room_types = [rt.strip() for rt in room_types_str.split(",") if rt.strip()]
 
-                                downgrade_role_id_raw = get_setting(self.bot, "DOWNGRADE_ROLE_ID", guild_id)
-                                if downgrade_role_id_raw:
-                                    downgrade_role = guild.get_role(int(downgrade_role_id_raw))
-                                    if downgrade_role:
-                                        existing_rooms = await database.get_all_rooms_for_guild(guild_id)
-                                        applied = 0
-                                        for room in existing_rooms:
-                                            room_type = room.get("room_type")
-                                            if room_type not in target_room_types:
-                                                continue
-                                            ch = guild.get_channel(room["channel_id"])
-                                            if not ch:
-                                                continue
+                                downgrade_roles = get_downgrade_roles(self.bot, guild)
+                                if downgrade_roles:
+                                    existing_rooms = await database.get_all_rooms_for_guild(guild_id)
+                                    applied = 0
+                                    allow_inn_text = get_setting(self.bot, "ROOM_ACCESS_LOW_EVAL_INN_TEXT", guild_id)
+                                    for room in existing_rooms:
+                                        room_type = room.get("room_type")
+                                        if room_type not in target_room_types:
+                                            continue
+                                        ch = guild.get_channel(room["channel_id"])
+                                        if not ch:
+                                            continue
+                                        for downgrade_role in downgrade_roles:
                                             try:
                                                 if is_deny:
                                                     await ch.set_permissions(downgrade_role, view_channel=False, connect=False)
                                                 else:
-                                                    await ch.set_permissions(downgrade_role, overwrite=None)
+                                                    if room_type == "宿" and allow_inn_text is False:
+                                                        await ch.set_permissions(downgrade_role, send_messages=False)
+                                                    else:
+                                                        await ch.set_permissions(downgrade_role, overwrite=None)
                                                 applied += 1
                                             except Exception as perm_err:
                                                 print(f"[IPC] apply_room_access perm error ch {room['channel_id']}: {perm_err}")
-                                        action = "非表示設定" if is_deny else "表示解除"
-                                        print(f"[IPC] apply_room_access ({action}) {applied}ch in guild {guild_id}")
+                                    action = "非表示設定" if is_deny else "表示解除"
+                                    print(f"[IPC] apply_room_access ({action}) {applied}ch in guild {guild_id}")
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to apply_room_access: {e}")
+
+                        elif panel_type.startswith("apply_room_inn_text_deny") or panel_type.startswith("apply_room_inn_text_allow"):
+                            try:
+                                from helpers import get_setting, get_downgrade_roles
+                                is_deny = panel_type.startswith("apply_room_inn_text_deny")
+                                downgrade_roles = get_downgrade_roles(self.bot, guild)
+                                if downgrade_roles:
+                                    allow_low_eval_inn = get_setting(self.bot, "ROOM_ACCESS_LOW_EVAL_inn", guild_id)
+                                    existing_rooms = await database.get_all_rooms_for_guild(guild_id)
+                                    applied = 0
+                                    for room in existing_rooms:
+                                        if room.get("room_type") != "宿":
+                                            continue
+                                        ch = guild.get_channel(room["channel_id"])
+                                        if not ch:
+                                            continue
+                                        for downgrade_role in downgrade_roles:
+                                            try:
+                                                # 部屋アクセス自体がOFFの場合はview_channel=Falseのまま
+                                                if allow_low_eval_inn is False:
+                                                    await ch.set_permissions(downgrade_role, view_channel=False, connect=False)
+                                                elif is_deny:
+                                                    await ch.set_permissions(downgrade_role, send_messages=False)
+                                                else:
+                                                    await ch.set_permissions(downgrade_role, send_messages=True)
+                                                applied += 1
+                                            except Exception as perm_err:
+                                                print(f"[IPC] apply_room_inn_text perm error ch {room['channel_id']}: {perm_err}")
+                                    action = "テキスト書き込み禁止" if is_deny else "テキスト書き込み許可"
+                                    print(f"[IPC] apply_room_inn_text ({action}) {applied}ch in guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to apply_room_inn_text: {e}")
 
                         elif panel_type.startswith("apply_room_access_violator_deny:") or panel_type.startswith("apply_room_access_violator_allow:"):
                             try:

@@ -7,7 +7,8 @@ from helpers import (
     JST, get_setting, is_free_inn_member, is_main_or_sub_member,
     get_room_settings, get_circled_number, circled_to_int, send_log,
     has_admin_role, is_new_member, is_downgrade_member, get_role_by_setting,
-    PENDING_MEMBER_ROLE_NAME, get_room_price
+    PENDING_MEMBER_ROLE_NAME, get_room_price, get_main_sub_member_roles,
+    get_new_member_roles, get_downgrade_roles
 )
 
 # --- モーダル ---
@@ -591,6 +592,38 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
                 pending_role = get_role_by_setting(bot, interaction.guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
                 if pending_role:
                     overwrites[pending_role] = discord.PermissionOverwrite(view_channel=False, connect=False)
+
+                if room_type == "宿":
+                    # 本メン・準メンロールにテキスト書き込み権限を付与
+                    main_sub_roles = get_main_sub_member_roles(bot, interaction.guild)
+                    for r in main_sub_roles:
+                        if r not in overwrites:
+                            overwrites[r] = discord.PermissionOverwrite(send_messages=True)
+                        else:
+                            overwrites[r].send_messages = True
+
+                    # 仮メンロールにテキスト書き込み権限を付与
+                    new_member_roles = get_new_member_roles(bot, interaction.guild)
+                    for r in new_member_roles:
+                        if r not in overwrites:
+                            overwrites[r] = discord.PermissionOverwrite(send_messages=True)
+                        else:
+                            overwrites[r].send_messages = True
+
+                    # 評価落ちロールのテキスト書き込み制御
+                    allow_low_eval_text = get_setting(bot, "ROOM_ACCESS_LOW_EVAL_INN_TEXT", interaction.guild.id)
+                    downgrade_roles = get_downgrade_roles(bot, interaction.guild)
+                    for r in downgrade_roles:
+                        if allow_low_eval_text is False:
+                            if r not in overwrites:
+                                overwrites[r] = discord.PermissionOverwrite(send_messages=False)
+                            else:
+                                overwrites[r].send_messages = False
+                        elif allow_low_eval_text is True:
+                            if r not in overwrites:
+                                overwrites[r] = discord.PermissionOverwrite(send_messages=True)
+                            else:
+                                overwrites[r].send_messages = True
             target_category = interaction.channel.category
             if panel_id:
                 configs = get_setting(bot, "ROOM_PANEL_CONFIGS", interaction.guild.id)

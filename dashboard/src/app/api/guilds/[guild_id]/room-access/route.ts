@@ -23,7 +23,10 @@ export async function GET(
   const guildId = params.guild_id;
   try {
     const pool = await getPool(guildId);
-    const allKeys = PREFIXES.flatMap(p => ROOM_TYPES.map(r => `${p.prefix}${r.key}`));
+    const allKeys = [
+      ...PREFIXES.flatMap(p => ROOM_TYPES.map(r => `${p.prefix}${r.key}`)),
+      'ROOM_ACCESS_LOW_EVAL_INN_TEXT'
+    ];
     const result = await pool.query(
       `SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key = ANY($2)`,
       [guildId, allKeys]
@@ -31,12 +34,21 @@ export async function GET(
 
     const lowEval: Record<string, boolean> = {};
     const violator: Record<string, boolean> = {};
+    let lowEvalInnText = true;
     // デフォルトは全部 true（許可）
     for (const rt of ROOM_TYPES) {
       lowEval[rt.key] = true;
       violator[rt.key] = true;
     }
     for (const row of result.rows) {
+      if (row.setting_key === 'ROOM_ACCESS_LOW_EVAL_INN_TEXT') {
+        try {
+          lowEvalInnText = JSON.parse(row.setting_value);
+        } catch {
+          lowEvalInnText = row.setting_value === 'true';
+        }
+        continue;
+      }
       for (const p of PREFIXES) {
         if (row.setting_key.startsWith(p.prefix)) {
           const key = row.setting_key.replace(p.prefix, '');
@@ -52,7 +64,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ lowEval, violator });
+    return NextResponse.json({ lowEval, violator, lowEvalInnText });
   } catch (error: any) {
     console.error('[room-access] GET error:', error);
     return NextResponse.json({ error: error?.message || String(error) }, { status: 500 });
@@ -95,11 +107,28 @@ export async function POST(
         }
       }
 
+      if (body.lowEvalInnText !== undefined) {
+        await client.query(
+          `INSERT INTO bot_settings (guild_id, setting_key, setting_value)
+           VALUES ($1, 'ROOM_ACCESS_LOW_EVAL_INN_TEXT', $2)
+           ON CONFLICT (guild_id, setting_key) DO UPDATE SET setting_value = $2`,
+          [guildId, JSON.stringify(Boolean(body.lowEvalInnText))]
+        );
+      }
+
       // Botのキャッシュ再読み込みをリクエスト
       await client.query(
         `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, 0, 'reload_bot_settings')`,
         [guildId]
       );
+
+      if (body.lowEvalInnText !== undefined) {
+        const textAction = body.lowEvalInnText ? 'apply_room_inn_text_allow' : 'apply_room_inn_text_deny';
+        await client.query(
+          `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, 0, $2)`,
+          [guildId, textAction]
+        );
+      }
 
       // 既存チャンネルへの一括パーミッション適用をリクエスト(評価落ち・違反者それぞれ)
       const requestBulkApply = async (body: Record<string, boolean>, kind: 'eval' | 'violator') => {

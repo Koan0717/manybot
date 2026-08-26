@@ -11,7 +11,7 @@ export async function GET(
   const pool = await getPool(guildId);
   try {
     const result = await pool.query(
-      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ROOM_PRICES', 'ROOM_PANEL_CONFIGS', 'ENABLE_PRICE_MAIN_SUB', 'ENABLE_PRICE_NEW_MEMBER', 'ENABLE_PRICE_DOWNGRADE', 'ENABLE_PRICE_VIOLATOR', 'ENABLE_FREE_INN_MAIN_SUB', 'DISABLE_12H_ROOMS', 'DISABLE_24H_ROOMS', 'DISABLE_12H_INN', 'DISABLE_24H_INN', 'DISABLE_12H_LUXURY', 'DISABLE_24H_LUXURY')",
+      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ROOM_PRICES', 'ROOM_PANEL_CONFIGS', 'ENABLE_PRICE_MAIN_SUB', 'ENABLE_PRICE_NEW_MEMBER', 'ENABLE_PRICE_DOWNGRADE', 'ENABLE_PRICE_VIOLATOR', 'ENABLE_FREE_INN_MAIN_SUB', 'DISABLE_12H_ROOMS', 'DISABLE_24H_ROOMS', 'DISABLE_12H_INN', 'DISABLE_24H_INN', 'DISABLE_12H_LUXURY', 'DISABLE_24H_LUXURY', 'ROOM_ACCESS_LOW_EVAL_INN_TEXT')",
       [guildId]
     );
 
@@ -28,7 +28,8 @@ export async function GET(
       DISABLE_12H_INN: false,
       DISABLE_24H_INN: false,
       DISABLE_12H_LUXURY: false,
-      DISABLE_24H_LUXURY: false
+      DISABLE_24H_LUXURY: false,
+      ROOM_ACCESS_LOW_EVAL_INN_TEXT: true
     };
 
     for (const row of result.rows) {
@@ -40,6 +41,12 @@ export async function GET(
         try {
           roomPanelConfigs = JSON.parse(row.setting_value);
         } catch (e) {}
+      } else if (row.setting_key === 'ROOM_ACCESS_LOW_EVAL_INN_TEXT') {
+        try {
+          toggles.ROOM_ACCESS_LOW_EVAL_INN_TEXT = JSON.parse(row.setting_value);
+        } catch {
+          toggles.ROOM_ACCESS_LOW_EVAL_INN_TEXT = row.setting_value === 'true';
+        }
       } else {
         toggles[row.setting_key as keyof typeof toggles] = row.setting_value === 'true';
       }

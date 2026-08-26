@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Save, Loader2, Shield, Lock, Unlock, AlertTriangle } from 'lucide-react';
+import { Save, Loader2, Shield, Lock, Unlock, AlertTriangle, MessageSquare } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import PageHeader from '@/components/PageHeader';
 
@@ -55,6 +55,7 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
     game_vc: true,
     custom_vc: true,
   });
+  const [lowEvalInnText, setLowEvalInnText] = useState(true);
 
   useEffect(() => {
     fetch(`/api/guilds/${guildId}/room-access`)
@@ -63,6 +64,7 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
         if (!data.error) {
           if (data.lowEval) setSettings(prev => ({ ...prev, ...data.lowEval }));
           if (data.violator) setViolatorSettings(prev => ({ ...prev, ...data.violator }));
+          if (data.lowEvalInnText !== undefined) setLowEvalInnText(Boolean(data.lowEvalInnText));
         }
       })
       .catch(console.error)
@@ -83,7 +85,7 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
       const res = await fetch(`/api/guilds/${guildId}/room-access`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lowEval: settings, violator: violatorSettings }),
+        body: JSON.stringify({ lowEval: settings, violator: violatorSettings, lowEvalInnText }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
@@ -211,7 +213,7 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
 
       {/* 評価落ちセクション */}
       <div className="pt-2">
-        <h2 className="text-white font-semibold text-lg mb-3">評価落ち</h2>
+        <h2 className="text-white font-semibold text-lg mb-3">評価落ち - VCアクセス制御</h2>
         {renderSection(
           settings,
           toggle,
@@ -220,6 +222,58 @@ export default function RoomAccessPage({ params }: { params: { guild_id: string 
           allDenied,
           '評価落ちロールを持つメンバーはこのVCを利用できません'
         )}
+
+        {/* 評価落ちテキスト書き込み制御 */}
+        <div className="mt-4 pt-4 border-t border-zinc-800/80">
+          <h3 className="text-white font-medium text-sm mb-3 flex items-center gap-2">
+            <MessageSquare size={16} className="text-zinc-400" />
+            宿VCテキストチャンネル書き込み制御
+          </h3>
+          <div
+            className={`bg-zinc-900 border rounded-xl p-5 transition-all ${lowEvalInnText ? 'border-zinc-800' : 'border-red-900/60 bg-red-950/10'}`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">💬</span>
+                <div>
+                  <div className="font-semibold text-white flex items-center gap-2">
+                    宿VCテキスト書き込み
+                    {lowEvalInnText ? (
+                      <span className="text-xs text-green-400 bg-green-400/10 border border-green-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Unlock size={10} /> 許可
+                      </span>
+                    ) : (
+                      <span className="text-xs text-red-400 bg-red-400/10 border border-red-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Lock size={10} /> 制限中
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-zinc-400 mt-0.5">
+                    評価落ちロールを持つメンバーが、宿VC内のテキストチャンネルに文字を書き込めるかを設定します
+                  </div>
+                </div>
+              </div>
+
+              {/* Toggle */}
+              <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={lowEvalInnText}
+                  onChange={() => setLowEvalInnText(!lowEvalInnText)}
+                />
+                <div className="w-12 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:bg-green-600 peer-not-checked:bg-red-800/70"></div>
+              </label>
+            </div>
+
+            {!lowEvalInnText && (
+              <div className="mt-3 pt-3 border-t border-red-900/40 text-xs text-red-300/70 flex items-center gap-1.5">
+                <Lock size={11} />
+                評価落ちロールを持つメンバーは宿VCのテキストチャンネルに文字を書き込めません
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* 違反者セクション */}

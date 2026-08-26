@@ -47,7 +47,8 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
     DISABLE_12H_INN: false,
     DISABLE_24H_INN: false,
     DISABLE_12H_LUXURY: false,
-    DISABLE_24H_LUXURY: false
+    DISABLE_24H_LUXURY: false,
+    ROOM_ACCESS_LOW_EVAL_INN_TEXT: true
   });
   
   const defaultRolePrices = {
@@ -495,6 +496,31 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
               </div>
               <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap">
                 {toggles.ENABLE_FREE_INN_MAIN_SUB ? '有効' : '無効'}
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* --- 評価落ちの宿VCテキスト書き込み設定 --- */}
+        <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-lg text-white">評価落ちの宿VCテキスト書き込み許可</h3>
+              <p className="text-sm text-zinc-400 mt-1">
+                評価落ちロールを持つメンバーが、宿VC内のテキストチャンネルに文字を書き込めるかどうかを設定します。（ON: 書き込み許可 / OFF: 書き込み制限）
+              </p>
+            </div>
+            <label className="flex items-center cursor-pointer ml-4">
+              <div className="relative">
+                <input type="checkbox" className="sr-only" 
+                  checked={toggles.ROOM_ACCESS_LOW_EVAL_INN_TEXT}
+                  onChange={(e) => setToggles({...toggles, ROOM_ACCESS_LOW_EVAL_INN_TEXT: e.target.checked})}
+                />
+                <div className={`block w-14 h-8 rounded-full transition-colors ${toggles.ROOM_ACCESS_LOW_EVAL_INN_TEXT ? 'bg-green-600' : 'bg-zinc-600'}`}></div>
+                <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${toggles.ROOM_ACCESS_LOW_EVAL_INN_TEXT ? 'transform translate-x-6' : ''}`}></div>
+              </div>
+              <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap">
+                {toggles.ROOM_ACCESS_LOW_EVAL_INN_TEXT ? '許可 (ON)' : '制限 (OFF)'}
               </div>
             </label>
           </div>
