@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import database
 from helpers import (
-    get_setting, get_role_by_setting, has_interviewer_role,
+    get_setting, get_role_by_setting, get_new_member_roles, has_interviewer_role,
     NEW_MEMBER_ROLE_NAME, PENDING_MEMBER_ROLE_NAME, send_log
 )
 
@@ -15,13 +15,13 @@ class InterviewNicknameModal(discord.ui.Modal, title='入界手続き：名前�
         guild = interaction.guild
         me = guild.me if guild else None
         
-        new_role = get_role_by_setting(bot, interaction.guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
+        new_roles = get_new_member_roles(bot, interaction.guild)
         pending_role = get_role_by_setting(bot, interaction.guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
         
-        if not new_role:
+        if not new_roles:
             await interaction.followup.send(f"❌ エラー: ロール「{NEW_MEMBER_ROLE_NAME}」が見つかりません。", ephemeral=True)
             return
-        if new_role in interaction.user.roles:
+        if all(r in interaction.user.roles for r in new_roles):
             await interaction.followup.send("ℹ️ 既に手続きは完了しています。", ephemeral=True)
             return
 
@@ -31,9 +31,11 @@ class InterviewNicknameModal(discord.ui.Modal, title='入界手続き：名前�
                     "❌ Botに「ロールの管理」権限がありません。\nサーバー管理者にお問い合わせください。",
                     ephemeral=True
                 )
-            if new_role >= me.top_role:
+            higher_roles = [r for r in new_roles if r >= me.top_role]
+            if higher_roles:
+                role_names = "、".join([f"「{r.name}」" for r in higher_roles])
                 return await interaction.followup.send(
-                    f"❌ ロール順位エラー: 付与対象のロール「{new_role.name}」がBotの最上位ロール（{me.top_role.name}）以上の位置にあります。\nサーバー設定でBotのロールを「{new_role.name}」より上に移動してください。",
+                    f"❌ ロール順位エラー: 付与対象のロール {role_names} がBotの最上位ロール（{me.top_role.name}）以上の位置にあります。\nサーバー設定でBotのロールを付与対象ロールより上に移動してください。",
                     ephemeral=True
                 )
             
@@ -44,13 +46,15 @@ class InterviewNicknameModal(discord.ui.Modal, title='入界手続き：名前�
             except discord.Forbidden:
                 nick_success = False
 
-            try:
-                await interaction.user.add_roles(new_role, reason="入界手続き（自己申請）")
-            except discord.Forbidden:
-                return await interaction.followup.send(
-                    f"❌ ロール付与権限エラー: Botに「{new_role.name}」を付与する権限がありません。\nBotのロール順位（サーバー設定 > ロール）を確認してください。",
-                    ephemeral=True
-                )
+            roles_to_add = [r for r in new_roles if r not in interaction.user.roles]
+            if roles_to_add:
+                try:
+                    await interaction.user.add_roles(*roles_to_add, reason="入界手続き（自己申請）")
+                except discord.Forbidden:
+                    return await interaction.followup.send(
+                        f"❌ ロール付与権限エラー: Botにロールを付与する権限がありません。\nBotのロール順位（サーバー設定 > ロール）を確認してください。",
+                        ephemeral=True
+                    )
 
             if pending_role and pending_role in interaction.user.roles:
                 try:
@@ -152,10 +156,10 @@ class InterviewerGroup(app_commands.Group):
         guild = interaction.guild
         me = guild.me
 
-        new_role = get_role_by_setting(bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
+        new_roles = get_new_member_roles(bot, guild)
         pending_role = get_role_by_setting(bot, guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
         
-        if not new_role:
+        if not new_roles:
             return await interaction.followup.send(f"❌ エラー: 付与対象ロール「{NEW_MEMBER_ROLE_NAME}」が見つかりません。ダッシュボードまたは設定を確認してください。", ephemeral=True)
         if not pending_role:
             return await interaction.followup.send(f"❌ エラー: 待機ロール「{PENDING_MEMBER_ROLE_NAME}」が見つかりません。ダッシュボードまたは設定を確認してください。", ephemeral=True)
@@ -170,11 +174,13 @@ class InterviewerGroup(app_commands.Group):
             )
 
         # 2. ロール順位（ヒエラルキー）チェック
-        if new_role >= me.top_role:
+        higher_roles = [r for r in new_roles if r >= me.top_role]
+        if higher_roles:
+            role_names = "、".join([f"「**{r.name}**」" for r in higher_roles])
             return await interaction.followup.send(
                 f"❌ **ロール順位エラー (403 Forbidden)**:\n"
-                f"付与対象のロール「**{new_role.name}**」がBotの最上位ロール（**{me.top_role.name}**）以上の位置にあります。\n"
-                f"Discordの【サーバー設定】>【ロール】一覧で、**Botのロールを「{new_role.name}」よりも上にドラッグして移動**してください。",
+                f"付与対象のロール {role_names} がBotの最上位ロール（**{me.top_role.name}**）以上の位置にあります。\n"
+                f"Discordの【サーバー設定】>【ロール】一覧で、**Botのロールを付与対象ロールよりも上にドラッグして移動**してください。",
                 ephemeral=True
             )
 
@@ -228,8 +234,9 @@ class InterviewerGroup(app_commands.Group):
                     ephemeral=True
                 )
 
-            if new_role in user.roles:
-                return await interaction.followup.send(f"ℹ️ {user.display_name} は既に「{new_role.name}」が付与されており、手続き完了済みです。", ephemeral=True)
+            if all(r in user.roles for r in new_roles):
+                role_names = "、".join([f"「{r.name}」" for r in new_roles])
+                return await interaction.followup.send(f"ℹ️ {user.display_name} は既に {role_names} が付与されており、手続き完了済みです。", ephemeral=True)
 
             nick_change_status = ""
             
@@ -277,15 +284,17 @@ class InterviewerGroup(app_commands.Group):
                 nick_change_status = "\nℹ️ チャンネル履歴に対象ユーザーのメッセージが見つからなかったため、名前変更はスキップされました。"
 
             # ロール付与
-            try:
-                await user.add_roles(new_role, reason=f"面接官入界許可 (面接官: {interaction.user.display_name})")
-            except discord.Forbidden:
-                return await interaction.followup.send(
-                    f"❌ **ロール付与に失敗しました (403 Forbidden)**:\n"
-                    f"Botのロールが「{new_role.name}」より下にあるか、「ロールの管理」権限がありません。\n"
-                    f"サーバー設定 > ロール でBotのロール順位を上げてから再実行してください。",
-                    ephemeral=True
-                )
+            roles_to_add = [r for r in new_roles if r not in user.roles]
+            if roles_to_add:
+                try:
+                    await user.add_roles(*roles_to_add, reason=f"面接官入界許可 (面接官: {interaction.user.display_name})")
+                except discord.Forbidden:
+                    return await interaction.followup.send(
+                        f"❌ **ロール付与に失敗しました (403 Forbidden)**:\n"
+                        f"Botのロール順位または「ロールの管理」権限を確認してください。\n"
+                        f"サーバー設定 > ロール でBotのロール順位を上げてから再実行してください。",
+                        ephemeral=True
+                    )
 
             # 待機ロール剥奪
             if pending_role and pending_role in user.roles:

@@ -14,6 +14,7 @@ export default function OthelloSettingsPage() {
   const [settings, setSettings] = useState<Record<string, any>>({
     OTHELLO_BET_ENABLED: false,
     OTHELLO_DEFAULT_BET: 100,
+    OTHELLO_SHOW_STATS: true,
     OTHELLO_PANEL_CHANNEL: '',
     OTHELLO_AUTO_VC_ENABLED: false,
     OTHELLO_VC_CATEGORY_ID: '',
@@ -34,6 +35,7 @@ export default function OthelloSettingsPage() {
       setSettings({
         OTHELLO_BET_ENABLED: data.OTHELLO_BET_ENABLED ?? false,
         OTHELLO_DEFAULT_BET: data.OTHELLO_DEFAULT_BET ?? 100,
+        OTHELLO_SHOW_STATS: data.OTHELLO_SHOW_STATS ?? true,
         OTHELLO_PANEL_CHANNEL: data.OTHELLO_PANEL_CHANNEL ?? '',
         OTHELLO_AUTO_VC_ENABLED: data.OTHELLO_AUTO_VC_ENABLED ?? false,
         OTHELLO_VC_CATEGORY_ID: data.OTHELLO_VC_CATEGORY_ID ?? '',
@@ -161,6 +163,23 @@ export default function OthelloSettingsPage() {
             />
           </div>
         )}
+
+        <div className="flex items-center justify-between bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
+          <div>
+            <p className="text-sm font-tech text-zinc-300 font-medium">戦績ボタン表示 ON/OFF</p>
+            <p className="text-xs font-tech text-zinc-500 mt-0.5">オセロパネルに「自分の戦績」ボタンを表示します</p>
+          </div>
+          <button
+            onClick={() => updateSetting('OTHELLO_SHOW_STATS', !settings.OTHELLO_SHOW_STATS)}
+            className={`px-5 py-2 rounded-lg font-bold font-mecha text-sm transition-colors ${
+              settings.OTHELLO_SHOW_STATS
+                ? 'bg-green-600 text-white shadow-[0_0_10px_rgba(34,197,94,0.4)]'
+                : 'bg-zinc-700 text-zinc-400'
+            }`}
+          >
+            {settings.OTHELLO_SHOW_STATS ? '表示 (ON)' : '非表示 (OFF)'}
+          </button>
+        </div>
       </section>
 
       {/* チャンネル設定 */}

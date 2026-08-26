@@ -297,12 +297,14 @@ class IPC(commands.Cog):
                         view = CallBoardPanelView()
                     elif panel_type == "othello":
                         from cogs.othello import OthelloPanelView
+                        from helpers import get_setting
+                        show_stats = get_setting(self.bot, "OTHELLO_SHOW_STATS", guild_id)
                         embed = discord.Embed(
                             title="🎯 オセロ対戦",
                             description="オセロで対戦しましょう！\n「PvP対戦」でプレイヤーと、「AI対戦」でAIと対戦できます。",
                             color=discord.Color.green()
                         )
-                        view = OthelloPanelView()
+                        view = OthelloPanelView(show_stats=(show_stats is not False))
                     elif panel_type == "gacha":
                         from cogs.gacha import GachaPanelView, create_gacha_panel_embed
                         embed = await create_gacha_panel_embed(self.bot, guild_id)

@@ -8,10 +8,30 @@ import database
 from helpers import (
     JST, get_setting,
     create_blackjack_deck, calculate_blackjack_score, check_roulette_win,
-    format_bet_type, send_log
+    format_bet_type, send_log, create_game_stats_embed
 )
 
 _bot_instance = None
+
+
+async def show_user_game_stats(interaction: discord.Interaction, game_type: str):
+    bot = interaction.client
+    guild_id = interaction.guild.id if interaction.guild else None
+    if not guild_id:
+        return await interaction.response.send_message("サーバー内でのみ戦績を確認できます。", ephemeral=True)
+
+    # 設定チェック (共通または個別設定がOFFの場合は案内)
+    common_show = get_setting(bot, "GAMBLE_SHOW_STATS", guild_id)
+    game_key_setting = f"GAMBLE_{game_type.upper()}_SHOW_STATS"
+    game_show = get_setting(bot, game_key_setting, guild_id)
+
+    if (common_show is False) or (game_show is False):
+        return await interaction.response.send_message("⚠️ 現在このサーバーでは戦績表示機能が無効になっています。", ephemeral=True)
+
+    currency_name = get_setting(bot, "CURRENCY_NAME", guild_id) or "コイン"
+    stats = await database.get_user_game_stats(guild_id, interaction.user.id, game_type)
+    embed = create_game_stats_embed(interaction.user, game_type, stats, currency_name)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # --- チンチロリン ---
 class ChinchiroBetModal(discord.ui.Modal, title='チンチロリン：賭け金入力'):
@@ -337,12 +357,50 @@ class ChinchiroGameView(discord.ui.View):
         embed_log.add_field(name="Botの役", value=npc_name, inline=True)
         await send_log(bot, interaction.guild, "gambling", embed_log)
 
+        # 戦績記録
+        try:
+            extra_key = None
+            if "ピンゾロ" in self.player_name:
+                extra_key = "pinzoro"
+            elif "アラシ" in self.player_name:
+                extra_key = "arashi"
+            elif "シゴロ" in self.player_name:
+                extra_key = "shigoro"
+            elif "ヒフミ" in self.player_name:
+                extra_key = "hifumi"
+            elif "出目" in self.player_name:
+                extra_key = "normal"
+
+            payout_val = win_amount if win_status == "player_win" else (self.bet if win_status == "draw" else 0)
+            actual_loss_val = self.bet
+            if win_status == "npc_win" and 'extra_loss' in locals() and extra_loss > 0:
+                actual_loss_val = self.bet + min(extra_loss, current_bal if 'current_bal' in locals() else extra_loss)
+            bet_val = actual_loss_val if win_status == "npc_win" else self.bet
+
+            await database.record_game_result(
+                interaction.guild.id, self.user.id, "chinchiro",
+                is_win=(win_status == "player_win"),
+                is_draw=(win_status == "draw"),
+                bet=bet_val,
+                payout=payout_val,
+                extra_key=extra_key
+            )
+        except Exception as e:
+            print(f"[ERROR] record_game_result (chinchiro): {e}")
+
 class ChinchiroView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, show_stats: bool = True):
         super().__init__(timeout=None)
+        if not show_stats:
+            self.remove_item(self.stats_btn)
+
     @discord.ui.button(label="🎲 チンチロリンで遊ぶ", style=discord.ButtonStyle.primary, custom_id="persistent_chinchiro_btn")
     async def play(self, it, btn):
         await it.response.send_modal(ChinchiroBetModal())
+
+    @discord.ui.button(label="📊 自分の戦績", style=discord.ButtonStyle.secondary, custom_id="persistent_chinchiro_stats_btn")
+    async def stats_btn(self, it, btn):
+        await show_user_game_stats(it, "chinchiro")
 
 # --- コイントス ---
 class CoinflipBetModal(discord.ui.Modal, title='コイントス：賭け金入力'):
@@ -442,6 +500,19 @@ class CoinflipGameView(discord.ui.View):
         embed_log.add_field(name="選択", value="表" if choice=="heads" else "裏", inline=True)
         embed_log.add_field(name="実際の結果", value="表" if res=="heads" else "裏", inline=True)
         await send_log(bot, it.guild, "gambling", embed_log)
+
+        # 戦績記録
+        try:
+            is_win = (choice == res)
+            await database.record_game_result(
+                it.guild.id, self.user.id, "coinflip",
+                is_win=is_win,
+                is_draw=False,
+                bet=self.bet,
+                payout=win_amount if is_win else 0
+            )
+        except Exception as e:
+            print(f"[ERROR] record_game_result (coinflip): {e}")
         
     @discord.ui.button(label="表", emoji="⚪")
     async def heads(self, it, btn): await self.process(it, "heads")
@@ -449,11 +520,18 @@ class CoinflipGameView(discord.ui.View):
     async def tails(self, it, btn): await self.process(it, "tails")
 
 class CoinflipView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, show_stats: bool = True):
         super().__init__(timeout=None)
+        if not show_stats:
+            self.remove_item(self.stats_btn)
+
     @discord.ui.button(label="🪙 コイントスで遊ぶ", style=discord.ButtonStyle.primary, custom_id="persistent_coinflip_btn")
     async def play(self, it, btn):
         await it.response.send_modal(CoinflipBetModal())
+
+    @discord.ui.button(label="📊 自分の戦績", style=discord.ButtonStyle.secondary, custom_id="persistent_coinflip_stats_btn")
+    async def stats_btn(self, it, btn):
+        await show_user_game_stats(it, "coinflip")
 
 # --- スロット ---
 class SlotBetModal(discord.ui.Modal, title='スロット：賭け金入力'):
@@ -561,6 +639,29 @@ class SlotBetModal(discord.ui.Modal, title='スロット：賭け金入力'):
                 
             embed_log.add_field(name="出目", value=" | ".join(r), inline=True)
             await send_log(bot, it.guild, "gambling", embed_log)
+
+            # 戦績記録
+            try:
+                extra_key = None
+                if r[0] == r[1] == r[2] == "7️⃣":
+                    extra_key = "slot_7"
+                elif r[0] == r[1] == r[2] == "⭐":
+                    extra_key = "slot_star"
+                elif r[0] == r[1] == r[2]:
+                    extra_key = "slot_three"
+                elif len(set(r)) < 3:
+                    extra_key = "slot_two"
+
+                await database.record_game_result(
+                    it.guild.id, it.user.id, "slot",
+                    is_win=(win > 0),
+                    is_draw=False,
+                    bet=bet,
+                    payout=win,
+                    extra_key=extra_key
+                )
+            except Exception as e:
+                print(f"[ERROR] record_game_result (slot): {e}")
         except:
             if not it.response.is_done():
                 await it.response.send_message('エラー', ephemeral=True)
@@ -568,11 +669,18 @@ class SlotBetModal(discord.ui.Modal, title='スロット：賭け金入力'):
                 await it.followup.send('エラー', ephemeral=True)
 
 class SlotView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, show_stats: bool = True):
         super().__init__(timeout=None)
+        if not show_stats:
+            self.remove_item(self.stats_btn)
+
     @discord.ui.button(label="🎰 スロットで遊ぶ", style=discord.ButtonStyle.primary, custom_id="persistent_slot_btn")
     async def play(self, it, btn):
         await it.response.send_modal(SlotBetModal())
+
+    @discord.ui.button(label="📊 自分の戦績", style=discord.ButtonStyle.secondary, custom_id="persistent_slot_stats_btn")
+    async def stats_btn(self, it, btn):
+        await show_user_game_stats(it, "slot")
 
 # --- ブラックジャック ---
 class BlackjackBetModal(discord.ui.Modal, title='ブラックジャック：賭け金入力'):
@@ -736,6 +844,19 @@ class BlackjackGameView(discord.ui.View):
                 embed_log.add_field(name="プレイヤー手札", value=f"Score: {player_score}", inline=True)
                 embed_log.add_field(name="ディーラー手札", value=f"Score: {dealer_score}", inline=True)
                 await send_log(bot, self.user.guild, "gambling", embed_log)
+
+                # 戦績記録 (双方BJ 引き分け)
+                try:
+                    await database.record_game_result(
+                        self.user.guild.id, self.user.id, "blackjack",
+                        is_win=False,
+                        is_draw=True,
+                        bet=self.bet,
+                        payout=self.bet,
+                        extra_key="bj_win"
+                    )
+                except Exception as e:
+                    print(f"[ERROR] record_game_result (blackjack initial push): {e}")
             else:
                 mul_bj = get_setting(bot, "GAMBLE_BLACKJACK_MUL_BJ") or 2.5
                 win_amount = int(self.bet * mul_bj)
@@ -761,6 +882,19 @@ class BlackjackGameView(discord.ui.View):
                 embed_log.add_field(name="プレイヤー手札", value=f"Score: {player_score}", inline=True)
                 embed_log.add_field(name="ディーラー手札", value=f"Score: {dealer_score}", inline=True)
                 await send_log(bot, self.user.guild, "gambling", embed_log)
+
+                # 戦績記録 (BJ勝利)
+                try:
+                    await database.record_game_result(
+                        self.user.guild.id, self.user.id, "blackjack",
+                        is_win=True,
+                        is_draw=False,
+                        bet=self.bet,
+                        payout=win_amount,
+                        extra_key="bj_win"
+                    )
+                except Exception as e:
+                    print(f"[ERROR] record_game_result (blackjack bj win): {e}")
             return self.build_embed(title=title, color=color, description=description, is_final=True)
         return None
 
@@ -852,6 +986,19 @@ class BlackjackGameView(discord.ui.View):
         embed_log.add_field(name="プレイヤー手札", value=f"Score: {player_score}", inline=True)
         embed_log.add_field(name="ディーラー手札", value=f"Score: {self.get_visible_score(self.dealer_hand, hide_second=True)}", inline=True)
         await send_log(bot, interaction.guild, "gambling", embed_log)
+
+        # 戦績記録 (バスト)
+        try:
+            await database.record_game_result(
+                interaction.guild.id, self.user.id, "blackjack",
+                is_win=False,
+                is_draw=False,
+                bet=self.bet,
+                payout=0,
+                extra_key="bust"
+            )
+        except Exception as e:
+            print(f"[ERROR] record_game_result (blackjack bust): {e}")
 
     async def resolve_stand(self, interaction: discord.Interaction = None):
         bot = interaction.client if interaction else self.user.guild.me
@@ -960,12 +1107,35 @@ class BlackjackGameView(discord.ui.View):
         embed_log.add_field(name="ディーラー手札", value=f"Score: {dealer_score}", inline=True)
         await send_log(bot, interaction.guild if interaction else self.user.guild, "gambling", embed_log)
 
+        # 戦績記録
+        try:
+            g_id = interaction.guild.id if interaction else self.user.guild.id
+            is_draw_val = (player_score == dealer_score and not is_win and dealer_score <= 21)
+            extra_k = "normal_win" if is_win else None
+            await database.record_game_result(
+                g_id, self.user.id, "blackjack",
+                is_win=is_win,
+                is_draw=is_draw_val,
+                bet=self.bet,
+                payout=win_amount if is_win else (self.bet if is_draw_val else 0),
+                extra_key=extra_k
+            )
+        except Exception as e:
+            print(f"[ERROR] record_game_result (blackjack resolve_stand): {e}")
+
 class BlackjackView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, show_stats: bool = True):
         super().__init__(timeout=None)
+        if not show_stats:
+            self.remove_item(self.stats_btn)
+
     @discord.ui.button(label="🃏 ブラックジャックで遊ぶ", style=discord.ButtonStyle.primary, custom_id="persistent_blackjack_btn")
     async def play(self, it, btn):
         await it.response.send_modal(BlackjackBetModal())
+
+    @discord.ui.button(label="📊 自分の戦績", style=discord.ButtonStyle.secondary, custom_id="persistent_blackjack_stats_btn")
+    async def stats_btn(self, it, btn):
+        await show_user_game_stats(it, "blackjack")
 
 # --- ルーレット ---
 class RouletteBetModal(discord.ui.Modal, title='ルーレット：賭け金入力'):
@@ -1243,12 +1413,41 @@ async def run_roulette_game(interaction: discord.Interaction, user, bet, count, 
     embed_log.add_field(name="出目", value=color_emoji, inline=True)
     await send_log(bot, interaction.guild, "gambling", embed_log)
 
+    # 戦績記録
+    try:
+        extra_key = None
+        if is_win:
+            if multiplier >= 30:
+                extra_key = "win_36x"
+            elif multiplier >= 3:
+                extra_key = "win_3x"
+            else:
+                extra_key = "win_2x"
+
+        await database.record_game_result(
+            interaction.guild.id, user.id, "roulette",
+            is_win=is_win,
+            is_draw=False,
+            bet=bet,
+            payout=win_amount if is_win else 0,
+            extra_key=extra_key
+        )
+    except Exception as e:
+        print(f"[ERROR] record_game_result (roulette): {e}")
+
 class RouletteView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, show_stats: bool = True):
         super().__init__(timeout=None)
+        if not show_stats:
+            self.remove_item(self.stats_btn)
+
     @discord.ui.button(label="🎡 ルーレットで遊ぶ", style=discord.ButtonStyle.primary, custom_id="persistent_roulette_btn")
     async def play(self, it, btn):
         await it.response.send_modal(RouletteBetModal())
+
+    @discord.ui.button(label="📊 自分の戦績", style=discord.ButtonStyle.secondary, custom_id="persistent_roulette_stats_btn")
+    async def stats_btn(self, it, btn):
+        await show_user_game_stats(it, "roulette")
 
 # --- 競馬 (Horse Racing) ---
 HORSE_DATA = [
@@ -1599,12 +1798,28 @@ async def execute_horse_race(interaction: discord.Interaction, user_horse_num: i
         top3_names = [f"{rank_emojis[idx]} {next(h['name'] for h in HORSE_DATA if h['num'] == final_ranking[idx])}" for idx in range(3)]
         embed_log.add_field(name="確定TOP3", value="\n".join(top3_names), inline=False)
         await send_log(bot, interaction.guild, "gambling", embed_log)
+
+        # 戦績記録
+        try:
+            extra_key = "tan_win" if (is_win and bet_type == "tan") else ("fuku_win" if is_win else None)
+            await database.record_game_result(
+                interaction.guild.id, interaction.user.id, "horse",
+                is_win=is_win,
+                is_draw=False,
+                bet=bet,
+                payout=win_amount if is_win else 0,
+                extra_key=extra_key
+            )
+        except Exception as e:
+            print(f"[ERROR] record_game_result (horse): {e}")
     finally:
         active_horse_racers.discard(interaction.user.id)
 
 class HorseRacingView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, show_stats: bool = True):
         super().__init__(timeout=None)
+        if not show_stats:
+            self.remove_item(self.stats_btn)
         
     @discord.ui.button(label="🏇 競馬で遊ぶ", style=discord.ButtonStyle.primary, custom_id="persistent_horse_racing_btn")
     async def play(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1632,6 +1847,10 @@ class HorseRacingView(discord.ui.View):
             color=discord.Color.dark_teal()
         )
         await interaction.response.send_message(embed=embed, view=HorseRacingBetTypeView(bot), ephemeral=True)
+
+    @discord.ui.button(label="📊 自分の戦績", style=discord.ButtonStyle.secondary, custom_id="persistent_horse_racing_stats_btn")
+    async def stats_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await show_user_game_stats(interaction, "horse")
 
 # --- ギャンブル期待値設定 管理者UI (2段階ドリルダウン) ---
 def calculate_gamble_win_rates(game_name: str, expectation: float):
@@ -1965,7 +2184,7 @@ class GambleGameSelect(discord.ui.Select):
 class GamblePanelSetupButton(discord.ui.Button):
     def __init__(self, game_key):
         self.game_key = game_key
-        super().__init__(label="🪧 このパネルを設置", style=discord.ButtonStyle.primary, row=3)
+        super().__init__(label="🪧 このパネルを設置", style=discord.ButtonStyle.primary, row=4)
         
     async def callback(self, interaction: discord.Interaction):
         if interaction.user != self.view.user:
@@ -1973,6 +2192,11 @@ class GamblePanelSetupButton(discord.ui.Button):
             
         channel = interaction.channel
         val = self.game_key
+        bot = interaction.client
+        
+        common_show = get_setting(bot, "GAMBLE_SHOW_STATS", interaction.guild.id)
+        game_show = get_setting(bot, f"GAMBLE_{val.upper()}_SHOW_STATS", interaction.guild.id)
+        show_stats = (common_show is not False) and (game_show is not False)
         
         if val == "chinchiro":
             embed = discord.Embed(
@@ -1990,7 +2214,7 @@ class GamblePanelSetupButton(discord.ui.Button):
                 ),
                 color=discord.Color.dark_green()
             )
-            await channel.send(embed=embed, view=ChinchiroView())
+            await channel.send(embed=embed, view=ChinchiroView(show_stats=show_stats))
             await interaction.response.send_message("✅ チンチロリンパネルを設置しました。", ephemeral=True)
         elif val == "coinflip":
             embed = discord.Embed(
@@ -2004,7 +2228,7 @@ class GamblePanelSetupButton(discord.ui.Button):
                 ),
                 color=discord.Color.blue()
             )
-            await channel.send(embed=embed, view=CoinflipView())
+            await channel.send(embed=embed, view=CoinflipView(show_stats=show_stats))
             await interaction.response.send_message("✅ コイントスパネルを設置しました。", ephemeral=True)
         elif val == "slot":
             embed = discord.Embed(
@@ -2021,7 +2245,7 @@ class GamblePanelSetupButton(discord.ui.Button):
                 ),
                 color=discord.Color.gold()
             )
-            await channel.send(embed=embed, view=SlotView())
+            await channel.send(embed=embed, view=SlotView(show_stats=show_stats))
             await interaction.response.send_message("✅ スロットパネルを設置しました。", ephemeral=True)
         elif val == "blackjack":
             embed = discord.Embed(
@@ -2037,7 +2261,7 @@ class GamblePanelSetupButton(discord.ui.Button):
                 ),
                 color=discord.Color.blue()
             )
-            await channel.send(embed=embed, view=BlackjackView())
+            await channel.send(embed=embed, view=BlackjackView(show_stats=show_stats))
             await interaction.response.send_message("✅ ブラックジャックパネルを設置しました。", ephemeral=True)
         elif val == "roulette":
             embed = discord.Embed(
@@ -2053,7 +2277,7 @@ class GamblePanelSetupButton(discord.ui.Button):
                 ),
                 color=discord.Color.red()
             )
-            await channel.send(embed=embed, view=RouletteView())
+            await channel.send(embed=embed, view=RouletteView(show_stats=show_stats))
             await interaction.response.send_message("✅ ルーレットパネルを設置しました。", ephemeral=True)
         elif val == "horse":
             horses_str = "\n".join([f"- {h['icon']}{h['emoji']} **{h['num']}号馬: {h['name']}**" for h in HORSE_DATA])
@@ -2072,8 +2296,31 @@ class GamblePanelSetupButton(discord.ui.Button):
                 ),
                 color=discord.Color.dark_teal()
             )
-            await channel.send(embed=embed, view=HorseRacingView())
+            await channel.send(embed=embed, view=HorseRacingView(show_stats=show_stats))
             await interaction.response.send_message("✅ 競馬パネルを設置しました。", ephemeral=True)
+
+
+class GambleToggleStatsButton(discord.ui.Button):
+    def __init__(self, game_key, is_enabled):
+        label = "📊 戦績ボタン: 表示中 (ON)" if is_enabled else "📊 戦績ボタン: 非表示中 (OFF)"
+        style = discord.ButtonStyle.success if is_enabled else discord.ButtonStyle.secondary
+        super().__init__(label=label, style=style, row=3)
+        self.game_key = game_key
+        self.is_enabled = is_enabled
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user != self.view.user:
+            return await interaction.response.send_message("操作権限がありません。", ephemeral=True)
+        
+        bot = interaction.client
+        new_val = not self.is_enabled
+        setting_key = f"GAMBLE_{self.game_key.upper()}_SHOW_STATS"
+        await database.save_setting(interaction.guild.id, setting_key, new_val)
+        bot.bot_settings.setdefault(interaction.guild.id, {})[setting_key] = new_val
+        
+        sub_view = GambleGameSettingsView(self.view.user, self.game_key, bot, back_to=getattr(self.view, "back_to", "admin"))
+        embed = await sub_view.build_embed(interaction.guild.id)
+        await interaction.response.edit_message(embed=embed, view=sub_view)
 
 
 class GambleGameSettingsView(discord.ui.View):
@@ -2098,10 +2345,16 @@ class GambleGameSettingsView(discord.ui.View):
             self.add_item(GambleRateSelect(self.game_key))
             # 倍率個別設定セレクト
             self.add_item(GambleMultiplierSelect(self.game_key))
+            # 戦績ボタンON/OFFトグル
+            show_key = f"GAMBLE_{self.game_key.upper()}_SHOW_STATS"
+            cur_show = get_setting(self.bot, show_key)
+            if cur_show is None:
+                cur_show = True
+            self.add_item(GambleToggleStatsButton(self.game_key, bool(cur_show)))
             # このゲームのパネルを設置するボタン
             self.add_item(GamblePanelSetupButton(self.game_key))
             
-    async def build_embed(self):
+    async def build_embed(self, guild_id: int = None):
         bot = self.bot
         game_names = {
             "chinchiro": "🎲 チンチロリン",
@@ -2114,11 +2367,18 @@ class GambleGameSettingsView(discord.ui.View):
         }
         embed = discord.Embed(
             title=f"{game_names.get(self.game_key, '設定')} 詳細設定",
-            description="期待値から自動計算して一括設定するか、確率や倍率を個別に設定してください。",
+            description="期待値から自動計算して一括設定するか、確率や倍率・戦績ボタン表示を設定してください。",
             color=discord.Color.purple()
         )
         
-        currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
+        currency_name = get_setting(bot, "CURRENCY_NAME", guild_id) or "コイン"
+
+        if self.game_key != "common":
+            show_key = f"GAMBLE_{self.game_key.upper()}_SHOW_STATS"
+            cur_show = get_setting(bot, show_key, guild_id)
+            is_on = (cur_show is not False)
+            embed.add_field(name="📊 戦績ボタン表示", value="🟢 **表示 (ON)**" if is_on else "🔴 **非表示 (OFF)**", inline=False)
+
         
         if self.game_key == "chinchiro":
             p_pinzoro = get_setting(bot, "GAMBLE_CHINCHIRO_RATE_PINZORO") or 0.02
@@ -2229,22 +2489,25 @@ class GambleGameSettingsView(discord.ui.View):
             embed.add_field(name="💰 複勝配当倍率", value=f"`{mul_fuku}倍`", inline=True)
             
         elif self.game_key == "common":
-            max_plays = get_setting(bot, "GAMBLE_MAX_PLAYS")
+            max_plays = get_setting(bot, "GAMBLE_MAX_PLAYS", guild_id)
             if max_plays is None: max_plays = 10
-            daily_limit = get_setting(bot, "GAMBLE_DAILY_LIMIT")
+            daily_limit = get_setting(bot, "GAMBLE_DAILY_LIMIT", guild_id)
             if daily_limit is None: daily_limit = 0
-            max_bet = get_setting(bot, "GAMBLE_MAX_BET")
+            max_bet = get_setting(bot, "GAMBLE_MAX_BET", guild_id)
             if max_bet is None: max_bet = 100000
-            tax_enabled = get_setting(bot, "GAMBLE_TAX_ENABLED")
+            tax_enabled = get_setting(bot, "GAMBLE_TAX_ENABLED", guild_id)
             if tax_enabled is None: tax_enabled = False
-            tax_rate = get_setting(bot, "GAMBLE_TAX_RATE")
+            tax_rate = get_setting(bot, "GAMBLE_TAX_RATE", guild_id)
             if tax_rate is None: tax_rate = 0.05
+            stats_show = get_setting(bot, "GAMBLE_SHOW_STATS", guild_id)
+            if stats_show is None: stats_show = True
             
             embed.add_field(name="📅 1日のプレイ回数上限", value=f"`{max_plays}回`" + (" (無制限)" if int(max_plays) <= 0 else ""), inline=False)
             embed.add_field(name="💰 1日の合計賭け金上限", value=f"`{int(daily_limit):,} {currency_name}`" + (" (無制限)" if int(daily_limit) <= 0 else ""), inline=False)
             embed.add_field(name="💵 1回の最大賭け金上限", value=f"`{int(max_bet):,} {currency_name}`", inline=False)
             embed.add_field(name="💸 カジノ手数料徴収", value="🟢 有効" if tax_enabled else "🔴 無効", inline=False)
             embed.add_field(name="📊 手数料の割合", value=f"`{tax_rate * 100:.1f}%`", inline=False)
+            embed.add_field(name="📊 ギャンブル戦績ボタン共通表示", value="🟢 有効 (表示)" if stats_show else "🔴 無効 (非表示)", inline=False)
             
         return embed
 

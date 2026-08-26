@@ -4,7 +4,7 @@ from discord import app_commands
 import datetime
 import database
 from helpers import (
-    JST, get_setting, get_role_by_setting, get_evaluator_tier, has_evaluator_role,
+    JST, get_setting, get_role_by_setting, get_new_member_roles, get_evaluator_tier, has_evaluator_role,
     format_evaluation_datetime, NEW_MEMBER_ROLE_NAME, ADMIN_ROLE_NAMES,
     EVALUATOR_ROLE_NAMES
 )
@@ -244,9 +244,10 @@ class Evaluation(commands.Cog):
             if not member:
                 continue
                 
-            # Requirements: Only when they have NEW_MEMBER_ROLE (仮メン)
-            temp_member_role = get_role_by_setting(self.bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
-            if not temp_member_role or temp_member_role not in member.roles:
+            # Requirements: Only when they have any NEW_MEMBER_ROLE (仮メン)
+            temp_member_roles = get_new_member_roles(self.bot, guild)
+            user_temp_roles = [r for r in temp_member_roles if r in member.roles]
+            if not user_temp_roles:
                 continue
                 
             eval_failed_role = get_role_by_setting(self.bot, guild, "DOWNGRADE_ROLE_ID", "評価落ち")
@@ -254,9 +255,9 @@ class Evaluation(commands.Cog):
                 continue
                 
             try:
-                # Add fail role and remove temp member role
+                # Add fail role and remove temp member roles
                 roles_to_add = [eval_failed_role]
-                roles_to_remove = [temp_member_role]
+                roles_to_remove = user_temp_roles
                 
                 await member.add_roles(*roles_to_add, reason="評価期間締切超過のため自動評価落ち")
                 await member.remove_roles(*roles_to_remove, reason="評価期間締切超過のため自動評価落ち")
@@ -315,8 +316,12 @@ class Evaluation(commands.Cog):
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
         bot = self.bot
-        human_role = get_role_by_setting(bot, after.guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
-        if human_role and human_role in after.roles and human_role not in before.roles:
+        temp_member_roles = get_new_member_roles(bot, after.guild)
+        temp_role_ids = {r.id for r in temp_member_roles}
+        has_new_role = any(r.id in temp_role_ids for r in after.roles)
+        had_new_role = any(r.id in temp_role_ids for r in before.roles)
+        
+        if has_new_role and not had_new_role:
             eval_settings = await database.get_evaluation_settings(after.guild.id)
             if eval_settings and eval_settings.get("auto_generate_period", True):
                 existing = await database.get_evaluation_period(after.guild.id, after.id)
@@ -335,10 +340,10 @@ class Evaluation(commands.Cog):
         # 評価落ちロール付与検知
         eval_failed_role = get_role_by_setting(bot, after.guild, "DOWNGRADE_ROLE_ID", "評価落ち")
         if eval_failed_role and eval_failed_role in after.roles and eval_failed_role not in before.roles:
-            temp_member_role = get_role_by_setting(bot, after.guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
-            if temp_member_role and temp_member_role in after.roles:
+            user_temp_roles = [r for r in temp_member_roles if r in after.roles]
+            if user_temp_roles:
                 try:
-                    await after.remove_roles(temp_member_role, reason="評価落ちのため自動剥奪")
+                    await after.remove_roles(*user_temp_roles, reason="評価落ちのため自動剥奪")
                 except Exception as e:
                     print(f"[Evaluation Failure] Failed to remove temp member role: {e}")
             import asyncio

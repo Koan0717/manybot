@@ -6,7 +6,7 @@ import asyncio
 import re
 import database
 from helpers import (
-    JST, get_setting, get_role_by_setting, has_admin_role, is_admin, is_admin_or_interviewer, is_admin_or_banker, send_log,
+    JST, get_setting, get_role_by_setting, get_new_member_roles, has_admin_role, is_admin, is_admin_or_interviewer, is_admin_or_banker, send_log,
     NEW_MEMBER_ROLE_NAME, INTERVIEWER_ROLE_NAMES, FREE_INN_ROLE_NAMES,
     EMBLEM_MANAGER_ROLE_NAME, EMBLEM_MASTER_ROLE_NAME, CONFESSION_PRIEST_ROLE_NAME,
     PRIEST_ROLE_NAME, ADMIN_ROLE_NAMES, EVALUATOR_ROLE_NAMES, DEFAULT_SETTINGS,
@@ -87,10 +87,11 @@ async def trigger_evaluation_failure(guild, target, reason, executor, bot):
                 print(f"[Evaluation] Failed to add role: {e}")
                 
         # 評価落ち時に元の仮メンロールを外す
-        temp_member_role = get_role_by_setting(bot, guild, "NEW_MEMBER_ROLE_ID", NEW_MEMBER_ROLE_NAME)
-        if temp_member_role and temp_member_role in target.roles:
+        temp_member_roles = get_new_member_roles(bot, guild)
+        roles_to_remove = [r for r in temp_member_roles if r in target.roles]
+        if roles_to_remove:
             try:
-                await target.remove_roles(temp_member_role, reason=reason)
+                await target.remove_roles(*roles_to_remove, reason=reason)
             except Exception as e:
                 print(f"[Evaluation] Failed to remove temp member role: {e}")
                 

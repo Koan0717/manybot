@@ -1304,6 +1304,42 @@ async def setup_db_schema(p):
 
         ''')
 
+        await conn.execute('''
+
+            CREATE TABLE IF NOT EXISTS user_game_stats (
+
+                guild_id     BIGINT,
+
+                user_id      BIGINT,
+
+                game_type    TEXT,
+
+                plays        INTEGER DEFAULT 0,
+
+                wins         INTEGER DEFAULT 0,
+
+                losses       INTEGER DEFAULT 0,
+
+                draws        INTEGER DEFAULT 0,
+
+                total_bet    BIGINT DEFAULT 0,
+
+                total_payout BIGINT DEFAULT 0,
+
+                net_profit   BIGINT DEFAULT 0,
+
+                max_win      BIGINT DEFAULT 0,
+
+                extra_data   JSONB DEFAULT '{}'::jsonb,
+
+                updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                PRIMARY KEY (guild_id, user_id, game_type)
+
+            )
+
+        ''')
+
         try:
             await conn.execute('ALTER TABLE gacha_prizes ADD COLUMN IF NOT EXISTS reward_role_duration_days INTEGER DEFAULT 0')
         except Exception as e:
@@ -1543,6 +1579,133 @@ async def increment_gambling_count(guild_id: int, user_id: int, amount: int = 0)
     async with p.acquire() as conn:
 
         await conn.execute('UPDATE users SET chinchiro_count = chinchiro_count + 1, chinchiro_daily_bet = chinchiro_daily_bet + $1 WHERE guild_id = $2 AND user_id = $3', amount, guild_id, user_id)
+
+
+
+async def record_game_result(
+    guild_id: int,
+    user_id: int,
+    game_type: str,
+    is_win: bool,
+    is_draw: bool,
+    bet: int,
+    payout: int,
+    extra_key: str = None,
+    custom_extra: dict = None
+):
+    """
+    ユーザーのゲーム・ギャンブル戦績を記録・更新する。
+    """
+    p = await get_pool(guild_id)
+    net_profit = int(payout - bet)
+    win_inc = 1 if (is_win and not is_draw) else 0
+    draw_inc = 1 if is_draw else 0
+    loss_inc = 1 if (not is_win and not is_draw) else 0
+
+    async with p.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT extra_data, max_win FROM user_game_stats WHERE guild_id = $1 AND user_id = $2 AND game_type = $3",
+            guild_id, user_id, game_type
+        )
+
+        extra_data = {}
+        prev_max_win = 0
+        if row:
+            prev_max_win = row['max_win'] or 0
+            raw_extra = row['extra_data']
+            if raw_extra:
+                try:
+                    if isinstance(raw_extra, str):
+                        extra_data = json.loads(raw_extra)
+                    elif isinstance(raw_extra, dict):
+                        extra_data = dict(raw_extra)
+                except Exception:
+                    extra_data = {}
+
+        if extra_key:
+            extra_data[extra_key] = extra_data.get(extra_key, 0) + 1
+        if custom_extra:
+            for k, v in custom_extra.items():
+                if isinstance(v, int):
+                    extra_data[k] = extra_data.get(k, 0) + v
+                else:
+                    extra_data[k] = v
+
+        new_max_win = max(prev_max_win, payout)
+        extra_json = json.dumps(extra_data)
+
+        await conn.execute('''
+            INSERT INTO user_game_stats (
+                guild_id, user_id, game_type, plays, wins, losses, draws,
+                total_bet, total_payout, net_profit, max_win, extra_data, updated_at
+            ) VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, CURRENT_TIMESTAMP)
+            ON CONFLICT (guild_id, user_id, game_type) DO UPDATE SET
+                plays = user_game_stats.plays + 1,
+                wins = user_game_stats.wins + $4,
+                losses = user_game_stats.losses + $5,
+                draws = user_game_stats.draws + $6,
+                total_bet = user_game_stats.total_bet + $7,
+                total_payout = user_game_stats.total_payout + $8,
+                net_profit = user_game_stats.net_profit + $9,
+                max_win = GREATEST(user_game_stats.max_win, $10),
+                extra_data = $11::jsonb,
+                updated_at = CURRENT_TIMESTAMP
+        ''', guild_id, user_id, game_type, win_inc, loss_inc, draw_inc, bet, payout, net_profit, new_max_win, extra_json)
+
+
+async def get_user_game_stats(guild_id: int, user_id: int, game_type: str = None):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        if game_type:
+            row = await conn.fetchrow(
+                "SELECT * FROM user_game_stats WHERE guild_id = $1 AND user_id = $2 AND game_type = $3",
+                guild_id, user_id, game_type
+            )
+            if not row:
+                return {
+                    "guild_id": guild_id,
+                    "user_id": user_id,
+                    "game_type": game_type,
+                    "plays": 0,
+                    "wins": 0,
+                    "losses": 0,
+                    "draws": 0,
+                    "total_bet": 0,
+                    "total_payout": 0,
+                    "net_profit": 0,
+                    "max_win": 0,
+                    "extra_data": {}
+                }
+            res = dict(row)
+            if isinstance(res.get("extra_data"), str):
+                try:
+                    res["extra_data"] = json.loads(res["extra_data"])
+                except Exception:
+                    res["extra_data"] = {}
+            elif res.get("extra_data") is None:
+                res["extra_data"] = {}
+            return res
+        else:
+            rows = await conn.fetch(
+                "SELECT * FROM user_game_stats WHERE guild_id = $1 AND user_id = $2",
+                guild_id, user_id
+            )
+            results = {}
+            for r in rows:
+                d = dict(r)
+                if isinstance(d.get("extra_data"), str):
+                    try:
+                        d["extra_data"] = json.loads(d["extra_data"])
+                    except Exception:
+                        d["extra_data"] = {}
+                elif d.get("extra_data") is None:
+                    d["extra_data"] = {}
+                results[d["game_type"]] = d
+            return results
+
+
+async def get_all_user_game_stats(guild_id: int, user_id: int):
+    return await get_user_game_stats(guild_id, user_id, game_type=None)
 
 
 

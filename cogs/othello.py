@@ -13,7 +13,7 @@ import io
 from PIL import Image, ImageDraw, ImageFont
 
 import database
-from helpers import get_setting, JST
+from helpers import get_setting, JST, create_game_stats_embed
 
 # ============================================================
 # モジュールレベル変数
@@ -596,6 +596,55 @@ async def end_game(channel, session: OthelloSession, winner: int):
                     )
         except Exception as e:
             print(f"[ERROR] end_game 賭け精算: {e}")
+
+    # 戦績記録
+    if session.guild_id:
+        try:
+            # 黒プレイヤー
+            is_black_win = (winner == 1)
+            is_draw = (winner == 0)
+            black_bet = session.bet
+            black_payout = (session.bet * 2 if not session.is_ai else session.bet) if is_black_win else (session.bet if is_draw else 0)
+            
+            extra_b = {}
+            if session.is_ai:
+                if is_black_win: extra_b["ai_wins"] = 1
+                elif is_draw: extra_b["ai_draws"] = 1
+                else: extra_b["ai_losses"] = 1
+            else:
+                if is_black_win: extra_b["pvp_wins"] = 1
+                elif is_draw: extra_b["pvp_draws"] = 1
+                else: extra_b["pvp_losses"] = 1
+
+            await database.record_game_result(
+                session.guild_id, session.black_id, "othello",
+                is_win=is_black_win,
+                is_draw=is_draw,
+                bet=black_bet,
+                payout=black_payout,
+                custom_extra=extra_b
+            )
+
+            # 白プレイヤー (PvP時)
+            if not session.is_ai and session.white_id:
+                is_white_win = (winner == 2)
+                white_bet = session.bet
+                white_payout = (session.bet * 2) if is_white_win else (session.bet if is_draw else 0)
+                extra_w = {}
+                if is_white_win: extra_w["pvp_wins"] = 1
+                elif is_draw: extra_w["pvp_draws"] = 1
+                else: extra_w["pvp_losses"] = 1
+
+                await database.record_game_result(
+                    session.guild_id, session.white_id, "othello",
+                    is_win=is_white_win,
+                    is_draw=is_draw,
+                    bet=white_bet,
+                    payout=white_payout,
+                    custom_extra=extra_w
+                )
+        except Exception as e:
+            print(f"[ERROR] record_game_result (othello): {e}")
 
     try:
         await channel.send(embed=embed, file=final_file)
@@ -1355,8 +1404,10 @@ class InvitationView(discord.ui.View):
 class OthelloPanelView(discord.ui.View):
     """オセロ対戦パネルView (persistent)。"""
 
-    def __init__(self):
+    def __init__(self, show_stats: bool = True):
         super().__init__(timeout=None)
+        if not show_stats:
+            self.remove_item(self.stats_button)
 
     @discord.ui.button(
         label="👥 PvP対戦",
@@ -1392,6 +1443,26 @@ class OthelloPanelView(discord.ui.View):
             view=view,
             ephemeral=True
         )
+
+    @discord.ui.button(
+        label="📊 自分の戦績",
+        style=discord.ButtonStyle.secondary,
+        custom_id="othello_panel_stats"
+    )
+    async def stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        bot = interaction.client
+        guild_id = interaction.guild.id if interaction.guild else None
+        if not guild_id:
+            return await interaction.response.send_message("サーバー内でのみ戦績を確認できます。", ephemeral=True)
+
+        show_stats = get_setting(bot, "OTHELLO_SHOW_STATS", guild_id)
+        if show_stats is False:
+            return await interaction.response.send_message("⚠️ 現在このサーバーではオセロ戦績表示機能が無効になっています。", ephemeral=True)
+
+        currency_name = get_setting(bot, "CURRENCY_NAME", guild_id) or "コイン"
+        stats = await database.get_user_game_stats(guild_id, interaction.user.id, "othello")
+        embed = create_game_stats_embed(interaction.user, "othello", stats, currency_name)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ============================================================

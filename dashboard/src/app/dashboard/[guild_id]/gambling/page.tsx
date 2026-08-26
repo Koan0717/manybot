@@ -47,6 +47,14 @@ export default function GamblingSettingsPage() {
             GAMBLE_TAX_ENABLED: data.GAMBLE_TAX_ENABLED ?? false,
             GAMBLE_TAX_RATE: data.GAMBLE_TAX_RATE ?? 0.05,
             
+            GAMBLE_SHOW_STATS: data.GAMBLE_SHOW_STATS ?? true,
+            GAMBLE_CHINCHIRO_SHOW_STATS: data.GAMBLE_CHINCHIRO_SHOW_STATS ?? true,
+            GAMBLE_COINFLIP_SHOW_STATS: data.GAMBLE_COINFLIP_SHOW_STATS ?? true,
+            GAMBLE_SLOT_SHOW_STATS: data.GAMBLE_SLOT_SHOW_STATS ?? true,
+            GAMBLE_BLACKJACK_SHOW_STATS: data.GAMBLE_BLACKJACK_SHOW_STATS ?? true,
+            GAMBLE_ROULETTE_SHOW_STATS: data.GAMBLE_ROULETTE_SHOW_STATS ?? true,
+            GAMBLE_HORSE_SHOW_STATS: data.GAMBLE_HORSE_SHOW_STATS ?? true,
+            
             GAMBLE_CHINCHIRO_RATE_PINZORO: data.GAMBLE_CHINCHIRO_RATE_PINZORO ?? 0.02,
             GAMBLE_CHINCHIRO_RATE_ARASHI: data.GAMBLE_CHINCHIRO_RATE_ARASHI ?? 0.05,
             GAMBLE_CHINCHIRO_RATE_SHIGORO: data.GAMBLE_CHINCHIRO_RATE_SHIGORO ?? 0.08,
@@ -345,13 +353,36 @@ export default function GamblingSettingsPage() {
                   </div>
                   
                   {settings.GAMBLE_TAX_ENABLED && renderInput('手数料率', 'GAMBLE_TAX_RATE', true)}
+
+                  <div className="flex flex-col space-y-2 bg-gray-800/40 p-4 rounded-lg border border-gray-700/50">
+                    <label className="text-sm text-gray-300 font-medium">ギャンブル全体の戦績ボタン表示</label>
+                    <button
+                      onClick={() => updateSetting('GAMBLE_SHOW_STATS', !settings.GAMBLE_SHOW_STATS)}
+                      className={`px-4 py-2 rounded-lg font-bold transition-colors ${settings.GAMBLE_SHOW_STATS ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                    >
+                      {settings.GAMBLE_SHOW_STATS ? '表示 (ON)' : '非表示 (OFF)'}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
 
             {activeTab === 'chinchiro' && (
               <div className="space-y-6">
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4">確率設定 (%)</h3>
+                <div className="flex items-center justify-between border-b border-gray-700 pb-2 mb-4">
+                  <h3 className="text-xl font-bold text-white">チンチロリン設定</h3>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-300">戦績ボタン表示:</span>
+                    <button
+                      onClick={() => updateSetting('GAMBLE_CHINCHIRO_SHOW_STATS', !settings.GAMBLE_CHINCHIRO_SHOW_STATS)}
+                      className={`px-3 py-1 text-sm rounded-lg font-bold transition-colors ${settings.GAMBLE_CHINCHIRO_SHOW_STATS ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                    >
+                      {settings.GAMBLE_CHINCHIRO_SHOW_STATS ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+
+                <h4 className="text-lg font-semibold text-gray-200">確率設定 (%)</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {renderInput('ピンゾロ確率', 'GAMBLE_CHINCHIRO_RATE_PINZORO', true)}
                   {renderInput('アラシ確率', 'GAMBLE_CHINCHIRO_RATE_ARASHI', true)}
@@ -361,7 +392,7 @@ export default function GamblingSettingsPage() {
                   {renderInput('通常負け確率', 'GAMBLE_CHINCHIRO_RATE_LOSE', true)}
                 </div>
                 
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">倍率設定 (倍)</h3>
+                <h4 className="text-lg font-semibold text-gray-200 mt-8">倍率設定 (倍)</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {renderInput('ピンゾロ倍率', 'GAMBLE_CHINCHIRO_MUL_PINZORO', false, '0.1')}
                   {renderInput('アラシ倍率', 'GAMBLE_CHINCHIRO_MUL_ARASHI', false, '0.1')}
@@ -374,7 +405,19 @@ export default function GamblingSettingsPage() {
 
             {activeTab === 'coinflip' && (
               <div className="space-y-6">
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4">設定</h3>
+                <div className="flex items-center justify-between border-b border-gray-700 pb-2 mb-4">
+                  <h3 className="text-xl font-bold text-white">コイントス設定</h3>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-300">戦績ボタン表示:</span>
+                    <button
+                      onClick={() => updateSetting('GAMBLE_COINFLIP_SHOW_STATS', !settings.GAMBLE_COINFLIP_SHOW_STATS)}
+                      className={`px-3 py-1 text-sm rounded-lg font-bold transition-colors ${settings.GAMBLE_COINFLIP_SHOW_STATS ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                    >
+                      {settings.GAMBLE_COINFLIP_SHOW_STATS ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   {renderInput('勝ち確率', 'GAMBLE_COINFLIP_RATE_WIN', true)}
                   {renderInput('負け確率', 'GAMBLE_COINFLIP_RATE_LOSE', true)}
@@ -385,7 +428,20 @@ export default function GamblingSettingsPage() {
 
             {activeTab === 'slot' && (
               <div className="space-y-6">
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4">確率設定 (%)</h3>
+                <div className="flex items-center justify-between border-b border-gray-700 pb-2 mb-4">
+                  <h3 className="text-xl font-bold text-white">スロット設定</h3>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-300">戦績ボタン表示:</span>
+                    <button
+                      onClick={() => updateSetting('GAMBLE_SLOT_SHOW_STATS', !settings.GAMBLE_SLOT_SHOW_STATS)}
+                      className={`px-3 py-1 text-sm rounded-lg font-bold transition-colors ${settings.GAMBLE_SLOT_SHOW_STATS ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                    >
+                      {settings.GAMBLE_SLOT_SHOW_STATS ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+
+                <h4 className="text-lg font-semibold text-gray-200">確率設定 (%)</h4>
                 <div className="grid grid-cols-2 gap-4">
                   {renderInput('7揃い確率', 'GAMBLE_SLOT_RATE_7', true)}
                   {renderInput('星揃い確率', 'GAMBLE_SLOT_RATE_STAR', true)}
@@ -394,7 +450,7 @@ export default function GamblingSettingsPage() {
                   <div className="text-xs text-gray-500 col-span-2">※ 残りの確率が自動的にハズレになります。</div>
                 </div>
 
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">倍率設定 (倍)</h3>
+                <h4 className="text-lg font-semibold text-gray-200 mt-8">倍率設定 (倍)</h4>
                 <div className="grid grid-cols-2 gap-4">
                   {renderInput('7揃い倍率', 'GAMBLE_SLOT_MUL_7', false, '0.1')}
                   {renderInput('星揃い倍率', 'GAMBLE_SLOT_MUL_STAR', false, '0.1')}
@@ -406,7 +462,20 @@ export default function GamblingSettingsPage() {
 
             {activeTab === 'blackjack' && (
               <div className="space-y-6">
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4">確率設定 (%)</h3>
+                <div className="flex items-center justify-between border-b border-gray-700 pb-2 mb-4">
+                  <h3 className="text-xl font-bold text-white">ブラックジャック設定</h3>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-300">戦績ボタン表示:</span>
+                    <button
+                      onClick={() => updateSetting('GAMBLE_BLACKJACK_SHOW_STATS', !settings.GAMBLE_BLACKJACK_SHOW_STATS)}
+                      className={`px-3 py-1 text-sm rounded-lg font-bold transition-colors ${settings.GAMBLE_BLACKJACK_SHOW_STATS ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                    >
+                      {settings.GAMBLE_BLACKJACK_SHOW_STATS ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+
+                <h4 className="text-lg font-semibold text-gray-200">確率設定 (%)</h4>
                 <div className="grid grid-cols-2 gap-4">
                   {renderInput('通常勝ち確率', 'GAMBLE_BLACKJACK_RATE_NORMAL_WIN', true)}
                   {renderInput('ブラックジャック勝ち確率', 'GAMBLE_BLACKJACK_RATE_BJ_WIN', true)}
@@ -414,7 +483,7 @@ export default function GamblingSettingsPage() {
                   {renderInput('負け確率', 'GAMBLE_BLACKJACK_RATE_LOSE', true)}
                 </div>
 
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">倍率設定 (倍)</h3>
+                <h4 className="text-lg font-semibold text-gray-200 mt-8">倍率設定 (倍)</h4>
                 <div className="grid grid-cols-2 gap-4">
                   {renderInput('通常勝ち倍率', 'GAMBLE_BLACKJACK_MUL_NORMAL', false, '0.1')}
                   {renderInput('BJ勝ち倍率', 'GAMBLE_BLACKJACK_MUL_BJ', false, '0.1')}
@@ -424,14 +493,27 @@ export default function GamblingSettingsPage() {
 
             {activeTab === 'roulette' && (
               <div className="space-y-6">
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4">確率設定 (%)</h3>
+                <div className="flex items-center justify-between border-b border-gray-700 pb-2 mb-4">
+                  <h3 className="text-xl font-bold text-white">ルーレット設定</h3>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-300">戦績ボタン表示:</span>
+                    <button
+                      onClick={() => updateSetting('GAMBLE_ROULETTE_SHOW_STATS', !settings.GAMBLE_ROULETTE_SHOW_STATS)}
+                      className={`px-3 py-1 text-sm rounded-lg font-bold transition-colors ${settings.GAMBLE_ROULETTE_SHOW_STATS ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                    >
+                      {settings.GAMBLE_ROULETTE_SHOW_STATS ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+
+                <h4 className="text-lg font-semibold text-gray-200">確率設定 (%)</h4>
                 <div className="grid grid-cols-2 gap-4">
                   {renderInput('2倍賭け当たり確率', 'GAMBLE_ROULETTE_WIN_RATE_2X', true)}
                   {renderInput('3倍賭け当たり確率', 'GAMBLE_ROULETTE_WIN_RATE_3X', true)}
                   {renderInput('1点賭け(36倍)当たり確率', 'GAMBLE_ROULETTE_WIN_RATE_36X', true)}
                 </div>
 
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">倍率設定 (倍)</h3>
+                <h4 className="text-lg font-semibold text-gray-200 mt-8">倍率設定 (倍)</h4>
                 <div className="grid grid-cols-3 gap-4">
                   {renderInput('2倍賭け配当', 'GAMBLE_ROULETTE_MUL_2X', false, '0.1')}
                   {renderInput('3倍賭け配当', 'GAMBLE_ROULETTE_MUL_3X', false, '0.1')}
@@ -442,20 +524,34 @@ export default function GamblingSettingsPage() {
 
             {activeTab === 'horse' && (
               <div className="space-y-6">
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4">確率設定 (%)</h3>
+                <div className="flex items-center justify-between border-b border-gray-700 pb-2 mb-4">
+                  <h3 className="text-xl font-bold text-white">競馬設定</h3>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-300">戦績ボタン表示:</span>
+                    <button
+                      onClick={() => updateSetting('GAMBLE_HORSE_SHOW_STATS', !settings.GAMBLE_HORSE_SHOW_STATS)}
+                      className={`px-3 py-1 text-sm rounded-lg font-bold transition-colors ${settings.GAMBLE_HORSE_SHOW_STATS ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                    >
+                      {settings.GAMBLE_HORSE_SHOW_STATS ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+
+                <h4 className="text-lg font-semibold text-gray-200">確率設定 (%)</h4>
                 <div className="grid grid-cols-2 gap-4">
                   {renderInput('🥇 単勝当選確率 (1着)', 'GAMBLE_HORSE_RATE_WIN_TAN', true)}
                   {renderInput('🥉 複勝当選確率 (1〜3着)', 'GAMBLE_HORSE_RATE_WIN_FUKU', true)}
                   <div className="text-xs text-gray-500 col-span-2">※ 出走5頭のうち、ユーザーが選んだ馬が1着になる確率（単勝）および1〜3着以内に入る確率（複勝）です。</div>
                 </div>
 
-                <h3 className="text-xl font-bold text-white border-b border-gray-700 pb-2 mb-4 mt-8">倍率設定 (倍)</h3>
+                <h4 className="text-lg font-semibold text-gray-200 mt-8">倍率設定 (倍)</h4>
                 <div className="grid grid-cols-2 gap-4">
                   {renderInput('🥇 単勝配当倍率', 'GAMBLE_HORSE_MUL_TAN', false, '0.1')}
                   {renderInput('🥉 複勝配当倍率', 'GAMBLE_HORSE_MUL_FUKU', false, '0.1')}
                 </div>
               </div>
             )}
+
           </motion.div>
         </div>
 

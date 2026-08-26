@@ -178,6 +178,7 @@ DEFAULT_SETTINGS = {
     "CREATE_VC_CHANNEL_ID": 123456789012345678,
     "EVALUATION_CATEGORY_ID": 123456789012345678,
     "NEW_MEMBER_ROLE_ID": 123456789012345678,
+    "NEW_MEMBER_ROLE_IDS": [],
     "PENDING_MEMBER_ROLE_ID": 123456789012345678,
     "INTERVIEWER_ROLE_IDS": [],
     "FREE_INN_ROLE_IDS": [],
@@ -250,7 +251,16 @@ DEFAULT_SETTINGS = {
     "GAMBLE_VIOLATOR_ROLE_IDS": [],
     "MINUS_PUNISHMENT_TYPE": "evaluation_failure",
     "ENABLE_ANTIGRIEF": True,
+    # --- ギャンブル・ゲーム戦績ボタン表示設定 ---
+    "GAMBLE_SHOW_STATS": True,
+    "GAMBLE_CHINCHIRO_SHOW_STATS": True,
+    "GAMBLE_COINFLIP_SHOW_STATS": True,
+    "GAMBLE_SLOT_SHOW_STATS": True,
+    "GAMBLE_BLACKJACK_SHOW_STATS": True,
+    "GAMBLE_ROULETTE_SHOW_STATS": True,
+    "GAMBLE_HORSE_SHOW_STATS": True,
     # --- オセロゲーム設定 ---
+    "OTHELLO_SHOW_STATS": True,
     "OTHELLO_BET_ENABLED": False,
     "OTHELLO_DEFAULT_BET": 100,
     "OTHELLO_PANEL_CHANNEL": "",
@@ -429,10 +439,68 @@ def is_downgrade_member(bot, user: discord.Member) -> bool:
         return True
     return False
 
+def get_new_member_role_ids(bot, guild_id: int = None) -> list:
+    """
+    仮（新規）メンバーロールのID一覧を返す。
+    新設定の NEW_MEMBER_ROLE_IDS(複数選択)を優先/統合し、
+    旧設定の NEW_MEMBER_ROLE_ID(単一)も後方互換のためサポートする。
+    """
+    result = []
+    seen = set()
+    ids = get_setting(bot, "NEW_MEMBER_ROLE_IDS", guild_id)
+    if ids:
+        if isinstance(ids, (int, str)):
+            ids = [ids]
+        for rid in ids:
+            try:
+                if rid:
+                    val = int(rid)
+                    if val not in seen:
+                        result.append(val)
+                        seen.add(val)
+            except (TypeError, ValueError):
+                pass
+
+    legacy_id = get_setting(bot, "NEW_MEMBER_ROLE_ID", guild_id)
+    if legacy_id:
+        try:
+            val = int(legacy_id)
+            if val not in seen:
+                result.append(val)
+                seen.add(val)
+        except (TypeError, ValueError):
+            pass
+
+    return result
+
+def get_new_member_roles(bot, guild: discord.Guild) -> list:
+    """
+    設定された仮メンバーロールの discord.Role オブジェクト一覧を返す。
+    IDで見つからない場合はデフォルト名 (NEW_MEMBER_ROLE_NAME) でフォールバック検索する。
+    """
+    roles = []
+    seen_ids = set()
+    role_ids = get_new_member_role_ids(bot, guild.id)
+    for rid in role_ids:
+        r = guild.get_role(rid)
+        if r and r.id not in seen_ids:
+            roles.append(r)
+            seen_ids.add(r.id)
+            
+    if not roles:
+        r = discord.utils.get(guild.roles, name=NEW_MEMBER_ROLE_NAME)
+        if r:
+            roles.append(r)
+    return roles
+
 def is_new_member(bot, user: discord.Member) -> bool:
-    new_member_role_id = get_setting(bot, "NEW_MEMBER_ROLE_ID")
-    if new_member_role_id and any(r.id == new_member_role_id for r in user.roles):
-        return True
+    if isinstance(user, discord.User) or not hasattr(user, 'roles'):
+        return False
+    new_member_role_ids = get_new_member_role_ids(bot, user.guild.id)
+    if new_member_role_ids:
+        user_role_ids = [r.id for r in user.roles]
+        if any(rid in user_role_ids for rid in new_member_role_ids):
+            return True
     user_role_names = [r.name for r in user.roles]
     if NEW_MEMBER_ROLE_NAME in user_role_names:
         return True
@@ -938,3 +1006,125 @@ async def apply_bot_nicknames(bot):
             print(f"[apply_bot_icons] Failed to edit icon in {guild.name} ({guild.id}): {e}")
         except Exception as e:
             print(f"[apply_bot_icons] Unexpected error in {guild.name} ({guild.id}): {e}")
+
+
+def create_game_stats_embed(user: discord.User or discord.Member, game_type: str, stats: dict, currency_name: str = "コイン") -> discord.Embed:
+    """
+    ユーザーのゲーム/ギャンブル戦績Embedを生成する。
+    """
+    game_meta = {
+        "chinchiro": {"name": "チンチロリン", "emoji": "🎲", "color": discord.Color.dark_green()},
+        "coinflip": {"name": "コイントス", "emoji": "🪙", "color": discord.Color.blue()},
+        "slot": {"name": "スロット", "emoji": "🎰", "color": discord.Color.gold()},
+        "blackjack": {"name": "ブラックジャック", "emoji": "🃏", "color": discord.Color.dark_red()},
+        "roulette": {"name": "ルーレット", "emoji": "🎡", "color": discord.Color.red()},
+        "horse": {"name": "競馬", "emoji": "🏇", "color": discord.Color.dark_teal()},
+        "othello": {"name": "オセロ", "emoji": "♟️", "color": discord.Color.green()},
+    }
+
+    meta = game_meta.get(game_type, {"name": game_type, "emoji": "🎮", "color": discord.Color.blurple()})
+
+    plays = stats.get("plays", 0)
+    wins = stats.get("wins", 0)
+    losses = stats.get("losses", 0)
+    draws = stats.get("draws", 0)
+    total_bet = stats.get("total_bet", 0)
+    total_payout = stats.get("total_payout", 0)
+    net_profit = stats.get("net_profit", 0)
+    max_win = stats.get("max_win", 0)
+    extra = stats.get("extra_data", {}) or {}
+
+    win_decisive = wins + losses
+    win_rate = (wins / win_decisive * 100) if win_decisive > 0 else 0.0
+
+    embed_color = meta["color"]
+    if plays > 0:
+        if net_profit > 0:
+            embed_color = discord.Color.gold()
+        elif net_profit < 0:
+            embed_color = discord.Color.red()
+
+    embed = discord.Embed(
+        title=f"{meta['emoji']} {meta['name']} 戦績",
+        description=f"{user.mention} のこれまでの戦績データです。",
+        color=embed_color,
+        timestamp=discord.utils.utcnow()
+    )
+    if hasattr(user, 'display_avatar') and user.display_avatar:
+        embed.set_thumbnail(url=user.display_avatar.url)
+
+    embed.add_field(name="🎮 総プレイ回数", value=f"**{plays:,}** 回", inline=True)
+    if game_type == "othello" or draws > 0:
+        embed.add_field(name="🏆 勝敗", value=f"**{wins:,}** 勝 **{losses:,}** 敗 (**{draws:,}** 分)", inline=True)
+    else:
+        embed.add_field(name="🏆 勝敗", value=f"**{wins:,}** 勝 **{losses:,}** 敗", inline=True)
+    embed.add_field(name="📈 勝率", value=f"**{win_rate:.1f}%**", inline=True)
+
+    # 収支情報
+    profit_prefix = "+" if net_profit > 0 else ""
+    profit_emoji = "🟢" if net_profit > 0 else ("🔴" if net_profit < 0 else "⚪")
+
+    embed.add_field(name="💰 総ベット額", value=f"{total_bet:,} {currency_name}", inline=True)
+    embed.add_field(name="🎁 総獲得額", value=f"{total_payout:,} {currency_name}", inline=True)
+    embed.add_field(name=f"{profit_emoji} 純損益", value=f"**{profit_prefix}{net_profit:,}** {currency_name}", inline=True)
+    embed.add_field(name="🌟 最高獲得額", value=f"{max_win:,} {currency_name}", inline=True)
+
+    # ゲーム別詳細情報
+    if game_type == "chinchiro":
+        detail_lines = [
+            f"- **ピンゾロ**: {extra.get('pinzoro', 0):,} 回",
+            f"- **アラシ**: {extra.get('arashi', 0):,} 回",
+            f"- **シゴロ**: {extra.get('shigoro', 0):,} 回",
+            f"- **通常出目**: {extra.get('normal', 0):,} 回",
+            f"- **ヒフミ**: {extra.get('hifumi', 0):,} 回",
+        ]
+        embed.add_field(name="🎲 役の履歴", value="\n".join(detail_lines), inline=False)
+
+    elif game_type == "slot":
+        detail_lines = [
+            f"- **7️⃣7️⃣7️⃣**: {extra.get('slot_7', 0):,} 回",
+            f"- **⭐⭐⭐**: {extra.get('slot_star', 0):,} 回",
+            f"- **絵柄3つ揃い**: {extra.get('slot_three', 0):,} 回",
+            f"- **絵柄2つ揃い**: {extra.get('slot_two', 0):,} 回",
+        ]
+        embed.add_field(name="🎰 当選履歴", value="\n".join(detail_lines), inline=False)
+
+    elif game_type == "blackjack":
+        detail_lines = [
+            f"- **ブラックジャック勝利**: {extra.get('bj_win', 0):,} 回",
+            f"- **通常勝利**: {extra.get('normal_win', 0):,} 回",
+            f"- **サレンダー**: {extra.get('surrender', 0):,} 回",
+            f"- **バスト**: {extra.get('bust', 0):,} 回",
+        ]
+        embed.add_field(name="🃏 詳細履歴", value="\n".join(detail_lines), inline=False)
+
+    elif game_type == "roulette":
+        detail_lines = [
+            f"- **数字1点的中 (36倍)**: {extra.get('win_36x', 0):,} 回",
+            f"- **ダズン的中 (3倍)**: {extra.get('win_3x', 0):,} 回",
+            f"- **赤黒/偶奇等的中 (2倍)**: {extra.get('win_2x', 0):,} 回",
+        ]
+        embed.add_field(name="🎡 当選履歴", value="\n".join(detail_lines), inline=False)
+
+    elif game_type == "horse":
+        detail_lines = [
+            f"- **単勝的中 (1着)**: {extra.get('tan_win', 0):,} 回",
+            f"- **複勝的中 (1〜3着)**: {extra.get('fuku_win', 0):,} 回",
+        ]
+        embed.add_field(name="🏇 的中履歴", value="\n".join(detail_lines), inline=False)
+
+    elif game_type == "othello":
+        pvp_w = extra.get("pvp_wins", 0)
+        pvp_l = extra.get("pvp_losses", 0)
+        pvp_d = extra.get("pvp_draws", 0)
+        ai_w = extra.get("ai_wins", 0)
+        ai_l = extra.get("ai_losses", 0)
+        ai_d = extra.get("ai_draws", 0)
+        detail_lines = [
+            f"- **PvP対戦**: {pvp_w:,} 勝 {pvp_l:,} 敗 ({pvp_d:,} 分)",
+            f"- **AI対戦**: {ai_w:,} 勝 {ai_l:,} 敗 ({ai_d:,} 分)",
+        ]
+        embed.add_field(name="♟️ モード別成績", value="\n".join(detail_lines), inline=False)
+
+    return embed
+

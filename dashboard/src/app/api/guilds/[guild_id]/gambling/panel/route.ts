@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getPool } from '@/lib/db';
 
 const GAME_TITLES: Record<string, string> = {
   chinchiro: "🎲 チンチロリン",
@@ -36,6 +37,15 @@ const GAME_CUSTOM_IDS: Record<string, string> = {
   horse: "persistent_horse_racing_btn"
 };
 
+const GAME_STATS_CUSTOM_IDS: Record<string, string> = {
+  chinchiro: "persistent_chinchiro_stats_btn",
+  coinflip: "persistent_coinflip_stats_btn",
+  slot: "persistent_slot_stats_btn",
+  blackjack: "persistent_blackjack_stats_btn",
+  roulette: "persistent_roulette_stats_btn",
+  horse: "persistent_horse_racing_stats_btn"
+};
+
 const GAME_EMOJIS: Record<string, string> = {
   chinchiro: "🎲",
   coinflip: "🪙",
@@ -63,6 +73,40 @@ export async function POST(
       return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
     }
 
+    const pool = await getPool(params.guild_id);
+    const showKey = `GAMBLE_${game_type.toUpperCase()}_SHOW_STATS`;
+    const settingRes = await pool.query(
+      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('GAMBLE_SHOW_STATS', $2)",
+      [params.guild_id, showKey]
+    );
+
+    let showStats = true;
+    settingRes.rows.forEach((r: any) => {
+      if (r.setting_value === 'false') {
+        showStats = false;
+      }
+    });
+
+    const buttons: any[] = [
+      {
+        type: 2, // Button
+        style: 1, // Primary
+        label: `${GAME_TITLES[game_type].replace(/^[^\s]+\s/, '')}で遊ぶ`,
+        emoji: { name: GAME_EMOJIS[game_type] },
+        custom_id: GAME_CUSTOM_IDS[game_type]
+      }
+    ];
+
+    if (showStats && GAME_STATS_CUSTOM_IDS[game_type]) {
+      buttons.push({
+        type: 2, // Button
+        style: 2, // Secondary
+        label: '自分の戦績',
+        emoji: { name: '📊' },
+        custom_id: GAME_STATS_CUSTOM_IDS[game_type]
+      });
+    }
+
     const payload = {
       embeds: [
         {
@@ -74,18 +118,11 @@ export async function POST(
       components: [
         {
           type: 1, // ActionRow
-          components: [
-            {
-              type: 2, // Button
-              style: 1, // Primary
-              label: `${GAME_TITLES[game_type].replace(/^[^\s]+\s/, '')}で遊ぶ`,
-              emoji: { name: GAME_EMOJIS[game_type] },
-              custom_id: GAME_CUSTOM_IDS[game_type]
-            }
-          ]
+          components: buttons
         }
       ]
     };
+
 
     let url = `https://discord.com/api/v10/channels/${channel_id}/messages`;
     let postBody: any = payload;

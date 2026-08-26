@@ -273,14 +273,20 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
-        human_role = config.get_role_by_setting(self.bot, after.guild, "NEW_MEMBER_ROLE_ID", config.NEW_MEMBER_ROLE_NAME)
-        if human_role and human_role in after.roles and human_role not in before.roles:
+        temp_member_roles = config.get_new_member_roles(self.bot, after.guild)
+        temp_role_ids = {r.id for r in temp_member_roles}
+        has_new_role = any(r.id in temp_role_ids for r in after.roles)
+        had_new_role = any(r.id in temp_role_ids for r in before.roles)
+        if has_new_role and not had_new_role:
             # 評価期間の自動生成は cogs/evaluation.py の on_member_update が担当（重複処理を避けるためここでは行わない）
 
             # 面接官の手動入界検知
             auto_detect = config.get_setting(self.bot, "AUTO_DETECT_MANUAL_JOIN", after.guild.id)
             if str(auto_detect).lower() == "true" or auto_detect is True:
-                self.bot.loop.create_task(self.check_manual_join(before, after, human_role))
+                added_roles = [r for r in after.roles if r.id in temp_role_ids and r not in before.roles]
+                primary_role = added_roles[0] if added_roles else (temp_member_roles[0] if temp_member_roles else None)
+                if primary_role:
+                    self.bot.loop.create_task(self.check_manual_join(before, after, primary_role))
 
         # 評価落ちロール付与検知は cogs/evaluation.py の on_member_update が担当（重複処理を避けるためここでは行わない）
 

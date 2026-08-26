@@ -46,6 +46,7 @@ DEFAULT_SETTINGS = {
     "CREATE_VC_CHANNEL_ID": 123456789012345678,
     "EVAL_TIME_CATEGORY_ID": 123456789012345678,
     "NEW_MEMBER_ROLE_ID": 123456789012345678,
+    "NEW_MEMBER_ROLE_IDS": [],
     "PENDING_MEMBER_ROLE_ID": 123456789012345678,
     "INTERVIEWER_ROLE_IDS": [],
     "MAIN_SUB_MEMBER_ROLE_IDS": [],
@@ -146,6 +147,73 @@ def get_role_by_id_or_name(guild, role_id, default_name):
     if not role:
         role = discord.utils.get(guild.roles, name=default_name)
     return role
+
+def get_new_member_role_ids(bot, guild_id: int = None) -> list:
+    """
+    仮（新規）メンバーロールのID一覧を返す。
+    新設定の NEW_MEMBER_ROLE_IDS(複数選択)を優先/統合し、
+    旧設定の NEW_MEMBER_ROLE_ID(単一)も後方互換のためサポートする。
+    """
+    result = []
+    seen = set()
+    ids = get_setting(bot, "NEW_MEMBER_ROLE_IDS", guild_id)
+    if ids:
+        if isinstance(ids, (int, str)):
+            ids = [ids]
+        for rid in ids:
+            try:
+                if rid:
+                    val = int(rid)
+                    if val not in seen:
+                        result.append(val)
+                        seen.add(val)
+            except (TypeError, ValueError):
+                pass
+
+    legacy_id = get_setting(bot, "NEW_MEMBER_ROLE_ID", guild_id)
+    if legacy_id:
+        try:
+            val = int(legacy_id)
+            if val not in seen:
+                result.append(val)
+                seen.add(val)
+        except (TypeError, ValueError):
+            pass
+
+    return result
+
+def get_new_member_roles(bot, guild: discord.Guild) -> list:
+    """
+    設定された仮メンバーロールの discord.Role オブジェクト一覧を返す。
+    IDで見つからない場合はデフォルト名 (NEW_MEMBER_ROLE_NAME) でフォールバック検索する。
+    """
+    roles = []
+    seen_ids = set()
+    role_ids = get_new_member_role_ids(bot, guild.id)
+    for rid in role_ids:
+        r = guild.get_role(rid)
+        if r and r.id not in seen_ids:
+            roles.append(r)
+            seen_ids.add(r.id)
+            
+    if not roles:
+        r = discord.utils.get(guild.roles, name=NEW_MEMBER_ROLE_NAME)
+        if r:
+            roles.append(r)
+    return roles
+
+def is_new_member(bot, user: discord.Member) -> bool:
+    if isinstance(user, discord.User) or not hasattr(user, 'roles'):
+        return False
+    new_member_role_ids = get_new_member_role_ids(bot, user.guild.id)
+    if new_member_role_ids:
+        user_role_ids = [r.id for r in user.roles]
+        if any(rid in user_role_ids for rid in new_member_role_ids):
+            return True
+    user_role_names = [r.name for r in user.roles]
+    if NEW_MEMBER_ROLE_NAME in user_role_names:
+        return True
+    return False
 
 def has_event_manager_role(bot, user: discord.Member):
     event_manager_role_ids = get_setting(bot, "EVENT_MANAGER_ROLE_IDS")

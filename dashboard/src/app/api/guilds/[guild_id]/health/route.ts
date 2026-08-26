@@ -103,8 +103,15 @@ export async function GET(
     // --- 面接・入界設定 (主要ロール確認) ---
     try {
       const pendingRoleId = await getSetting(pool, guildId, 'PENDING_MEMBER_ROLE_ID');
+      let newMemberRoleIds: string[] = (await getSetting(pool, guildId, 'NEW_MEMBER_ROLE_IDS')) || [];
+      if (!Array.isArray(newMemberRoleIds)) newMemberRoleIds = [newMemberRoleIds];
+      const legacyNewRoleId = await getSetting(pool, guildId, 'NEW_MEMBER_ROLE_ID');
+      if (legacyNewRoleId && !newMemberRoleIds.includes(String(legacyNewRoleId))) {
+        newMemberRoleIds.push(String(legacyNewRoleId));
+      }
       const interviewerRoleIds: string[] = (await getSetting(pool, guildId, 'INTERVIEWER_ROLE_IDS')) || [];
       const checks: (Check | null)[] = [
+        ...newMemberRoleIds.map((rid: string) => checkRoleExists(rid, roleMap, '仮メンバーロール')),
         checkRoleExists(pendingRoleId, roleMap, '面接中(仮入界)ロール'),
         ...interviewerRoleIds.map((rid: string) => checkRoleExists(rid, roleMap, '面接官ロール')),
       ];

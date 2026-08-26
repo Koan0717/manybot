@@ -29,7 +29,7 @@ function normalizeImageUrlForPreview(url: string): string {
 
 
 const ROLE_SETTINGS = [
-  { key: 'NEW_MEMBER_ROLE_ID', label: '仮（新規）メンバーロール', multiple: false },
+  { key: 'NEW_MEMBER_ROLE_IDS', label: '仮（新規）メンバーロール', multiple: true },
   { key: 'DOWNGRADE_ROLE_ID', label: '評価落ちロール', multiple: false },
   { key: 'PENDING_MEMBER_ROLE_ID', label: '入界待機者ロール', multiple: false },
   { key: 'EMBLEM_MANAGER_ROLE_ID', label: 'スタンプ統括ロール', multiple: false },
@@ -85,6 +85,10 @@ export default function GeneralSettings({ params }: { params: { guild_id: string
           } else if (v) {
             formattedSettings[k] = String(v);
           }
+        }
+        // NEW_MEMBER_ROLE_ID から NEW_MEMBER_ROLE_IDS への後方互換マイグレーション
+        if (formattedSettings.NEW_MEMBER_ROLE_ID && (!formattedSettings.NEW_MEMBER_ROLE_IDS || formattedSettings.NEW_MEMBER_ROLE_IDS.length === 0)) {
+          formattedSettings.NEW_MEMBER_ROLE_IDS = [formattedSettings.NEW_MEMBER_ROLE_ID];
         }
         setSettings(formattedSettings);
       }
