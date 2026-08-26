@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Info,
   CheckCircle2,
+  Coins,
 } from 'lucide-react';
 
 interface DoumoriSettings {
@@ -27,6 +28,7 @@ interface DoumoriSettings {
   ticket_required_minutes?: number;
   ticket_chat_activity_seconds?: number;
   ticket_chat_cooldown_seconds?: number;
+  miles_per_ticket?: number;
   [key: string]: any;
 }
 
@@ -47,6 +49,7 @@ export default function DoumoriTicketsSettingsPage({
     ticket_required_minutes: 60,
     ticket_chat_activity_seconds: 60,
     ticket_chat_cooldown_seconds: 60,
+    miles_per_ticket: 100,
   });
 
   const [channels, setChannels] = useState<any[]>([]);
@@ -514,6 +517,54 @@ export default function DoumoriTicketsSettingsPage({
             <span className="text-[10px] text-zinc-500 block mt-1">
               デフォルト: **60 秒** (スパム防止間隔)
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. マイル両替＆チケット購入設定 */}
+      <div className="mecha-corners mecha-scan-wrap mecha-grid-bg bg-neutral-900/90 border border-purple-900/40 mecha-clip p-6 shadow-xl space-y-5">
+        <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+          <div className="flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-lg flex items-center justify-center font-mecha font-black text-sm bg-purple-600/30 text-purple-300 border border-purple-500/40">
+              5
+            </span>
+            <div>
+              <h2 className="font-mecha font-bold text-white text-base flex items-center gap-2">
+                両替コマンド＆チケット購入レート設定
+              </h2>
+              <span className="font-tech text-xs text-zinc-400">
+                `/両替` コマンドやショップで、マイルポイントを図鑑チケットに両替するレートを設定します。
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 font-tech text-sm">
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1.5 flex items-center gap-1.5">
+              <Coins className="w-3.5 h-3.5 text-purple-400" />
+              チケット1枚あたりの必要マイル数 (pt)
+            </label>
+            <input
+              type="number"
+              min={1}
+              step={10}
+              value={settings.miles_per_ticket ?? 100}
+              onChange={(e) => updateField('miles_per_ticket', parseInt(e.target.value, 10) || 100)}
+              className="w-full bg-black/70 border border-zinc-700 mecha-clip-sm px-3 py-2 text-white font-mono focus:border-purple-400 outline-none"
+            />
+            <span className="text-[10px] text-zinc-500 block mt-1">
+              デフォルト: **100 pt**（100マイル ➔ 🎫 チケット1枚）
+            </span>
+          </div>
+
+          <div className="p-3 bg-black/50 border border-zinc-800 mecha-clip-sm flex flex-col justify-center">
+            <span className="text-xs text-purple-300 font-bold mb-1">
+              💡 両替仕様について
+            </span>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              両替は <strong>100マイル ➔ チケット1枚</strong> に統一されています（ベルとの両替は行われません）。
+            </p>
           </div>
         </div>
       </div>

@@ -13,11 +13,12 @@ const DEFAULT_SETTINGS = {
   ticket_notify_dm: false,
   ticket_notify_message: '🎉 **【浮上特典】** {user} さんがアクティビティを達成し、**図鑑チケット ×{tickets}** を獲得しました！（所持数: {total}枚）',
 
-  // 2. 🏪 ショップ (/ショップ)
+  // 2. 🏪 ショップ＆両替 (/ショップ, /両替)
   miles_per_ticket: 100,
   fishing_rod_price: 1,
   bug_net_price: 1,
   shop_discount_bulk: true,
+  allow_miles_to_ticket: true,
 
   // 3. 🎣 採集 (/釣り, /虫捕り)
   shiny_chance_percent: 0.5,
@@ -41,11 +42,7 @@ const DEFAULT_SETTINGS = {
   completion_auto_award: true,
   completion_announce_channel_id: '',
 
-  // 6. 🪙 鯖内通貨 (ベル) 連携 (/両替, /売却)
-  manybot_per_ticket: 500,
-  allow_miles_to_ticket: true,
-  allow_zeny_to_ticket: true,
-  allow_ticket_to_zeny: true,
+  // 6. 🪙 鯖内通貨 (ベル) 生き物売却 (/売却)
   sell_price_common: 100,
   sell_price_uncommon: 300,
   sell_price_rare: 800,
@@ -487,7 +484,7 @@ export async function POST(
           },
           {
             name: '📖 🔀 💰 図鑑・両替・売却',
-            value: '・**【魚図鑑】/【虫図鑑】**: 各図鑑と完成率を確認\n・**【両替】**: マイル/ベル ⇄ 図鑑チケット の相互両替\n・**【ダブり売却】**: 重複した生き物をまとめてベルに換金',
+            value: '・**【魚図鑑】/【虫図鑑】**: 各図鑑と完成率を確認\n・**【両替】**: マイルを図鑑チケットに両替 (100pt ➔ 1枚)\n・**【ダブり売却】**: 重複した生き物をまとめてベルに換金',
             inline: false,
           },
           {
