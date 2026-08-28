@@ -177,14 +177,14 @@ class EmblemSelectView(discord.ui.View):
         if not options:
             self.add_item(discord.ui.Button(label="現在、依頼可能な製作者がいません（基本設定でロールを指定してください）", disabled=True))
         else:
-            select = discord.ui.Select(
+            self.master_select = discord.ui.Select(
                 placeholder="担当する製作者を選択してください...",
                 options=options[:25]
             )
-            select.callback = self.select_callback
-            self.add_item(select)
+            self.master_select.callback = self._select_callback
+            self.add_item(self.master_select)
 
-    async def select_callback(self, interaction: discord.Interaction):
+    async def _select_callback(self, interaction: discord.Interaction):
         try:
             user_id = int(interaction.data['values'][0])
             target_member = interaction.guild.get_member(user_id)
@@ -213,6 +213,7 @@ class EmblemRequestPanelView(discord.ui.View):
         except Exception as e:
             if not interaction.response.is_done():
                 await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
+
 
 # --- 告解室 ---
 class ConfessionRequestModal(discord.ui.Modal, title='告解・相談依頼'):
@@ -313,20 +314,21 @@ class ConfessionSelectView(discord.ui.View):
         if not options:
             self.add_item(discord.ui.Button(label="現在、対応可能な司祭がいません", disabled=True, custom_id="no_priests_btn"))
         else:
-            select = discord.ui.Select(
+            self.priest_select = discord.ui.Select(
                 placeholder="担当する司祭を選択してください...",
                 options=options[:25]
             )
-            select.callback = self.select_callback
-            self.add_item(select)
+            self.priest_select.callback = self._select_callback
+            self.add_item(self.priest_select)
 
-    async def select_callback(self, interaction: discord.Interaction):
+    async def _select_callback(self, interaction: discord.Interaction):
         user_id = int(interaction.data['values'][0])
         target_member = interaction.guild.get_member(user_id)
         if not target_member:
             await interaction.response.send_message("メンバーが見つかりませんでした。", ephemeral=True)
             return
         await interaction.response.send_modal(ConfessionRequestModal(target_member))
+
 
 class ConfessionRequestPanelView(discord.ui.View):
     def __init__(self):

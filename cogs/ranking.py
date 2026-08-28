@@ -10,12 +10,8 @@ class Ranking(commands.Cog):
         self.bot = bot
         self.vc_reward_loop.start()
 
-    async def cog_load(self):
-        self.bot.tree.add_command(self.rank_group)
-
     async def cog_unload(self):
         self.vc_reward_loop.cancel()
-        self.bot.tree.remove_command("rank")
 
     # --- スラッシュコマンド ---
     rank_group = app_commands.Group(name="rank", description="ランク（レベル）関連のコマンド")
