@@ -216,6 +216,30 @@ export async function ensureRoomPanelsSchema(pool: any) {
 }
 
 /**
+ * role_salary_settings テーブルの全カラムを保証する
+ */
+export async function ensureRoleSalarySettingsSchema(pool: any) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS role_salary_settings (
+        guild_id BIGINT PRIMARY KEY,
+        payday INT NOT NULL DEFAULT 1,
+        entries JSONB NOT NULL DEFAULT '[]'
+      )
+    `);
+    const cols = [
+      `ALTER TABLE role_salary_settings ADD COLUMN IF NOT EXISTS payday INT NOT NULL DEFAULT 1`,
+      `ALTER TABLE role_salary_settings ADD COLUMN IF NOT EXISTS entries JSONB NOT NULL DEFAULT '[]'`,
+    ];
+    for (const sql of cols) {
+      try { await pool.query(sql); } catch {}
+    }
+  } catch (e) {
+    console.error('Failed to ensure role_salary_settings schema:', e);
+  }
+}
+
+/**
  * すべての基本スキーマを一括保証する
  */
 export async function ensureAllSchemas(pool: any) {
@@ -226,5 +250,6 @@ export async function ensureAllSchemas(pool: any) {
     ensureAntigriefSettingsSchema(pool),
     ensureVcCoinsSettingsSchema(pool),
     ensureRoomPanelsSchema(pool),
+    ensureRoleSalarySettingsSchema(pool),
   ]);
 }
