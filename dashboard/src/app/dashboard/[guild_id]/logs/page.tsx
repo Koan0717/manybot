@@ -19,6 +19,7 @@ const LOG_TYPES = [
   { id: 'message_delete', label: 'メッセージの削除' },
   { id: 'vc_join_leave', label: 'VCの入退室' },
   { id: 'currency', label: '経済システム・通貨変動' },
+  { id: 'role_salary', label: '役職給与の自動支払い・即時払い' },
   { id: 'shop', label: 'ショップアイテムの購入・使用' },
   { id: 'shop_extend', label: '評価期間延長の購入' },
   { id: 'gambling', label: '賭博・カジノ機能の利用' },

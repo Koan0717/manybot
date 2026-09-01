@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { Banknote, Plus, Trash2, Coins, Zap } from 'lucide-react';
+import { Banknote, Plus, Trash2, Coins, Zap, BellRing } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import RoleSelect from '@/components/RoleSelect';
 
@@ -25,7 +25,8 @@ export default function RoleSalaryPage({ params }: { params: { guild_id: string 
   const [roles, setRoles] = useState<DiscordRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [payingNow, setPayingNow] = useState<string | null>(null); // role_id being paid
+  const [payingNow, setPayingNow] = useState<string | null>(null); // role_id being paid, or 'all'
+  const [payingAll, setPayingAll] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -94,6 +95,41 @@ export default function RoleSalaryPage({ params }: { params: { guild_id: string 
     }
   };
 
+  /** 設定されている全エントリを順番に即時払い */
+  const handlePayAll = async () => {
+    const validEntries = entries.filter(e => e.role_id && e.amount > 0);
+    if (validEntries.length === 0) {
+      toast.error('有効な給与エントリがありません');
+      return;
+    }
+    setPayingAll(true);
+    let successCount = 0;
+    let errorCount = 0;
+    for (const entry of validEntries) {
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/role-salary`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'pay_now', role_id: entry.role_id, amount: entry.amount }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          successCount++;
+        } else {
+          errorCount++;
+        }
+      } catch {
+        errorCount++;
+      }
+    }
+    setPayingAll(false);
+    if (errorCount === 0) {
+      toast.success(`全 ${successCount} 役職への即時払いをリクエストしました`);
+    } else {
+      toast.error(`${successCount} 件成功、${errorCount} 件失敗しました`);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -118,6 +154,8 @@ export default function RoleSalaryPage({ params }: { params: { guild_id: string 
   if (loading) {
     return <div className="text-zinc-400 p-8">読み込み中...</div>;
   }
+
+  const validEntryCount = entries.filter(e => e.role_id && e.amount > 0).length;
 
   return (
     <div className="max-w-4xl mx-auto pb-20 space-y-6">
@@ -155,24 +193,38 @@ export default function RoleSalaryPage({ params }: { params: { guild_id: string 
 
       {/* 役職給与エントリ一覧 */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-white flex items-center gap-2">
               <Banknote className="w-5 h-5 text-green-400" />
               役職給与リスト
             </h2>
             <p className="text-sm text-zinc-400 mt-1">
-              ロールを選択し、支給するコイン数を設定してください。「即時払い」で今すぐ支給することもできます。
+              ロールを選択し、支給するコイン数を設定してください。
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleAddEntry}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            追加
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* 全役職即時払いボタン */}
+            <button
+              type="button"
+              onClick={handlePayAll}
+              disabled={payingAll || payingNow !== null || validEntryCount === 0}
+              className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg transition-colors whitespace-nowrap"
+              title={`設定されている全 ${validEntryCount} 役職に今すぐ給与を支給します`}
+            >
+              <BellRing className="w-4 h-4" />
+              {payingAll ? '処理中...' : `全役職に即時払い (${validEntryCount})`}
+            </button>
+            {/* 追加ボタン */}
+            <button
+              type="button"
+              onClick={handleAddEntry}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              追加
+            </button>
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -216,11 +268,11 @@ export default function RoleSalaryPage({ params }: { params: { guild_id: string 
                 </div>
               </div>
 
-              {/* 即時払いボタン */}
+              {/* 即時払いボタン（個別） */}
               <button
                 type="button"
                 onClick={() => handlePayNow(index)}
-                disabled={payingNow === entry.role_id || !entry.role_id || entry.amount <= 0}
+                disabled={payingAll || payingNow === entry.role_id || !entry.role_id || entry.amount <= 0}
                 className="flex items-center gap-1.5 px-4 py-2 bg-green-700 hover:bg-green-600 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg transition-colors whitespace-nowrap"
                 title="このロールのメンバーに今すぐ給与を支給します"
               >
