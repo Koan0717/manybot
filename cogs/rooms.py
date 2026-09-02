@@ -391,6 +391,34 @@ class InnControlView(discord.ui.View):
         if not await check_room_owner(interaction): return
         await interaction.response.send_modal(RenameModal())
 
+    @discord.ui.button(label="画面共有を許可", style=discord.ButtonStyle.secondary, emoji="🖥", custom_id="inn_stream_allow_btn", row=1)
+    async def stream_allow_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await check_room_owner(interaction): return
+        channel = interaction.channel
+        if not isinstance(channel, discord.VoiceChannel):
+            return await interaction.response.send_message("ボイスチャンネルでのみ使用できます。", ephemeral=True)
+        try:
+            overwrite = channel.overwrites_for(channel.guild.default_role)
+            overwrite.stream = True
+            await channel.set_permissions(channel.guild.default_role, overwrite=overwrite)
+            await interaction.response.send_message("✅ 画面共有を **許可** しました。", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"エラー: {e}", ephemeral=True)
+
+    @discord.ui.button(label="画面共有を禁止", style=discord.ButtonStyle.secondary, emoji="🚫", custom_id="inn_stream_deny_btn", row=2)
+    async def stream_deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await check_room_owner(interaction): return
+        channel = interaction.channel
+        if not isinstance(channel, discord.VoiceChannel):
+            return await interaction.response.send_message("ボイスチャンネルでのみ使用できます。", ephemeral=True)
+        try:
+            overwrite = channel.overwrites_for(channel.guild.default_role)
+            overwrite.stream = False
+            await channel.set_permissions(channel.guild.default_role, overwrite=overwrite)
+            await interaction.response.send_message("🚫 画面共有を **禁止** しました。", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"エラー: {e}", ephemeral=True)
+
 class RoomControlView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -417,6 +445,35 @@ class RoomControlView(discord.ui.View):
     async def manage_button(self, interaction, button):
         if not await check_room_owner(interaction): return
         await interaction.response.send_message("管理するユーザーを選択し、操作を選んでください。", view=AccessManageView(interaction.channel), ephemeral=True)
+
+    @discord.ui.button(label="画面共有を許可", style=discord.ButtonStyle.secondary, emoji="🖥", custom_id="persistent_stream_allow_btn", row=2)
+    async def stream_allow_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await check_room_owner(interaction): return
+        channel = interaction.channel
+        if not isinstance(channel, discord.VoiceChannel):
+            return await interaction.response.send_message("ボイスチャンネルでのみ使用できます。", ephemeral=True)
+        try:
+            overwrite = channel.overwrites_for(channel.guild.default_role)
+            overwrite.stream = True
+            await channel.set_permissions(channel.guild.default_role, overwrite=overwrite)
+            await interaction.response.send_message("✅ 画面共有を **許可** しました。", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"エラー: {e}", ephemeral=True)
+
+    @discord.ui.button(label="画面共有を禁止", style=discord.ButtonStyle.secondary, emoji="🚫", custom_id="persistent_stream_deny_btn", row=3)
+    async def stream_deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not await check_room_owner(interaction): return
+        channel = interaction.channel
+        if not isinstance(channel, discord.VoiceChannel):
+            return await interaction.response.send_message("ボイスチャンネルでのみ使用できます。", ephemeral=True)
+        try:
+            overwrite = channel.overwrites_for(channel.guild.default_role)
+            overwrite.stream = False
+            await channel.set_permissions(channel.guild.default_role, overwrite=overwrite)
+            await interaction.response.send_message("🚫 画面共有を **禁止** しました。", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"エラー: {e}", ephemeral=True)
+
 
 class CustomRoomControlView(discord.ui.View):
     def __init__(self):
@@ -587,15 +644,41 @@ async def process_room_purchase(bot, interaction: discord.Interaction, room_type
 async def _process_room_purchase_inner(bot, interaction: discord.Interaction, room_type: str, duration: int, panel_id: str = None):
     await interaction.response.defer(ephemeral=True)
     owner_id = interaction.user.id
-    
-    if room_type in ["宿", "高級宿"] and await database.has_room_type(owner_id, ["宿", "高級宿"]):
-        return await interaction.edit_original_response(content="既に「宿」を持っています！(1人1つまで)")
-    if room_type == "カスタムVC" and await database.has_room_type(owner_id, ["カスタムVC"]):
-        return await interaction.edit_original_response(content="既に「カスタムVC」を持っています！")
-    if room_type == "ゲームVC" and await database.has_room_type(owner_id, ["ゲームVC"]):
-        return await interaction.edit_original_response(content="既に「ゲームVC」を持っています！(1人1つまで)")
-    if room_type == "賭博VC" and await database.has_room_type(owner_id, ["賭博VC"]):
-        return await interaction.edit_original_response(content="既に「賭博VC」を持っています！(1人1つまで)")
+
+    # DBに宿レコードが残っていてもチャンネルが存在しない場合は古いレコードを削除して続行
+    async def _clean_stale_rooms(types: list):
+        """DBに残っているが実際にはチャンネルが存在しない古いレコードを削除する"""
+        try:
+            pool = await database.get_pool()
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    'SELECT channel_id FROM rooms WHERE owner_id = $1 AND room_type = ANY($2)',
+                    owner_id, types
+                )
+            for row in rows:
+                ch = bot.get_channel(row["channel_id"])
+                if ch is None:
+                    # チャンネルが存在しないのでDBから削除
+                    await database.remove_room(row["channel_id"])
+        except Exception as e:
+            print(f"[RoomPurchase] stale room cleanup error: {e}")
+
+    if room_type in ["宿", "高級宿"]:
+        await _clean_stale_rooms(["宿", "高級宿"])
+        if await database.has_room_type(owner_id, ["宿", "高級宿"]):
+            return await interaction.edit_original_response(content="既に「宿」を持っています！(1人1つまで)")
+    if room_type == "カスタムVC":
+        await _clean_stale_rooms(["カスタムVC"])
+        if await database.has_room_type(owner_id, ["カスタムVC"]):
+            return await interaction.edit_original_response(content="既に「カスタムVC」を持っています！")
+    if room_type == "ゲームVC":
+        await _clean_stale_rooms(["ゲームVC"])
+        if await database.has_room_type(owner_id, ["ゲームVC"]):
+            return await interaction.edit_original_response(content="既に「ゲームVC」を持っています！(1人1つまで)")
+    if room_type == "賭博VC":
+        await _clean_stale_rooms(["賭博VC"])
+        if await database.has_room_type(owner_id, ["賭博VC"]):
+            return await interaction.edit_original_response(content="既に「賭博VC」を持っています！(1人1つまで)")
     
     if room_type == "高級宿":
         price = get_room_price(bot, interaction.user, room_type, duration)
@@ -1317,10 +1400,27 @@ class Rooms(commands.Cog):
             if len(humans) == 0:
                 room_data = await database.get_room(before.channel.id)
                 if room_data:
-                    if room_data["room_type"] in ["一時部屋", "宿", "ゲームVC", "賭博VC"]:
-                        # 期限設定あり(有料/無期限)は退出しても削除しない
-                        if room_data["expire_at"] and room_data["room_type"] in ["宿", "ゲームVC", "賭博VC"]:
-                            pass # 有料の部屋は退出しても保持される
+                    if room_data["room_type"] in ["一時部屋", "宿", "高級宿", "ゲームVC", "賭博VC"]:
+                        if room_data["room_type"] in ["宿", "高級宿"] and room_data["expire_at"]:
+                            # 期限が365日以上先 = 無料・無制限宿、それ以外 = 有料宿(12h/24h)
+                            expire_naive = room_data["expire_at"].replace(tzinfo=None) if room_data["expire_at"].tzinfo else room_data["expire_at"]
+                            is_unlimited = (expire_naive - database.get_now_naive()).total_seconds() > 365 * 24 * 3600
+                            if is_unlimited:
+                                # 無料・無制限宿: 本メン・準メンオーナーなら無人時削除
+                                owner_member = before.channel.guild.get_member(room_data["owner_id"])
+                                owner_is_main_sub = owner_member is not None and is_main_or_sub_member(self.bot, owner_member)
+                                if owner_is_main_sub:
+                                    try:
+                                        print(f"[Auto-VC] Deleting empty unlimited inn (main/sub owner, {room_data['room_type']}): {before.channel.name}")
+                                        await before.channel.delete()
+                                        await database.remove_room(before.channel.id)
+                                    except Exception as del_e:
+                                        print(f"[Auto-VC] Delete error: {del_e}")
+                                # 仮メンの無制限宿はタイマー切れまで保持（実質削除されない）
+                            else:
+                                pass  # 有料宿(12h/24h)は退出しても保持、タイマー切れ時のみ削除
+                        elif room_data["expire_at"] and room_data["room_type"] in ["ゲームVC", "賭博VC"]:
+                            pass # ゲームVC・賭博VCは退出しても保持
                         else:
                             try:
                                 print(f"[Auto-VC] Deleting empty room ({room_data['room_type']}): {before.channel.name}")
@@ -1330,6 +1430,7 @@ class Rooms(commands.Cog):
                                 print(f"[Auto-VC] Delete error: {del_e}")
                     elif room_data["room_type"] == "カスタムVC":
                         self.bot.empty_custom_vcs[before.channel.id] = now_aware
+
 
 async def setup(bot):
     await bot.add_cog(Rooms(bot))
