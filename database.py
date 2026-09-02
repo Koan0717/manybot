@@ -4368,6 +4368,11 @@ async def get_all_interviewer_stats(guild_id: int):
 async def update_available_commands(commands_to_sync: list):
     p = await get_master_pool()
     async with p.acquire() as conn:
+        valid_names = [cmd['name'] for cmd in commands_to_sync]
+        if valid_names:
+            await conn.execute('''
+                DELETE FROM available_commands WHERE NOT (command_name = ANY($1::text[]))
+            ''', valid_names)
         for cmd in commands_to_sync:
             await conn.execute('''
                 INSERT INTO available_commands (command_name, description, category)
