@@ -28,7 +28,7 @@ class Economy(commands.Cog):
         amount="1人あたりの送金額"
     )
     async def pay(self, interaction: discord.Interaction, targets: str, amount: int):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
 
         if amount <= 0:
             await interaction.followup.send("1以上の金額を指定してください。", ephemeral=True)
