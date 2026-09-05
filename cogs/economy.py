@@ -22,33 +22,85 @@ class Economy(commands.Cog):
         else:
             await interaction.followup.send(f"{target_user.display_name} の所持金は **{bal} {currency_name}** です。", ephemeral=True)
 
-    @app_commands.command(name="pay", description="他のユーザーに通貨を送ります")
-    async def pay(self, interaction: discord.Interaction, target: discord.Member, amount: int):
+    @app_commands.command(name="pay", description="1人または複数のユーザーに通貨を送ります")
+    @app_commands.describe(
+        targets="送金先のユーザー（メンションまたはIDをスペース区切りで複数指定可能）",
+        amount="1人あたりの送金額"
+    )
+    async def pay(self, interaction: discord.Interaction, targets: str, amount: int):
+        await interaction.response.defer(ephemeral=True)
+
         if amount <= 0:
-            await interaction.response.send_message("1以上の金額を指定してください。", ephemeral=True)
+            await interaction.followup.send("1以上の金額を指定してください。", ephemeral=True)
             return
-        if target.id == interaction.user.id:
-            await interaction.response.send_message("自分自身には送金できません。", ephemeral=True)
-            return
-            
-        success = await database.transfer_balance(interaction.guild.id, interaction.user.id, target.id, amount)
-        if not success:
-            await interaction.response.send_message("残高が不足しています。", ephemeral=True)
-            return
-            
+
+        import re
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
-        await interaction.response.send_message(f"💵 {target.mention} に **{amount} {currency_name}** を送金しました。")
+
+        # メンションまたはIDからユーザーIDを抽出し重複排除
+        raw_ids = set(re.findall(r'\d{17,19}', targets))
+        if not raw_ids:
+            await interaction.followup.send("送金先のユーザーが見つかりませんでした。メンションまたはIDで指定してください。", ephemeral=True)
+            return
+
+        target_members = []
+        not_found = []
+        for uid_str in raw_ids:
+            uid = int(uid_str)
+            if uid == interaction.user.id:
+                continue  # 自分自身はスキップ
+            member = interaction.guild.get_member(uid)
+            if member:
+                target_members.append(member)
+            else:
+                not_found.append(uid_str)
+
+        if not target_members:
+            await interaction.followup.send("送金先のユーザーがサーバー内に見つかりませんでした。", ephemeral=True)
+            return
+
+        success_members = []
+        failed_members = []
+        for member in target_members:
+            ok = await database.transfer_balance(interaction.guild.id, interaction.user.id, member.id, amount)
+            if ok:
+                success_members.append(member)
+            else:
+                failed_members.append(member)
+
+        if not success_members:
+            await interaction.followup.send("残高が不足しているため送金できませんでした。", ephemeral=True)
+            return
+
+        mentions_str = " ".join(m.mention for m in success_members)
+        if len(success_members) == 1:
+            msg = f"💵 {mentions_str} に **{amount:,} {currency_name}** を送金しました。"
+        else:
+            msg = f"💵 {mentions_str} の計 **{len(success_members)}名** に **{amount:,} {currency_name}**（合計 **{amount * len(success_members):,} {currency_name}**）を送金しました。"
+
+        if failed_members:
+            msg += f"\n⚠️ 残高不足により {len(failed_members)}名 への送金は失敗しました。"
+        if not_found:
+            msg += f"\n⚠️ サーバーに存在しないため {len(not_found)}名 はスキップしました。"
+
+        if len(msg) > 2000:
+            msg = msg[:1900] + "\n... (省略)"
+        await interaction.followup.send(msg)
 
         # 通貨ログ送信
         embed = discord.Embed(
             title="💸 送金",
-            description="ユーザー間で送金が行われました。",
+            description=f"ユーザー間で送金が行われました。",
             color=discord.Color.blue(),
             timestamp=discord.utils.utcnow()
         )
-        embed.add_field(name="送金元", value=f"{interaction.user.mention} ({interaction.user.id})", inline=True)
-        embed.add_field(name="送金先", value=f"{target.mention} ({target.id})", inline=True)
-        embed.add_field(name="金額", value=f"{amount:,} {currency_name}", inline=True)
+        embed.add_field(name="送金元", value=f"{interaction.user.mention} ({interaction.user.id})", inline=False)
+        targets_val = "\n".join(f"{m.mention} ({m.id})" for m in success_members)
+        if len(targets_val) > 1024:
+            targets_val = targets_val[:1021] + "..."
+        embed.add_field(name=f"送金先 ({len(success_members)}名)", value=targets_val, inline=False)
+        embed.add_field(name="1人あたりの金額", value=f"{amount:,} {currency_name}", inline=True)
+        embed.add_field(name="合計金額", value=f"{amount * len(success_members):,} {currency_name}", inline=True)
         await send_log(self.bot, interaction.guild, "currency", embed)
 
     @app_commands.command(name="初期発行", description="指定したユーザー達、またはロール全員に初期発行額の通貨を付与します。")

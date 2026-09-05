@@ -646,10 +646,12 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
     owner_id = interaction.user.id
 
     # DBに宿レコードが残っていてもチャンネルが存在しない場合は古いレコードを削除して続行
+    guild_id = interaction.guild.id
+
     async def _clean_stale_rooms(types: list):
         """DBに残っているが実際にはチャンネルが存在しない古いレコードを削除する"""
         try:
-            pool = await database.get_pool()
+            pool = await database.get_pool(guild_id)
             async with pool.acquire() as conn:
                 rows = await conn.fetch(
                     'SELECT channel_id FROM rooms WHERE owner_id = $1 AND room_type = ANY($2)',
@@ -658,6 +660,11 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
             for row in rows:
                 ch = bot.get_channel(row["channel_id"])
                 if ch is None:
+                    try:
+                        ch = await bot.fetch_channel(row["channel_id"])
+                    except Exception:
+                        ch = None
+                if ch is None:
                     # チャンネルが存在しないのでDBから削除
                     await database.remove_room(row["channel_id"])
         except Exception as e:
@@ -665,19 +672,19 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
 
     if room_type in ["宿", "高級宿"]:
         await _clean_stale_rooms(["宿", "高級宿"])
-        if await database.has_room_type(owner_id, ["宿", "高級宿"]):
+        if await database.has_room_type(owner_id, ["宿", "高級宿"], guild_id):
             return await interaction.edit_original_response(content="既に「宿」を持っています！(1人1つまで)")
     if room_type == "カスタムVC":
         await _clean_stale_rooms(["カスタムVC"])
-        if await database.has_room_type(owner_id, ["カスタムVC"]):
+        if await database.has_room_type(owner_id, ["カスタムVC"], guild_id):
             return await interaction.edit_original_response(content="既に「カスタムVC」を持っています！")
     if room_type == "ゲームVC":
         await _clean_stale_rooms(["ゲームVC"])
-        if await database.has_room_type(owner_id, ["ゲームVC"]):
+        if await database.has_room_type(owner_id, ["ゲームVC"], guild_id):
             return await interaction.edit_original_response(content="既に「ゲームVC」を持っています！(1人1つまで)")
     if room_type == "賭博VC":
         await _clean_stale_rooms(["賭博VC"])
-        if await database.has_room_type(owner_id, ["賭博VC"]):
+        if await database.has_room_type(owner_id, ["賭博VC"], guild_id):
             return await interaction.edit_original_response(content="既に「賭博VC」を持っています！(1人1つまで)")
     
     if room_type == "高級宿":
@@ -797,7 +804,7 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
             else:
                 expire_at = database.get_now_naive() + datetime.timedelta(hours=duration)
                 
-            await database.add_room(channel.id, owner_id, room_type, expire_at)
+            await database.add_room(channel.id, owner_id, room_type, expire_at, guild_id=guild_id)
             await interaction.edit_original_response(content=f"✅ {channel.mention} を作成しました！", view=None)
             
             view = CustomRoomControlView() if room_type=="カスタムVC" else (RoomControlView() if room_type=="高級宿" else InnControlView())
@@ -1239,6 +1246,12 @@ class Rooms(commands.Cog):
         if after.channel is not None:
             if after.channel.id in self.bot.auto_vc_triggers:
                 trigger_id = after.channel.id
+                if not hasattr(self.bot, "creating_auto_vcs"):
+                    self.bot.creating_auto_vcs = set()
+                if member.id in self.bot.creating_auto_vcs:
+                    return
+                self.bot.creating_auto_vcs.add(member.id)
+
                 # トリガーチャンネルごとに排他ロックを取得し、同時入室によるVC名の
                 # 採番衝突・二重作成・他人のVCへの誤流用を防ぐ
                 if not hasattr(self.bot, "auto_vc_locks"):
@@ -1251,7 +1264,7 @@ class Rooms(commands.Cog):
                         if not (member.voice and member.voice.channel and member.voice.channel.id == trigger_id):
                             return
 
-                        pool = await database.get_pool()
+                        pool = await database.get_pool(member.guild.id)
                         async with pool.acquire() as conn:
                             existing_room = await conn.fetchrow('SELECT channel_id FROM rooms WHERE owner_id = $1 AND room_type = $2 AND trigger_channel_id = $3', member.id, "一時部屋", trigger_id)
 
@@ -1323,7 +1336,7 @@ class Rooms(commands.Cog):
 
                         now_naive = database.get_now_naive()
                         far_future = now_naive + datetime.timedelta(days=36500)
-                        await database.add_room(new_channel.id, member.id, "一時部屋", far_future, trigger_channel_id=trigger_id)
+                        await database.add_room(new_channel.id, member.id, "一時部屋", far_future, trigger_channel_id=trigger_id, guild_id=member.guild.id)
                         print(f"[Auto-VC] Created room {new_channel.id} and registered in DB")
 
                     # --- ここからはロック外(他ユーザーの入室処理をブロックしない) ---
@@ -1392,44 +1405,57 @@ class Rooms(commands.Cog):
                     self.bot.loop.create_task(delayed_move())
                 except Exception as e:
                     print(f"[Auto-VC] Error: {e}")
+                finally:
+                    if hasattr(self.bot, "creating_auto_vcs"):
+                        self.bot.creating_auto_vcs.discard(member.id)
 
             self.bot.empty_custom_vcs.pop(after.channel.id, None)
         
         if before.channel is not None and (after.channel is None or before.channel != after.channel):
             humans = [m for m in before.channel.members if not m.bot]
             if len(humans) == 0:
-                room_data = await database.get_room(before.channel.id)
+                room_data = await database.get_room(before.channel.id, before.channel.guild.id)
                 if room_data:
-                    if room_data["room_type"] in ["一時部屋", "宿", "高級宿", "ゲームVC", "賭博VC"]:
-                        if room_data["room_type"] in ["宿", "高級宿"] and room_data["expire_at"]:
-                            # 期限が365日以上先 = 無料・無制限宿、それ以外 = 有料宿(12h/24h)
-                            expire_naive = room_data["expire_at"].replace(tzinfo=None) if room_data["expire_at"].tzinfo else room_data["expire_at"]
-                            is_unlimited = (expire_naive - database.get_now_naive()).total_seconds() > 365 * 24 * 3600
-                            if is_unlimited:
-                                # 無料・無制限宿: 本メン・準メンオーナーなら無人時削除
-                                owner_member = before.channel.guild.get_member(room_data["owner_id"])
-                                owner_is_main_sub = owner_member is not None and is_main_or_sub_member(self.bot, owner_member)
-                                if owner_is_main_sub:
-                                    try:
-                                        print(f"[Auto-VC] Deleting empty unlimited inn (main/sub owner, {room_data['room_type']}): {before.channel.name}")
-                                        await before.channel.delete()
-                                        await database.remove_room(before.channel.id)
-                                    except Exception as del_e:
-                                        print(f"[Auto-VC] Delete error: {del_e}")
-                                # 仮メンの無制限宿はタイマー切れまで保持（実質削除されない）
-                            else:
-                                pass  # 有料宿(12h/24h)は退出しても保持、タイマー切れ時のみ削除
-                        elif room_data["expire_at"] and room_data["room_type"] in ["ゲームVC", "賭博VC"]:
-                            pass # ゲームVC・賭博VCは退出しても保持
-                        else:
+                    rtype = room_data.get("room_type")
+                    if rtype == "高級宿":
+                        # 高級宿は退出しても保持（タイマー切れで削除）
+                        pass
+                    elif rtype == "宿":
+                        # 一般宿: 本メン・準メンオーナー、無料設定、無料対象者、または無制限宿なら無人時削除
+                        guild = before.channel.guild
+                        owner_id = room_data.get("owner_id")
+                        owner_member = guild.get_member(owner_id) if guild else None
+                        is_main_sub = owner_member is not None and is_main_or_sub_member(self.bot, owner_member)
+                        is_free_setting = (
+                            get_setting(self.bot, "ENABLE_FREE_INN_MAIN_SUB", guild.id if guild else None) or
+                            get_setting(self.bot, "ENABLE_FREE_INN_MAIN_SUB")
+                        )
+                        is_free_member = owner_member is not None and is_free_inn_member(self.bot, owner_member)
+
+                        expire_naive = room_data["expire_at"].replace(tzinfo=None) if room_data.get("expire_at") and room_data["expire_at"].tzinfo else room_data.get("expire_at")
+                        is_unlimited = expire_naive and (expire_naive - database.get_now_naive()).total_seconds() > 365 * 24 * 3600
+
+                        if is_main_sub or is_free_setting or is_free_member or is_unlimited:
                             try:
-                                print(f"[Auto-VC] Deleting empty room ({room_data['room_type']}): {before.channel.name}")
+                                print(f"[Auto-VC] Deleting empty inn (owner={owner_id}, main_sub={is_main_sub}): {before.channel.name}")
                                 await before.channel.delete()
                                 await database.remove_room(before.channel.id)
                             except Exception as del_e:
                                 print(f"[Auto-VC] Delete error: {del_e}")
-                    elif room_data["room_type"] == "カスタムVC":
+                        else:
+                            # 仮メン等の有料宿(12h/24h)はタイマー切れまで保持
+                            pass
+                    elif rtype in ["ゲームVC", "賭博VC"]:
+                        pass # ゲームVC・賭博VCは退出しても保持
+                    elif rtype == "カスタムVC":
                         self.bot.empty_custom_vcs[before.channel.id] = now_aware
+                    else:
+                        try:
+                            print(f"[Auto-VC] Deleting empty room ({rtype}): {before.channel.name}")
+                            await before.channel.delete()
+                            await database.remove_room(before.channel.id)
+                        except Exception as del_e:
+                            print(f"[Auto-VC] Delete error: {del_e}")
 
 
 async def setup(bot):

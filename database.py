@@ -1761,39 +1761,42 @@ async def add_xp(guild_id: int, user_id: int, amount: int, mode: str):
 
 
 
-async def add_room(channel_id: int, owner_id: int, room_type: str, expire_at: datetime.datetime, trigger_channel_id: int = None):
+async def add_room(channel_id: int, owner_id: int, room_type: str, expire_at: datetime.datetime, trigger_channel_id: int = None, guild_id: int = None):
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
-        await conn.execute('INSERT INTO rooms (channel_id, owner_id, room_type, expire_at, trigger_channel_id) VALUES ($1, $2, $3, $4, $5)', 
-
+        await conn.execute('INSERT INTO rooms (channel_id, owner_id, room_type, expire_at, trigger_channel_id) VALUES ($1, $2, $3, $4, $5)',
                          channel_id, owner_id, room_type, expire_at, trigger_channel_id)
 
 
 
-async def get_room(channel_id: int):
+async def get_room(channel_id: int, guild_id: int = None):
+    """channel_idでroomを取得。guild_idを渡せばそのDBのみを検索し、なければ全DBを検索する。"""
 
-    p = await get_pool()
-
-    async with p.acquire() as conn:
-
-        row = await conn.fetchrow('SELECT owner_id, room_type, expire_at, trigger_channel_id FROM rooms WHERE channel_id = $1', channel_id)
-
-        if row:
-
-            return {"owner_id": row['owner_id'], "room_type": row['room_type'], "expire_at": row['expire_at'], "trigger_channel_id": row['trigger_channel_id']}
-
+    if guild_id is not None:
+        p = await get_pool(guild_id)
+        async with p.acquire() as conn:
+            row = await conn.fetchrow('SELECT owner_id, room_type, expire_at, trigger_channel_id FROM rooms WHERE channel_id = $1', channel_id)
+            if row:
+                return {"owner_id": row['owner_id'], "room_type": row['room_type'], "expire_at": row['expire_at'], "trigger_channel_id": row['trigger_channel_id']}
         return None
 
+    # guild_idなし: 全プールを検索して最初にヒットした結果を返す
+    for p in await get_all_configured_pools():
+        async with p.acquire() as conn:
+            row = await conn.fetchrow('SELECT owner_id, room_type, expire_at, trigger_channel_id FROM rooms WHERE channel_id = $1', channel_id)
+            if row:
+                return {"owner_id": row['owner_id'], "room_type": row['room_type'], "expire_at": row['expire_at'], "trigger_channel_id": row['trigger_channel_id']}
+
+    return None
 
 
 
+async def has_room_type(owner_id: int, room_types: list[str], guild_id: int = None) -> bool:
 
-async def has_room_type(owner_id: int, room_types: list[str]) -> bool:
-
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
