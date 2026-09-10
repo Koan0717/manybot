@@ -253,6 +253,7 @@ class EconomyBot(commands.Bot):
             "cogs.call_board",
             "cogs.gacha",
             "cogs.othello",
+            "cogs.invite_link",
         ]
         for cog in cogs_to_load:
             try:

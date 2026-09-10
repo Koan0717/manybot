@@ -344,6 +344,15 @@ class IPC(commands.Cog):
                         from cogs.gacha import GachaPanelView, create_gacha_panel_embed
                         embed = await create_gacha_panel_embed(self.bot, guild_id)
                         view = GachaPanelView()
+                    elif panel_type in ["invite_link", "invite_panel"]:
+                        from cogs.invite_link import InviteLinkPanelView
+                        embed = discord.Embed(
+                            title="🔗 サーバー招待リンク発行",
+                            description="下のボタンを押すと、あなた専用のサーバー招待リンクがDMに送られます。\nお友達をサーバーに招待する際にご利用ください！",
+                            color=discord.Color.blue()
+                        )
+                        embed.set_footer(text=f"{guild.name} 公式")
+                        view = InviteLinkPanelView()
 
                     if embed and view:
                         try:

@@ -35,6 +35,7 @@ import {
   Sparkles,
   Bell,
   Banknote,
+  Link2,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -148,6 +149,7 @@ export default function DashboardLayout({
         { label: '面接官設定', path: `/dashboard/${guildId}/interviewer`, roles: ['admin', 'subadmin'], icon: UserCheck, group: '評価鯖' },
         { label: '条件ロール付与設定', path: `/dashboard/${guildId}/self-intro-role`, roles: ['admin', 'subadmin'], icon: UserPlus, group: '雑談鯖' },
         { label: '荒らし対策設定', path: `/dashboard/${guildId}/antigrief`, roles: ['admin', 'subadmin'], icon: ShieldAlert, group: '雑談鯖' },
+        { label: '招待リンク設定', path: `/dashboard/${guildId}/invite-link`, roles: ['admin', 'subadmin'], icon: Link2, group: 'その他' },
         { label: 'その他パネル設定', path: `/dashboard/${guildId}/other-panels`, roles: ['admin', 'subadmin'], icon: LayoutPanelTop, group: '雑談鯖' },
       ],
     },
