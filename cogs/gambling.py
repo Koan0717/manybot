@@ -912,13 +912,13 @@ class BlackjackGameView(discord.ui.View):
             return await interaction.response.send_message("これはあなたのゲームではありません。", ephemeral=True)
         if getattr(self, 'processing', False):
             try:
-                await interaction.response.defer()
+                await interaction.response.defer(ephemeral=True)
             except:
                 pass
             return
         self.processing = True
         try:
-            await interaction.response.defer()
+            await interaction.response.defer(ephemeral=True)
         except:
             pass
         
@@ -944,13 +944,13 @@ class BlackjackGameView(discord.ui.View):
             return await interaction.response.send_message("これはあなたのゲームではありません。", ephemeral=True)
         if getattr(self, 'processing', False):
             try:
-                await interaction.response.defer()
+                await interaction.response.defer(ephemeral=True)
             except:
                 pass
             return
         self.processing = True
         try:
-            await interaction.response.defer()
+            await interaction.response.defer(ephemeral=True)
         except:
             pass
         
@@ -971,7 +971,8 @@ class BlackjackGameView(discord.ui.View):
             await interaction.edit_original_response(embed=embed, view=self)
         except Exception:
             try:
-                await interaction.response.edit_message(embed=embed, view=self)
+                if self.message:
+                    await self.message.edit(embed=embed, view=self)
             except Exception:
                 pass
 
@@ -1064,7 +1065,8 @@ class BlackjackGameView(discord.ui.View):
                 await interaction.edit_original_response(embed=embed, view=self)
             except Exception:
                 try:
-                    await interaction.response.edit_message(embed=embed, view=self)
+                    if self.message:
+                        await self.message.edit(embed=embed, view=self)
                 except Exception:
                     pass
         else:
@@ -1073,12 +1075,14 @@ class BlackjackGameView(discord.ui.View):
                     await self.interaction.edit_original_response(embed=embed, view=self)
                 except Exception:
                     try:
-                        await self.message.edit(embed=embed, view=self)
+                        if self.message:
+                            await self.message.edit(embed=embed, view=self)
                     except Exception:
                         pass
             else:
                 try:
-                    await self.message.edit(embed=embed, view=self)
+                    if self.message:
+                        await self.message.edit(embed=embed, view=self)
                 except Exception:
                     pass
 
