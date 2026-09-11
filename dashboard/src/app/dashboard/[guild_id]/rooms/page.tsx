@@ -18,12 +18,12 @@ const defaultPrices = {
     "24": { price: 30000, duration_hours: 24 }
   },
   "ゲームVC": {
-    "12": { price: 10000, duration_hours: 12 },
-    "24": { price: 15000, duration_hours: 24 }
+    "6": { price: 5000, duration_hours: 6 },
+    "12": { price: 10000, duration_hours: 12 }
   },
   "賭博VC": {
-    "12": { price: 10000, duration_hours: 12 },
-    "24": { price: 15000, duration_hours: 24 }
+    "6": { price: 5000, duration_hours: 6 },
+    "12": { price: 10000, duration_hours: 12 }
   }
 };
 
@@ -48,7 +48,12 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
     DISABLE_24H_INN: false,
     DISABLE_12H_LUXURY: false,
     DISABLE_24H_LUXURY: false,
-    ROOM_ACCESS_LOW_EVAL_INN_TEXT: true
+    DISABLE_6H_GAMEVC: false,
+    DISABLE_12H_GAMEVC: false,
+    DISABLE_6H_GAMBLEVC: false,
+    DISABLE_12H_GAMBLEVC: false,
+    ROOM_ACCESS_LOW_EVAL_INN_TEXT: true,
+    ENABLE_GAME_VC_HOURLY: true
   });
   
   const defaultRolePrices = {
@@ -220,14 +225,17 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
     }));
   };
 
-  const handleDurationToggle = (category: 'inn' | 'luxury', duration: '12h' | '24h', checked: boolean) => {
-    const targetKey = category === 'inn'
-      ? (duration === '12h' ? 'DISABLE_12H_INN' : 'DISABLE_24H_INN')
-      : (duration === '12h' ? 'DISABLE_12H_LUXURY' : 'DISABLE_24H_LUXURY');
-    
-    const otherKey = category === 'inn'
-      ? (duration === '12h' ? 'DISABLE_24H_INN' : 'DISABLE_12H_INN')
-      : (duration === '12h' ? 'DISABLE_24H_LUXURY' : 'DISABLE_12H_LUXURY');
+  // カテゴリごとの「短い方/長い方の時間ボタンOFF」設定キーと実際の時間（一般宿・高級宿は12/24時間、ゲームVC・賭博VCは6/12時間）
+  const durationCategories = [
+    { key: 'inn', label: '一般宿', color: 'text-green-400', k12: 'DISABLE_12H_INN', k24: 'DISABLE_24H_INN', hShort: 12, hLong: 24 },
+    { key: 'luxury', label: '高級宿', color: 'text-purple-400', k12: 'DISABLE_12H_LUXURY', k24: 'DISABLE_24H_LUXURY', hShort: 12, hLong: 24 },
+    { key: 'game', label: 'ゲームVC', color: 'text-blue-400', k12: 'DISABLE_6H_GAMEVC', k24: 'DISABLE_12H_GAMEVC', hShort: 6, hLong: 12 },
+    { key: 'gamble', label: '賭博VC', color: 'text-orange-400', k12: 'DISABLE_6H_GAMBLEVC', k24: 'DISABLE_12H_GAMBLEVC', hShort: 6, hLong: 12 },
+  ] as const;
+
+  const handleDurationToggle = (offKey12: string, offKey24: string, duration: '12h' | '24h', checked: boolean) => {
+    const targetKey = duration === '12h' ? offKey12 : offKey24;
+    const otherKey = duration === '12h' ? offKey24 : offKey12;
 
     if (checked) {
       if ((toggles as any)[otherKey]) {
@@ -256,12 +264,12 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
         </div>
       )}
 
-      {/* --- 利用可能時間ボタンの表示制限 (一般宿 / 高級宿) --- */}
+      {/* --- 利用可能時間ボタンの表示制限 (一般宿 / 高級宿 / ゲームVC / 賭博VC) --- */}
       <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
         <div className="flex justify-between items-center mb-6 border-b border-zinc-700 pb-2">
           <div>
-            <h2 className="text-xl font-bold text-white">利用可能時間ボタン設定 (12時間 / 24時間)</h2>
-            <p className="text-xs text-zinc-400 mt-1">一般宿・高級宿ごとに、購入時・延長時に表示する時間ボタンを個別に制限できます。</p>
+            <h2 className="text-xl font-bold text-white">利用可能時間ボタン設定</h2>
+            <p className="text-xs text-zinc-400 mt-1">一般宿・高級宿（12時間/24時間）、ゲームVC・賭博VC（6時間/12時間）ごとに、購入時・延長時に表示する時間ボタンを個別に制限できます。</p>
           </div>
           <button
             onClick={handleSavePrices}
@@ -272,157 +280,55 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
           </button>
         </div>
 
-        {/* --- 一般宿の設定 --- */}
-        <div className="mb-6">
-          <h3 className="text-base font-bold text-white mb-3 flex items-center gap-2">
-            <span className="text-green-400">■</span> 一般宿の時間ボタン設定
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 一般宿: 12時間ボタンOFF */}
-            <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                    <span>12時間ボタンをOFF</span>
-                    {toggles.DISABLE_12H_INN && (
-                      <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono">
-                        24時間のみ表示
-                      </span>
-                    )}
-                  </h4>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    有効時: 一般宿購入時に12時間が出ず、<strong className="text-zinc-200">24時間のみ</strong>表示。
-                  </p>
-                </div>
-                <label className="flex items-center cursor-pointer ml-4">
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={toggles.DISABLE_12H_INN}
-                      onChange={(e) => handleDurationToggle('inn', '12h', e.target.checked)}
-                    />
-                    <div className={`block w-14 h-8 rounded-full transition-colors ${toggles.DISABLE_12H_INN ? 'bg-amber-500' : 'bg-zinc-600'}`}></div>
-                    <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${toggles.DISABLE_12H_INN ? 'transform translate-x-6' : ''}`}></div>
+        {durationCategories.map((cat, idx) => (
+          <div key={cat.key} className={idx < durationCategories.length - 1 ? 'mb-6' : ''}>
+            <h3 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+              <span className={cat.color}>■</span> {cat.label}の時間ボタン設定
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(['12h', '24h'] as const).map(dur => {
+                const offKey = dur === '12h' ? cat.k12 : cat.k24;
+                const isOff = (toggles as any)[offKey];
+                const durLabel = String(dur === '12h' ? cat.hShort : cat.hLong);
+                const otherDurLabel = String(dur === '12h' ? cat.hLong : cat.hShort);
+                return (
+                  <div key={dur} className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                          <span>{durLabel}時間ボタンをOFF</span>
+                          {isOff && (
+                            <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono">
+                              {otherDurLabel}時間のみ表示
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-xs text-zinc-400 mt-1">
+                          有効時: {cat.label}購入時に{durLabel}時間が出ず、<strong className="text-zinc-200">{otherDurLabel}時間のみ</strong>表示。
+                        </p>
+                      </div>
+                      <label className="flex items-center cursor-pointer ml-4">
+                        <div className="relative">
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={isOff}
+                            onChange={(e) => handleDurationToggle(cat.k12, cat.k24, dur, e.target.checked)}
+                          />
+                          <div className={`block w-14 h-8 rounded-full transition-colors ${isOff ? 'bg-amber-500' : 'bg-zinc-600'}`}></div>
+                          <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${isOff ? 'transform translate-x-6' : ''}`}></div>
+                        </div>
+                        <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap text-sm">
+                          {isOff ? 'OFF中' : '通常'}
+                        </div>
+                      </label>
+                    </div>
                   </div>
-                  <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap text-sm">
-                    {toggles.DISABLE_12H_INN ? 'OFF中' : '通常'}
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {/* 一般宿: 24時間ボタンOFF */}
-            <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                    <span>24時間ボタンをOFF</span>
-                    {toggles.DISABLE_24H_INN && (
-                      <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono">
-                        12時間のみ表示
-                      </span>
-                    )}
-                  </h4>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    有効時: 一般宿購入時に24時間が出ず、<strong className="text-zinc-200">12時間のみ</strong>表示。
-                  </p>
-                </div>
-                <label className="flex items-center cursor-pointer ml-4">
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={toggles.DISABLE_24H_INN}
-                      onChange={(e) => handleDurationToggle('inn', '24h', e.target.checked)}
-                    />
-                    <div className={`block w-14 h-8 rounded-full transition-colors ${toggles.DISABLE_24H_INN ? 'bg-amber-500' : 'bg-zinc-600'}`}></div>
-                    <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${toggles.DISABLE_24H_INN ? 'transform translate-x-6' : ''}`}></div>
-                  </div>
-                  <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap text-sm">
-                    {toggles.DISABLE_24H_INN ? 'OFF中' : '通常'}
-                  </div>
-                </label>
-              </div>
+                );
+              })}
             </div>
           </div>
-        </div>
-
-        {/* --- 高級宿の設定 --- */}
-        <div>
-          <h3 className="text-base font-bold text-white mb-3 flex items-center gap-2">
-            <span className="text-purple-400">■</span> 高級宿の時間ボタン設定
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 高級宿: 12時間ボタンOFF */}
-            <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                    <span>12時間ボタンをOFF</span>
-                    {toggles.DISABLE_12H_LUXURY && (
-                      <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono">
-                        24時間のみ表示
-                      </span>
-                    )}
-                  </h4>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    有効時: 高級宿購入時に12時間が出ず、<strong className="text-zinc-200">24時間のみ</strong>表示。
-                  </p>
-                </div>
-                <label className="flex items-center cursor-pointer ml-4">
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={toggles.DISABLE_12H_LUXURY}
-                      onChange={(e) => handleDurationToggle('luxury', '12h', e.target.checked)}
-                    />
-                    <div className={`block w-14 h-8 rounded-full transition-colors ${toggles.DISABLE_12H_LUXURY ? 'bg-amber-500' : 'bg-zinc-600'}`}></div>
-                    <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${toggles.DISABLE_12H_LUXURY ? 'transform translate-x-6' : ''}`}></div>
-                  </div>
-                  <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap text-sm">
-                    {toggles.DISABLE_12H_LUXURY ? 'OFF中' : '通常'}
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {/* 高級宿: 24時間ボタンOFF */}
-            <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                    <span>24時間ボタンをOFF</span>
-                    {toggles.DISABLE_24H_LUXURY && (
-                      <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono">
-                        12時間のみ表示
-                      </span>
-                    )}
-                  </h4>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    有効時: 高級宿購入時に24時間が出ず、<strong className="text-zinc-200">12時間のみ</strong>表示。
-                  </p>
-                </div>
-                <label className="flex items-center cursor-pointer ml-4">
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={toggles.DISABLE_24H_LUXURY}
-                      onChange={(e) => handleDurationToggle('luxury', '24h', e.target.checked)}
-                    />
-                    <div className={`block w-14 h-8 rounded-full transition-colors ${toggles.DISABLE_24H_LUXURY ? 'bg-amber-500' : 'bg-zinc-600'}`}></div>
-                    <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${toggles.DISABLE_24H_LUXURY ? 'transform translate-x-6' : ''}`}></div>
-                  </div>
-                  <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap text-sm">
-                    {toggles.DISABLE_24H_LUXURY ? 'OFF中' : '通常'}
-                  </div>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* --- 価格設定 --- */}
@@ -465,6 +371,31 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* --- ゲームVC 時間指定作成機能 --- */}
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-lg text-white">ゲームVCの時間指定作成 (1時間単位)</h3>
+            <p className="text-sm text-zinc-400 mt-1">
+              有効にすると、ゲームVC作成の選択画面に「⏱ 時間指定で通話作成」ボタンが表示され、通話名と利用時間（時間単位）を自由入力してVCを作成できるようになります。料金はゲームVCの12時間料金から1時間あたりの単価を算出して計算されます。OFFにすると、いつも通り6時間/12時間ボタンのみの表示に戻ります。
+            </p>
+          </div>
+          <label className="flex items-center cursor-pointer ml-4">
+            <div className="relative">
+              <input type="checkbox" className="sr-only"
+                checked={toggles.ENABLE_GAME_VC_HOURLY}
+                onChange={(e) => setToggles({...toggles, ENABLE_GAME_VC_HOURLY: e.target.checked})}
+              />
+              <div className={`block w-14 h-8 rounded-full transition-colors ${toggles.ENABLE_GAME_VC_HOURLY ? 'bg-green-600' : 'bg-zinc-600'}`}></div>
+              <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${toggles.ENABLE_GAME_VC_HOURLY ? 'transform translate-x-6' : ''}`}></div>
+            </div>
+            <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap">
+              {toggles.ENABLE_GAME_VC_HOURLY ? '有効 (ON)' : '無効 (OFF)'}
+            </div>
+          </label>
         </div>
       </div>
 

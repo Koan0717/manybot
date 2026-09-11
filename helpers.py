@@ -100,12 +100,12 @@ def get_room_settings(bot, guild_id: int = None) -> dict:
             24: {"price": 30000, "duration_hours": 24}
         },
         "ゲームVC": {
-            12: {"price": 10000, "duration_hours": 12},
-            24: {"price": 15000, "duration_hours": 24}
+            6: {"price": 5000, "duration_hours": 6},
+            12: {"price": 10000, "duration_hours": 12}
         },
         "賭博VC": {
-            12: {"price": 10000, "duration_hours": 12},
-            24: {"price": 15000, "duration_hours": 24}
+            6: {"price": 5000, "duration_hours": 6},
+            12: {"price": 10000, "duration_hours": 12}
         }
     }
 
@@ -269,6 +269,7 @@ DEFAULT_SETTINGS = {
     "OTHELLO_VC_NAME": "オセロ対戦",
     "OTHELLO_GAME_CHANNEL": "",
     "ROOM_ACCESS_LOW_EVAL_INN_TEXT": True,
+    "ENABLE_GAME_VC_HOURLY": True,
 }
 
 import sys

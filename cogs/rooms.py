@@ -53,6 +53,14 @@ def apply_duration_restrictions(view, bot, room_type: str = "宿", member=None, 
         if disable_12h is None and disable_24h is None:
             disable_12h = get_setting(bot, "DISABLE_12H_ROOMS", guild_id)
             disable_24h = get_setting(bot, "DISABLE_24H_ROOMS", guild_id)
+    elif room_type == "ゲームVC":
+        # ゲームVCは 6時間/12時間 の2択（DISABLE_6H_GAMEVCが短い方=6時間、DISABLE_12H_GAMEVCが長い方=12時間の非表示設定）
+        disable_12h = get_setting(bot, "DISABLE_6H_GAMEVC", guild_id)
+        disable_24h = get_setting(bot, "DISABLE_12H_GAMEVC", guild_id)
+    elif room_type == "賭博VC":
+        # 賭博VCは 6時間/12時間 の2択（DISABLE_6H_GAMBLEVCが短い方=6時間、DISABLE_12H_GAMBLEVCが長い方=12時間の非表示設定）
+        disable_12h = get_setting(bot, "DISABLE_6H_GAMBLEVC", guild_id)
+        disable_24h = get_setting(bot, "DISABLE_12H_GAMBLEVC", guild_id)
     else:
         disable_12h = get_setting(bot, "DISABLE_12H_ROOMS", guild_id)
         disable_24h = get_setting(bot, "DISABLE_24H_ROOMS", guild_id)
@@ -63,13 +71,22 @@ def apply_duration_restrictions(view, bot, room_type: str = "宿", member=None, 
     if is_12h_off and is_24h_off:
         is_24h_off = False
 
+    # is_12h_off = 短い方の選択肢を非表示 / is_24h_off = 長い方の選択肢を非表示
     if is_12h_off:
-        if hasattr(view, 'twelve_hours'):
+        if hasattr(view, 'six_hours'):
+            view.remove_item(view.six_hours)
+        elif hasattr(view, 'six'):
+            view.remove_item(view.six)
+        elif hasattr(view, 'twelve_hours'):
             view.remove_item(view.twelve_hours)
         elif hasattr(view, 'twelve'):
             view.remove_item(view.twelve)
     elif is_24h_off:
-        if hasattr(view, 'twenty_four_hours'):
+        if hasattr(view, 'twelve_hours') and room_type in ("ゲームVC", "賭博VC"):
+            view.remove_item(view.twelve_hours)
+        elif hasattr(view, 'twelve') and room_type in ("ゲームVC", "賭博VC"):
+            view.remove_item(view.twelve)
+        elif hasattr(view, 'twenty_four_hours'):
             view.remove_item(view.twenty_four_hours)
         elif hasattr(view, 'twenty_four'):
             view.remove_item(view.twenty_four)
@@ -135,23 +152,23 @@ class ExtendGameVCSelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.bot = bot
         self.member = member
+        p6 = get_room_price(self.bot, self.member, "ゲームVC", 6)
         p12 = get_room_price(self.bot, self.member, "ゲームVC", 12)
-        p24 = get_room_price(self.bot, self.member, "ゲームVC", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
+        self.six.label = f"6時間 ({p6:,} {currency_name})"
         self.twelve.label = f"12時間 ({p12:,} {currency_name})"
-        self.twenty_four.label = f"24時間 ({p24:,} {currency_name})"
         apply_duration_restrictions(self, self.bot, "ゲームVC", self.member)
-        
+
+    @discord.ui.button(label="6時間", style=discord.ButtonStyle.success)
+    async def six(self, interaction: discord.Interaction, button: discord.ui.Button):
+        price = get_room_price(self.bot, interaction.user, "ゲームVC", 6)
+        await process_room_extension(self.bot, interaction, "ゲームVC", 6, price)
+
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success)
     async def twelve(self, interaction: discord.Interaction, button: discord.ui.Button):
         price = get_room_price(self.bot, interaction.user, "ゲームVC", 12)
         await process_room_extension(self.bot, interaction, "ゲームVC", 12, price)
-        
-    @discord.ui.button(label="24時間", style=discord.ButtonStyle.success)
-    async def twenty_four(self, interaction: discord.Interaction, button: discord.ui.Button):
-        price = get_room_price(self.bot, interaction.user, "ゲームVC", 24)
-        await process_room_extension(self.bot, interaction, "ゲームVC", 24, price)
-        
+
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(content="キャンセルしました。", view=None)
@@ -161,23 +178,23 @@ class ExtendGambleVCSelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.bot = bot
         self.member = member
+        p6 = get_room_price(self.bot, self.member, "賭博VC", 6)
         p12 = get_room_price(self.bot, self.member, "賭博VC", 12)
-        p24 = get_room_price(self.bot, self.member, "賭博VC", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
+        self.six.label = f"6時間 ({p6:,} {currency_name})"
         self.twelve.label = f"12時間 ({p12:,} {currency_name})"
-        self.twenty_four.label = f"24時間 ({p24:,} {currency_name})"
         apply_duration_restrictions(self, self.bot, "賭博VC", self.member)
-        
+
+    @discord.ui.button(label="6時間", style=discord.ButtonStyle.success)
+    async def six(self, interaction: discord.Interaction, button: discord.ui.Button):
+        price = get_room_price(self.bot, interaction.user, "賭博VC", 6)
+        await process_room_extension(self.bot, interaction, "賭博VC", 6, price)
+
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success)
     async def twelve(self, interaction: discord.Interaction, button: discord.ui.Button):
         price = get_room_price(self.bot, interaction.user, "賭博VC", 12)
         await process_room_extension(self.bot, interaction, "賭博VC", 12, price)
-        
-    @discord.ui.button(label="24時間", style=discord.ButtonStyle.success)
-    async def twenty_four(self, interaction: discord.Interaction, button: discord.ui.Button):
-        price = get_room_price(self.bot, interaction.user, "賭博VC", 24)
-        await process_room_extension(self.bot, interaction, "賭博VC", 24, price)
-        
+
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(content="キャンセルしました。", view=None)
@@ -623,7 +640,7 @@ async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
 
 
 
-async def process_room_purchase(bot, interaction: discord.Interaction, room_type: str, duration: int, panel_id: str = None):
+async def process_room_purchase(bot, interaction: discord.Interaction, room_type: str, duration: int, panel_id: str = None, custom_name: str = None, override_price: int = None):
     owner_id = interaction.user.id
     if not hasattr(bot, 'processing_rooms'):
         bot.processing_rooms = set()
@@ -637,11 +654,11 @@ async def process_room_purchase(bot, interaction: discord.Interaction, room_type
         return
     bot.processing_rooms.add(owner_id)
     try:
-        await _process_room_purchase_inner(bot, interaction, room_type, duration, panel_id)
+        await _process_room_purchase_inner(bot, interaction, room_type, duration, panel_id, custom_name, override_price)
     finally:
         bot.processing_rooms.discard(owner_id)
 
-async def _process_room_purchase_inner(bot, interaction: discord.Interaction, room_type: str, duration: int, panel_id: str = None):
+async def _process_room_purchase_inner(bot, interaction: discord.Interaction, room_type: str, duration: int, panel_id: str = None, custom_name: str = None, override_price: int = None):
     await interaction.response.defer(ephemeral=True)
     owner_id = interaction.user.id
 
@@ -687,7 +704,9 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
         if await database.has_room_type(owner_id, ["賭博VC"], guild_id):
             return await interaction.edit_original_response(content="既に「賭博VC」を持っています！(1人1つまで)")
     
-    if room_type == "高級宿":
+    if override_price is not None:
+        price = override_price
+    elif room_type == "高級宿":
         price = get_room_price(bot, interaction.user, room_type, duration)
     elif room_type == "宿" and duration == 0:
         if is_main_or_sub_member(bot, interaction.user) or has_admin_role(bot, interaction.user):
@@ -762,7 +781,8 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
                             if cat: target_category = cat
                         except:
                             pass
-            channel = await interaction.guild.create_voice_channel(name=f"{room_type}-{interaction.user.display_name}", category=target_category, overwrites=overwrites, user_limit=(2 if room_type=="宿" else 0))
+            channel_name = custom_name if custom_name else f"{room_type}-{interaction.user.display_name}"
+            channel = await interaction.guild.create_voice_channel(name=channel_name, category=target_category, overwrites=overwrites, user_limit=(2 if room_type=="宿" else 0))
             
             # 評価落ちロールの表示制御
             # room_type -> panel_key マッピング
@@ -854,22 +874,29 @@ class GameVCDurationSelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.bot = bot
         self.member = member
+        p6 = get_room_price(self.bot, self.member, "ゲームVC", 6)
         p12 = get_room_price(self.bot, self.member, "ゲームVC", 12)
-        p24 = get_room_price(self.bot, self.member, "ゲームVC", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
+        self.six_hours.label = f"6時間 ({p6:,} {currency_name})"
         self.twelve_hours.label = f"12時間 ({p12:,} {currency_name})"
-        self.twenty_four_hours.label = f"24時間 ({p24:,} {currency_name})"
         apply_duration_restrictions(self, self.bot, "ゲームVC", self.member)
+        guild_id = self.member.guild.id if self.member and hasattr(self.member, "guild") and self.member.guild else None
+        if not get_setting(self.bot, "ENABLE_GAME_VC_HOURLY", guild_id):
+            self.remove_item(self.hourly_create)
+
+    @discord.ui.button(label="6時間", style=discord.ButtonStyle.success, emoji="🎮")
+    async def six_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await process_room_purchase(self.bot, interaction, "ゲームVC", 6)
 
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success, emoji="🎮")
     async def twelve_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
         await process_room_purchase(self.bot, interaction, "ゲームVC", 12)
 
-    @discord.ui.button(label="24時間", style=discord.ButtonStyle.success, emoji="🎮")
-    async def twenty_four_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await process_room_purchase(self.bot, interaction, "ゲームVC", 24)
+    @discord.ui.button(label="⏱ 時間指定で通話作成", style=discord.ButtonStyle.primary, row=1)
+    async def hourly_create(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(GameVCHourlyModal(self.bot))
 
-    @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
+    @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖", row=1)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(content="キャンセルしました。", view=None)
 
@@ -878,24 +905,90 @@ class GambleVCDurationSelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.bot = bot
         self.member = member
+        p6 = get_room_price(self.bot, self.member, "賭博VC", 6)
         p12 = get_room_price(self.bot, self.member, "賭博VC", 12)
-        p24 = get_room_price(self.bot, self.member, "賭博VC", 24)
         currency_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
+        self.six_hours.label = f"6時間 ({p6:,} {currency_name})"
         self.twelve_hours.label = f"12時間 ({p12:,} {currency_name})"
-        self.twenty_four_hours.label = f"24時間 ({p24:,} {currency_name})"
         apply_duration_restrictions(self, self.bot, "賭博VC", self.member)
+
+    @discord.ui.button(label="6時間", style=discord.ButtonStyle.success, emoji="🎲")
+    async def six_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await process_room_purchase(self.bot, interaction, "賭博VC", 6)
 
     @discord.ui.button(label="12時間", style=discord.ButtonStyle.success, emoji="🎲")
     async def twelve_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
         await process_room_purchase(self.bot, interaction, "賭博VC", 12)
 
-    @discord.ui.button(label="24時間", style=discord.ButtonStyle.success, emoji="🎲")
-    async def twenty_four_hours(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await process_room_purchase(self.bot, interaction, "賭博VC", 24)
-
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(content="キャンセルしました。", view=None)
+
+# --- 時間指定 (1時間単位) でのゲームVC作成 ---
+class GameVCHourlyModal(discord.ui.Modal, title='📞 通話作成'):
+    name_input = discord.ui.TextInput(
+        label='通話名',
+        placeholder='通話名を入力してください',
+        max_length=90,
+        required=True
+    )
+    hours_input = discord.ui.TextInput(
+        label='利用時間',
+        placeholder='時間単位で入力してください（例: 1）',
+        max_length=4,
+        required=True
+    )
+
+    def __init__(self, bot):
+        super().__init__()
+        self.bot = bot
+
+    async def on_submit(self, interaction: discord.Interaction):
+        name = self.name_input.value.strip()
+        if not name:
+            return await interaction.response.send_message("通話名を入力してください。", ephemeral=True)
+
+        hours_raw = self.hours_input.value.strip()
+        if not hours_raw.isdigit():
+            return await interaction.response.send_message("利用時間は半角数字で入力してください。（例: 1）", ephemeral=True)
+        hours = int(hours_raw)
+        if hours < 1 or hours > 168:
+            return await interaction.response.send_message("利用時間は1〜168時間（1週間）の範囲で入力してください。", ephemeral=True)
+
+        currency_name = get_setting(self.bot, "CURRENCY_NAME", interaction.guild.id) or "コイン"
+        base_12h_price = get_room_price(self.bot, interaction.user, "ゲームVC", 12)
+        price = 0 if base_12h_price <= 0 else max(1, round((base_12h_price / 12) * hours))
+
+        embed = discord.Embed(
+            title="🎮 通話VCの作成確認",
+            description="以下の内容でVCを作成します。よろしいですか？",
+            color=discord.Color.blurple()
+        )
+        embed.add_field(name="📛 通話名", value=name, inline=False)
+        embed.add_field(name="⏱ 利用時間", value=f"{hours}時間", inline=True)
+        embed.add_field(name="💰 料金", value=(f"{price:,} {currency_name}" if price > 0 else "無料"), inline=True)
+        embed.set_footer(text="内容を確認し、「作成する」ボタンを押してください。")
+
+        view = GameVCHourlyConfirmView(self.bot, name, hours, price)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+
+class GameVCHourlyConfirmView(discord.ui.View):
+    def __init__(self, bot, name: str, hours: int, price: int):
+        super().__init__(timeout=60)
+        self.bot = bot
+        self.name = name
+        self.hours = hours
+        self.price = price
+
+    @discord.ui.button(label="作成する", style=discord.ButtonStyle.success, emoji="✅")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await process_room_purchase(self.bot, interaction, "ゲームVC", self.hours, custom_name=self.name, override_price=self.price)
+
+    @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary, emoji="✖")
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="キャンセルしました。", embed=None, view=None)
+
 
 class GameRoomPanelView(discord.ui.View):
     def __init__(self):
