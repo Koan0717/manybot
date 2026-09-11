@@ -11,7 +11,7 @@ export async function GET(
   const pool = await getPool(guildId);
   try {
     const result = await pool.query(
-      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ROOM_PRICES', 'ROOM_PANEL_CONFIGS', 'ENABLE_PRICE_MAIN_SUB', 'ENABLE_PRICE_NEW_MEMBER', 'ENABLE_PRICE_DOWNGRADE', 'ENABLE_PRICE_VIOLATOR', 'ENABLE_FREE_INN_MAIN_SUB', 'DISABLE_12H_ROOMS', 'DISABLE_24H_ROOMS', 'DISABLE_12H_INN', 'DISABLE_24H_INN', 'DISABLE_12H_LUXURY', 'DISABLE_24H_LUXURY', 'DISABLE_12H_GAMEVC', 'DISABLE_24H_GAMEVC', 'DISABLE_12H_GAMBLEVC', 'DISABLE_24H_GAMBLEVC', 'ROOM_ACCESS_LOW_EVAL_INN_TEXT', 'ENABLE_GAME_VC_HOURLY')",
+      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('ROOM_PRICES', 'ROOM_PANEL_CONFIGS', 'ENABLE_PRICE_MAIN_SUB', 'ENABLE_PRICE_NEW_MEMBER', 'ENABLE_PRICE_DOWNGRADE', 'ENABLE_PRICE_VIOLATOR', 'ENABLE_FREE_INN_MAIN_SUB', 'DISABLE_12H_ROOMS', 'DISABLE_24H_ROOMS', 'DISABLE_12H_INN', 'DISABLE_24H_INN', 'DISABLE_12H_LUXURY', 'DISABLE_24H_LUXURY', 'DISABLE_6H_GAMEVC', 'DISABLE_12H_GAMEVC', 'DISABLE_6H_GAMBLEVC', 'DISABLE_12H_GAMBLEVC', 'ROOM_ACCESS_LOW_EVAL_INN_TEXT', 'ENABLE_GAME_VC_HOURLY')",
       [guildId]
     );
 
@@ -29,10 +29,10 @@ export async function GET(
       DISABLE_24H_INN: false,
       DISABLE_12H_LUXURY: false,
       DISABLE_24H_LUXURY: false,
+      DISABLE_6H_GAMEVC: false,
       DISABLE_12H_GAMEVC: false,
-      DISABLE_24H_GAMEVC: false,
+      DISABLE_6H_GAMBLEVC: false,
       DISABLE_12H_GAMBLEVC: false,
-      DISABLE_24H_GAMBLEVC: false,
       ROOM_ACCESS_LOW_EVAL_INN_TEXT: true,
       ENABLE_GAME_VC_HOURLY: true
     };
@@ -112,11 +112,11 @@ export async function POST(
           if (toggles.DISABLE_12H_LUXURY && toggles.DISABLE_24H_LUXURY) {
             toggles.DISABLE_24H_LUXURY = false;
           }
-          if (toggles.DISABLE_12H_GAMEVC && toggles.DISABLE_24H_GAMEVC) {
-            toggles.DISABLE_24H_GAMEVC = false;
+          if (toggles.DISABLE_6H_GAMEVC && toggles.DISABLE_12H_GAMEVC) {
+            toggles.DISABLE_12H_GAMEVC = false;
           }
-          if (toggles.DISABLE_12H_GAMBLEVC && toggles.DISABLE_24H_GAMBLEVC) {
-            toggles.DISABLE_24H_GAMBLEVC = false;
+          if (toggles.DISABLE_6H_GAMBLEVC && toggles.DISABLE_12H_GAMBLEVC) {
+            toggles.DISABLE_12H_GAMBLEVC = false;
           }
           for (const [key, value] of Object.entries(toggles)) {
             await client.query(
