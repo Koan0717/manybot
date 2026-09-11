@@ -269,6 +269,7 @@ DEFAULT_SETTINGS = {
     "OTHELLO_VC_NAME": "オセロ対戦",
     "OTHELLO_GAME_CHANNEL": "",
     "ROOM_ACCESS_LOW_EVAL_INN_TEXT": True,
+    "ENABLE_GAME_VC_HOURLY": True,
 }
 
 import sys
