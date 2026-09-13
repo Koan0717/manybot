@@ -9,7 +9,7 @@ import database
 from keep_alive import keep_alive
 from helpers import (
     JST,
-    get_setting, is_rank_eligible, is_vc_coins_eligible, send_log
+    get_setting, is_rank_eligible, get_effective_vc_coins_rate, send_log
 )
 import config
 
@@ -92,7 +92,12 @@ class EconomyBot(commands.Bot):
 
     def get_vc_coins_config(self, guild_id: int) -> dict:
         if guild_id not in self.vc_coins_settings_cache:
-            return {"is_enabled": False, "whitelist": set(), "blacklist": set(), "categories": set(), "blacklist_categories": set(), "enable_exclude_rank_role": False, "exclude_rank_role_ids": set()}
+            return {
+                "is_enabled": False, "whitelist": set(), "blacklist": set(), "categories": set(), "blacklist_categories": set(),
+                "enable_exclude_rank_role": False, "exclude_rank_role_ids": set(),
+                "use_common_reward": True, "role_scope_per_rule": False, "stack_multiple_roles": False,
+                "common_reward_amount": 100, "common_reward_interval": 10, "role_rewards": [],
+            }
         return self.vc_coins_settings_cache[guild_id]
 
     async def fetch_and_cache_vc_coins_config(self, guild_id: int) -> dict:
@@ -104,7 +109,13 @@ class EconomyBot(commands.Bot):
             "categories": set(data.get("categories", [])),
             "blacklist_categories": set(data.get("blacklist_categories", [])),
             "enable_exclude_rank_role": data.get("enable_exclude_rank_role", False),
-            "exclude_rank_role_ids": set(data.get("exclude_rank_role_ids", []))
+            "exclude_rank_role_ids": set(data.get("exclude_rank_role_ids", [])),
+            "use_common_reward": data.get("use_common_reward", True),
+            "role_scope_per_rule": data.get("role_scope_per_rule", False),
+            "stack_multiple_roles": data.get("stack_multiple_roles", False),
+            "common_reward_amount": data.get("common_reward_amount", 100),
+            "common_reward_interval": data.get("common_reward_interval", 10),
+            "role_rewards": data.get("role_rewards", []),
         }
         return self.vc_coins_settings_cache[guild_id]
 
@@ -179,7 +190,13 @@ class EconomyBot(commands.Bot):
                     "whitelist": set(r.get("whitelist", [])),
                     "blacklist": set(r.get("blacklist", [])),
                     "categories": set(r.get("categories", [])),
-                    "blacklist_categories": set(r.get("blacklist_categories", []))
+                    "blacklist_categories": set(r.get("blacklist_categories", [])),
+                    "use_common_reward": r.get("use_common_reward", True),
+                    "role_scope_per_rule": r.get("role_scope_per_rule", False),
+                    "stack_multiple_roles": r.get("stack_multiple_roles", False),
+                    "common_reward_amount": r.get("common_reward_amount", 100),
+                    "common_reward_interval": r.get("common_reward_interval", 10),
+                    "role_rewards": r.get("role_rewards", []),
                 }
         except Exception as e:
             print(f"[ERROR] Failed to load VC coins settings from DB: {e}")
@@ -406,8 +423,10 @@ async def on_voice_state_update(member, before, after):
                 
                 enable_vc_coins = get_setting(bot, "ENABLE_VC_COINS")
                 if enable_vc_coins is None: enable_vc_coins = True
-                in_coins_eligible = is_vc_coins_eligible(bot, after.channel) and enable_vc_coins
-                
+                # 役職ごとの対象カテゴリ/VC指定など、正確な金額判定は退出時に行うため、
+                # 参加時点では機能が有効かどうかだけで大まかにセッション追跡を開始する
+                in_coins_eligible = enable_vc_coins
+
                 if in_correct_category or is_eval_category or in_coins_eligible:
                     print(f"[VC XP/Coins] Started session for {member.display_name} (rank={in_correct_category}, eval={is_eval_category}, coins={in_coins_eligible})")
                     bot.vc_sessions[user_id] = now_aware
@@ -433,10 +452,9 @@ async def on_voice_state_update(member, before, after):
                             
                     enable_vc_coins = get_setting(bot, "ENABLE_VC_COINS")
                     if enable_vc_coins is None: enable_vc_coins = True
-                    if enable_vc_coins and is_vc_coins_eligible(bot, before.channel):
-                        coins_per_min = get_setting(bot, "VC_COINS_PER_MIN")
-                        if coins_per_min is None: coins_per_min = 12
-                        coins_reward = duration_minutes * coins_per_min
+                    if enable_vc_coins:
+                        coins_per_min = get_effective_vc_coins_rate(bot, member, before.channel)
+                        coins_reward = int(duration_minutes * coins_per_min)
                         if coins_reward > 0:
                             await database.add_balance(member.guild.id, user_id, coins_reward)
     except Exception as global_e:

@@ -698,27 +698,13 @@ def is_rank_eligible(bot, channel) -> bool:
     else:
         return in_whitelist and not in_blacklist
 
-def is_vc_coins_eligible(bot, channel) -> bool:
-    if not channel or not hasattr(channel, "guild") or not channel.guild:
-        return False
-    guild_id = channel.guild.id
-    cfg = bot.get_vc_coins_config(guild_id)
-    
-    # 制限機能が無効（is_enabled == False）の場合は制限を行わない（すべてのVCで獲得可能）
-    if not cfg.get("is_enabled", False):
-        return True
-
-    whitelist_channels = cfg.get("whitelist", set())
-    whitelist_categories = cfg.get("categories", set())
-    blacklist_channels = cfg.get("blacklist", set())
-    blacklist_categories = cfg.get("blacklist_categories", set())
-    
+def _channel_in_scope(channel, whitelist_channels, whitelist_categories, blacklist_channels, blacklist_categories) -> bool:
     has_whitelist = len(whitelist_channels) > 0 or len(whitelist_categories) > 0
     has_blacklist = len(blacklist_channels) > 0 or len(blacklist_categories) > 0
-    
+
     in_whitelist = (channel.id in whitelist_channels) or (channel.category and channel.category.id in whitelist_categories)
     in_blacklist = (channel.id in blacklist_channels) or (channel.category and channel.category.id in blacklist_categories)
-    
+
     if not has_whitelist and not has_blacklist:
         return True
     elif not has_whitelist and has_blacklist:
@@ -727,6 +713,68 @@ def is_vc_coins_eligible(bot, channel) -> bool:
         return in_whitelist
     else:
         return in_whitelist and not in_blacklist
+
+def get_effective_vc_coins_rate(bot, member, channel) -> float:
+    """メンバーが指定VCに滞在した際の、1分あたりのVCコイン獲得レートを算出する。
+
+    - use_common_reward が True の場合は全員共通のレートを返す。
+    - False の場合はメンバーが持つ役職に紐づく獲得ルールを優先し、
+      該当ルールが無ければ共通レートにフォールバックする。
+    - role_scope_per_rule が True の場合、役職ルールは全体の対象カテゴリ/VC設定とは
+      独立に、そのルール自身が指定する対象カテゴリ/VCでのみ適用される。
+    """
+    if not channel or not hasattr(channel, "guild") or not channel.guild:
+        return 0.0
+
+    guild_id = channel.guild.id
+    cfg = bot.get_vc_coins_config(guild_id)
+
+    if cfg.get("is_enabled", False):
+        global_eligible = _channel_in_scope(
+            channel,
+            cfg.get("whitelist", set()), cfg.get("categories", set()),
+            cfg.get("blacklist", set()), cfg.get("blacklist_categories", set()),
+        )
+    else:
+        global_eligible = True
+
+    interval = cfg.get("common_reward_interval") or 10
+    amount = cfg.get("common_reward_amount", 100)
+    common_rate = (amount / interval) if interval > 0 else 0.0
+
+    if cfg.get("use_common_reward", True):
+        return common_rate if global_eligible else 0.0
+
+    role_scope_per_rule = cfg.get("role_scope_per_rule", False)
+    stack = cfg.get("stack_multiple_roles", False)
+    member_role_ids = {r.id for r in member.roles} if member else set()
+
+    matched_rates = []
+    for rule in cfg.get("role_rewards", []):
+        if rule.get("role_id") not in member_role_ids:
+            continue
+
+        if role_scope_per_rule:
+            in_scope = _channel_in_scope(
+                channel,
+                set(rule.get("whitelist", [])), set(rule.get("categories", [])),
+                set(rule.get("blacklist", [])), set(rule.get("blacklist_categories", [])),
+            )
+            if not in_scope:
+                continue
+        elif not global_eligible:
+            continue
+
+        r_interval = rule.get("reward_interval") or 10
+        r_amount = rule.get("reward_amount") or 0
+        if r_interval > 0:
+            matched_rates.append(r_amount / r_interval)
+
+    if matched_rates:
+        return sum(matched_rates) if stack else max(matched_rates)
+
+    return common_rate if global_eligible else 0.0
+
 def format_evaluation_datetime(dt) -> str:
     if not dt:
         return "データなし"

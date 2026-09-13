@@ -374,31 +374,6 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
         </div>
       </div>
 
-      {/* --- ゲームVC 時間指定作成機能 --- */}
-      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-lg text-white">ゲームVCの時間指定作成 (1時間単位)</h3>
-            <p className="text-sm text-zinc-400 mt-1">
-              有効にすると、ゲームVC作成の選択画面に「⏱ 時間指定で通話作成」ボタンが表示され、通話名と利用時間（時間単位）を自由入力してVCを作成できるようになります。料金はゲームVCの12時間料金から1時間あたりの単価を算出して計算されます。OFFにすると、いつも通り6時間/12時間ボタンのみの表示に戻ります。
-            </p>
-          </div>
-          <label className="flex items-center cursor-pointer ml-4">
-            <div className="relative">
-              <input type="checkbox" className="sr-only"
-                checked={toggles.ENABLE_GAME_VC_HOURLY}
-                onChange={(e) => setToggles({...toggles, ENABLE_GAME_VC_HOURLY: e.target.checked})}
-              />
-              <div className={`block w-14 h-8 rounded-full transition-colors ${toggles.ENABLE_GAME_VC_HOURLY ? 'bg-green-600' : 'bg-zinc-600'}`}></div>
-              <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${toggles.ENABLE_GAME_VC_HOURLY ? 'transform translate-x-6' : ''}`}></div>
-            </div>
-            <div className="ml-3 text-zinc-300 font-medium whitespace-nowrap">
-              {toggles.ENABLE_GAME_VC_HOURLY ? '有効 (ON)' : '無効 (OFF)'}
-            </div>
-          </label>
-        </div>
-      </div>
-
       {/* --- ロール別特別料金設定 --- */}
       <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
         <h2 className="text-xl font-bold text-white mb-6 border-b border-zinc-700 pb-2">ロール別特別料金設定</h2>
@@ -535,8 +510,8 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-white text-lg">{panel.name}</h3>
-                    {panelConfigs[panel.id] && (
-                      <button 
+                    {(panelConfigs[panel.id] || panel.id === 'game_vc') && (
+                      <button
                         onClick={() => setExpandedPanels(prev => ({ ...prev, [panel.id]: !prev[panel.id] }))}
                         className="text-xs bg-zinc-700 hover:bg-zinc-600 px-2 py-1 rounded text-white transition-colors"
                       >
@@ -610,6 +585,42 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
                       />
                     </div>
                     
+                    <div className="flex justify-end mt-2">
+                      <button
+                        onClick={handleSavePrices}
+                        disabled={saving}
+                        className="mecha-btn-sheen font-mecha bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 disabled:opacity-50 text-white px-4 py-2 rounded font-bold shadow transition-colors text-sm"
+                      >
+                        {saving ? '保存中...' : '設定を保存'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {expandedPanels[panel.id] && panel.id === 'game_vc' && (
+                <div className="bg-zinc-800/50 p-4 border-t border-zinc-700">
+                  <h4 className="font-bold text-white mb-4 text-sm">■ {panel.name} の設定</h4>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between bg-zinc-800 p-3 rounded border border-zinc-700">
+                      <div className="pr-4">
+                        <span className="text-sm text-white font-bold block">時間指定作成 (1時間単位) を有効化</span>
+                        <p className="text-xs text-zinc-400 mt-1">
+                          有効にすると、選択画面に「⏱ 時間指定で通話作成」ボタンが表示され、通話名と利用時間（時間単位）を自由入力してVCを作成できるようになります。料金は12時間料金から1時間あたりの単価を算出して計算されます。OFFにすると、いつも通り6時間/12時間ボタンのみの表示に戻ります。
+                        </p>
+                      </div>
+                      <label className="flex items-center cursor-pointer shrink-0">
+                        <div className="relative">
+                          <input type="checkbox" className="sr-only"
+                            checked={toggles.ENABLE_GAME_VC_HOURLY}
+                            onChange={(e) => setToggles({ ...toggles, ENABLE_GAME_VC_HOURLY: e.target.checked })}
+                          />
+                          <div className={`block w-12 h-7 rounded-full transition-colors ${toggles.ENABLE_GAME_VC_HOURLY ? 'bg-red-500' : 'bg-zinc-600'}`}></div>
+                          <div className={`dot absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform ${toggles.ENABLE_GAME_VC_HOURLY ? 'transform translate-x-5' : ''}`}></div>
+                        </div>
+                      </label>
+                    </div>
+
                     <div className="flex justify-end mt-2">
                       <button
                         onClick={handleSavePrices}

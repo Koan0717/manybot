@@ -138,10 +138,30 @@ export async function ensureVcCoinsSettingsSchema(pool: any) {
       `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS blacklist_channels JSONB DEFAULT '[]'`,
       `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS whitelist_categories JSONB DEFAULT '[]'`,
       `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS blacklist_categories JSONB DEFAULT '[]'`,
+      `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS use_common_reward BOOLEAN NOT NULL DEFAULT TRUE`,
+      `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS role_scope_per_rule BOOLEAN NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS stack_multiple_roles BOOLEAN NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS common_reward_amount INT NOT NULL DEFAULT 100`,
+      `ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS common_reward_interval INT NOT NULL DEFAULT 10`,
     ];
-    for (const sql of cols) { 
-      try { await pool.query(sql); } catch {} 
+    for (const sql of cols) {
+      try { await pool.query(sql); } catch {}
     }
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vc_coins_role_rewards (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        role_id BIGINT NOT NULL,
+        reward_amount INT NOT NULL DEFAULT 100,
+        reward_interval INT NOT NULL DEFAULT 10,
+        is_whitelist_mode BOOLEAN NOT NULL DEFAULT TRUE,
+        whitelist_channel_ids BIGINT[] NOT NULL DEFAULT '{}',
+        blacklist_channel_ids BIGINT[] NOT NULL DEFAULT '{}',
+        whitelist_category_ids BIGINT[] NOT NULL DEFAULT '{}',
+        blacklist_category_ids BIGINT[] NOT NULL DEFAULT '{}'
+      )
+    `);
   } catch (e) {
     console.error('Failed to ensure vc_coins_settings schema:', e);
   }

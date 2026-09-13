@@ -938,7 +938,17 @@ async def setup_db_schema(p):
 
                 enable_exclude_rank_role BOOLEAN NOT NULL DEFAULT FALSE,
 
-                exclude_rank_role_ids BIGINT[] NOT NULL DEFAULT '{}'
+                exclude_rank_role_ids BIGINT[] NOT NULL DEFAULT '{}',
+
+                use_common_reward BOOLEAN NOT NULL DEFAULT TRUE,
+
+                role_scope_per_rule BOOLEAN NOT NULL DEFAULT FALSE,
+
+                stack_multiple_roles BOOLEAN NOT NULL DEFAULT FALSE,
+
+                common_reward_amount INT NOT NULL DEFAULT 100,
+
+                common_reward_interval INT NOT NULL DEFAULT 10
 
             )
 
@@ -948,6 +958,33 @@ async def setup_db_schema(p):
             await conn.execute('ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT FALSE')
         except Exception:
             pass
+
+        for _col_sql in [
+            "ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS use_common_reward BOOLEAN NOT NULL DEFAULT TRUE",
+            "ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS role_scope_per_rule BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS stack_multiple_roles BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS common_reward_amount INT NOT NULL DEFAULT 100",
+            "ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS common_reward_interval INT NOT NULL DEFAULT 10",
+        ]:
+            try:
+                await conn.execute(_col_sql)
+            except Exception:
+                pass
+
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS vc_coins_role_rewards (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                role_id BIGINT NOT NULL,
+                reward_amount INT NOT NULL DEFAULT 100,
+                reward_interval INT NOT NULL DEFAULT 10,
+                is_whitelist_mode BOOLEAN NOT NULL DEFAULT TRUE,
+                whitelist_channel_ids BIGINT[] NOT NULL DEFAULT '{}',
+                blacklist_channel_ids BIGINT[] NOT NULL DEFAULT '{}',
+                whitelist_category_ids BIGINT[] NOT NULL DEFAULT '{}',
+                blacklist_category_ids BIGINT[] NOT NULL DEFAULT '{}'
+            )
+        ''')
 
 
 
@@ -3060,15 +3097,40 @@ async def get_vc_coins_settings(guild_id: int) -> dict:
     async with p.acquire() as conn:
 
         try:
-            row = await conn.fetchrow('SELECT is_enabled, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids FROM vc_coins_settings WHERE guild_id = $1', guild_id)
+            row = await conn.fetchrow('SELECT is_enabled, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids, use_common_reward, role_scope_per_rule, stack_multiple_roles, common_reward_amount, common_reward_interval FROM vc_coins_settings WHERE guild_id = $1', guild_id)
         except Exception:
             try:
                 await conn.execute('ALTER TABLE vc_coins_settings ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN NOT NULL DEFAULT FALSE')
-                row = await conn.fetchrow('SELECT is_enabled, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids FROM vc_coins_settings WHERE guild_id = $1', guild_id)
+                row = await conn.fetchrow('SELECT is_enabled, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids, use_common_reward, role_scope_per_rule, stack_multiple_roles, common_reward_amount, common_reward_interval FROM vc_coins_settings WHERE guild_id = $1', guild_id)
             except Exception:
                 row = await conn.fetchrow('SELECT whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids FROM vc_coins_settings WHERE guild_id = $1', guild_id)
 
+        try:
+            role_rows = await conn.fetch('SELECT role_id, reward_amount, reward_interval, is_whitelist_mode, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_role_rewards WHERE guild_id = $1', guild_id)
+        except Exception:
+            role_rows = []
+
+        role_rewards = [
+            {
+                "role_id": r["role_id"],
+                "reward_amount": r["reward_amount"],
+                "reward_interval": r["reward_interval"],
+                "is_whitelist_mode": r["is_whitelist_mode"],
+                "whitelist": r["whitelist_channel_ids"] or [],
+                "blacklist": r["blacklist_channel_ids"] or [],
+                "categories": r["whitelist_category_ids"] or [],
+                "blacklist_categories": r["blacklist_category_ids"] or [],
+            }
+            for r in role_rows
+        ]
+
         if row:
+
+            def _get(key, default):
+                try:
+                    return row[key] if key in row and row[key] is not None else default
+                except Exception:
+                    return default
 
             return {
 
@@ -3082,7 +3144,13 @@ async def get_vc_coins_settings(guild_id: int) -> dict:
 
                 "blacklist_categories": row["blacklist_category_ids"] or [],
                 "enable_exclude_rank_role": row.get("enable_exclude_rank_role", False) if hasattr(row, "get") else (row["enable_exclude_rank_role"] if "enable_exclude_rank_role" in row else False),
-                "exclude_rank_role_ids": row.get("exclude_rank_role_ids", []) if hasattr(row, "get") else (row["exclude_rank_role_ids"] if "exclude_rank_role_ids" in row else [])
+                "exclude_rank_role_ids": row.get("exclude_rank_role_ids", []) if hasattr(row, "get") else (row["exclude_rank_role_ids"] if "exclude_rank_role_ids" in row else []),
+                "use_common_reward": _get("use_common_reward", True),
+                "role_scope_per_rule": _get("role_scope_per_rule", False),
+                "stack_multiple_roles": _get("stack_multiple_roles", False),
+                "common_reward_amount": _get("common_reward_amount", 100),
+                "common_reward_interval": _get("common_reward_interval", 10),
+                "role_rewards": role_rewards,
 
             }
 
@@ -3090,7 +3158,7 @@ async def get_vc_coins_settings(guild_id: int) -> dict:
 
             await conn.execute('INSERT INTO vc_coins_settings (guild_id, is_enabled, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, enable_exclude_rank_role, exclude_rank_role_ids) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (guild_id) DO NOTHING', guild_id, False, [], [], [], [], False, [])
 
-            return {"is_enabled": False, "whitelist": [], "blacklist": [], "categories": [], "blacklist_categories": [], "enable_exclude_rank_role": False, "exclude_rank_role_ids": []}
+            return {"is_enabled": False, "whitelist": [], "blacklist": [], "categories": [], "blacklist_categories": [], "enable_exclude_rank_role": False, "exclude_rank_role_ids": [], "use_common_reward": True, "role_scope_per_rule": False, "stack_multiple_roles": False, "common_reward_amount": 100, "common_reward_interval": 10, "role_rewards": []}
 
 
 
@@ -3107,9 +3175,33 @@ async def get_all_vc_coins_settings() -> list[dict]:
             async with p.acquire() as conn:
 
                 try:
-                    rows = await conn.fetch('SELECT guild_id, is_enabled, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_settings')
+                    rows = await conn.fetch('SELECT guild_id, is_enabled, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids, use_common_reward, role_scope_per_rule, stack_multiple_roles, common_reward_amount, common_reward_interval FROM vc_coins_settings')
                 except Exception:
                     rows = await conn.fetch('SELECT guild_id, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_settings')
+
+                try:
+                    role_rows = await conn.fetch('SELECT guild_id, role_id, reward_amount, reward_interval, is_whitelist_mode, whitelist_channel_ids, blacklist_channel_ids, whitelist_category_ids, blacklist_category_ids FROM vc_coins_role_rewards')
+                except Exception:
+                    role_rows = []
+
+                role_rewards_by_guild: dict = {}
+                for rr in role_rows:
+                    role_rewards_by_guild.setdefault(rr["guild_id"], []).append({
+                        "role_id": rr["role_id"],
+                        "reward_amount": rr["reward_amount"],
+                        "reward_interval": rr["reward_interval"],
+                        "is_whitelist_mode": rr["is_whitelist_mode"],
+                        "whitelist": rr["whitelist_channel_ids"] or [],
+                        "blacklist": rr["blacklist_channel_ids"] or [],
+                        "categories": rr["whitelist_category_ids"] or [],
+                        "blacklist_categories": rr["blacklist_category_ids"] or [],
+                    })
+
+                def _rget(r, key, default):
+                    try:
+                        return r[key] if key in r and r[key] is not None else default
+                    except Exception:
+                        return default
 
                 all_settings.extend([
 
@@ -3125,7 +3217,19 @@ async def get_all_vc_coins_settings() -> list[dict]:
 
                         "categories": r["whitelist_category_ids"] or [],
 
-                        "blacklist_categories": r["blacklist_category_ids"] or []
+                        "blacklist_categories": r["blacklist_category_ids"] or [],
+
+                        "use_common_reward": _rget(r, "use_common_reward", True),
+
+                        "role_scope_per_rule": _rget(r, "role_scope_per_rule", False),
+
+                        "stack_multiple_roles": _rget(r, "stack_multiple_roles", False),
+
+                        "common_reward_amount": _rget(r, "common_reward_amount", 100),
+
+                        "common_reward_interval": _rget(r, "common_reward_interval", 10),
+
+                        "role_rewards": role_rewards_by_guild.get(r["guild_id"], []),
 
                     }
 

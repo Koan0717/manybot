@@ -240,24 +240,26 @@ export async function GET(
 
     // 5) VCコイン獲得制限 (VC Coins)
     try {
-      const vccRes = await pool.query('SELECT is_enabled FROM vc_coins_settings WHERE guild_id = $1', [guildId]);
-      const botCoinsRes = await pool.query("SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('vc_coin_reward_interval', 'vc_coin_reward_amount', 'is_whitelist_mode', 'channels', 'categories')", [guildId]);
-      
+      const vccRes = await pool.query(
+        'SELECT is_enabled, common_reward_interval, common_reward_amount, use_common_reward FROM vc_coins_settings WHERE guild_id = $1',
+        [guildId]
+      );
+
       const vccRow = vccRes.rows[0];
       const isEnabled = vccRow ? (vccRow.is_enabled === true) : false;
-      let interval = 10;
-      let amount = 100;
-      
-      for (const r of botCoinsRes.rows) {
-        if (r.setting_key === 'vc_coin_reward_interval') interval = Number(r.setting_value) || interval;
-        if (r.setting_key === 'vc_coin_reward_amount') amount = Number(r.setting_value) || amount;
-      }
+      const interval = Number(vccRow?.common_reward_interval) || 10;
+      const amount = Number(vccRow?.common_reward_amount) || 100;
+      const useCommon = vccRow ? (vccRow.use_common_reward !== false) : true;
+
+      const rateText = useCommon
+        ? `${interval}分ごとに${amount}コイン`
+        : '役職ごとの個別設定';
 
       modules['vc_coins'] = {
         configured: true,
-        summary: isEnabled 
-          ? `獲得制限: ON (${interval}分ごとに${amount}コイン)` 
-          : `獲得制限: OFF (${interval}分ごとに${amount}コイン / 全VC獲得)`,
+        summary: isEnabled
+          ? `獲得制限: ON (${rateText})`
+          : `獲得制限: OFF (${rateText} / 全VC獲得)`,
       };
     } catch (e: any) {
       modules['vc_coins'] = { configured: false, summary: 'エラー', error: e?.message || String(e) };
