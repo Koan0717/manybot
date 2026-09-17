@@ -91,7 +91,14 @@ class InterviewPanelView(discord.ui.View):
         
     @discord.ui.button(label="入界手続きを開始", style=discord.ButtonStyle.success, emoji="📝", custom_id="persistent_interview_btn")
     async def start_button(self, interaction, button):
-        await interaction.response.send_modal(InterviewNicknameModal())
+        try:
+            await interaction.response.send_modal(InterviewNicknameModal())
+        except Exception as e:
+            print(f"[Interview Error] {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
 class InterviewerGroup(app_commands.Group):
     def __init__(self, bot):

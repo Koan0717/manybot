@@ -447,7 +447,14 @@ class InquiryRequestPanelView(discord.ui.View):
 
     @discord.ui.button(label="お問い合わせチケットを作成", style=discord.ButtonStyle.primary, emoji="✉️", custom_id="persistent_inquiry_req_btn")
     async def request_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(InquiryRequestModal())
+        try:
+            await interaction.response.send_modal(InquiryRequestModal())
+        except Exception as e:
+            print(f"[InquiryRequest Error] {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
 class InquirySetupRoleSelect(discord.ui.RoleSelect):
     def __init__(self):
@@ -532,7 +539,14 @@ class AnonymousChatPanelView(discord.ui.View):
 
     @discord.ui.button(label="匿名メッセージを送る", style=discord.ButtonStyle.secondary, emoji="💬", custom_id="persistent_anon_chat_btn")
     async def request_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(AnonymousMessageModal())
+        try:
+            await interaction.response.send_modal(AnonymousMessageModal())
+        except Exception as e:
+            print(f"[AnonymousChat Error] {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
 class AnonymousPanelChannelSelect(discord.ui.ChannelSelect):
     def __init__(self):
