@@ -288,11 +288,11 @@ export async function setupDbSchema(client: any) {
             PRIMARY KEY (guild_id, user_id, channel_id)
         );
         CREATE TABLE IF NOT EXISTS sticky_templates (
-            id SERIAL PRIMARY KEY,
-            guild_id BIGINT,
-            name TEXT,
+            channel_id BIGINT PRIMARY KEY,
+            title TEXT,
             content TEXT,
-            channel_ids TEXT
+            last_message_id BIGINT,
+            last_text_message_id BIGINT
         );
         CREATE TABLE IF NOT EXISTS shop_settings (
             guild_id BIGINT PRIMARY KEY,

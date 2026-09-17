@@ -3277,15 +3277,15 @@ async def add_vc_duration(guild_id: int, user_id: int, category_id: int, seconds
 
         await conn.execute('''
 
-            INSERT INTO user_vc_durations (user_id, category_id, duration_seconds)
+            INSERT INTO user_vc_durations (guild_id, user_id, category_id, duration_seconds)
 
-            VALUES ($1, $2, $3)
+            VALUES ($1, $2, $3, $4)
 
-            ON CONFLICT (user_id, category_id)
+            ON CONFLICT (guild_id, user_id, category_id)
 
-            DO UPDATE SET duration_seconds = user_vc_durations.duration_seconds + $3
+            DO UPDATE SET duration_seconds = user_vc_durations.duration_seconds + $4
 
-        ''', user_id, category_id, seconds)
+        ''', guild_id, user_id, category_id, seconds)
 
 
 
