@@ -504,6 +504,139 @@ class DowngradeGroup(app_commands.Group):
         except Exception as e:
             await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
+class BankerGroup(app_commands.Group):
+    def __init__(self, bot):
+        super().__init__(name="銀行員", description="運営・銀行員専用の通貨付与・没収コマンド")
+        self.bot = bot
+
+    def _resolve_targets(self, guild: discord.Guild, users: str, role: discord.Role) -> dict:
+        target_members = {}
+        if users:
+            for uid_str in set(re.findall(r'\d{17,19}', users)):
+                member = guild.get_member(int(uid_str))
+                if member:
+                    target_members[member.id] = member
+        if role:
+            for member in role.members:
+                target_members[member.id] = member
+        return target_members
+
+    @app_commands.command(name="付与", description="【運営・銀行員専用】指定したユーザー（複数）またはロール全員に通貨を付与します")
+    @is_admin_or_banker()
+    @app_commands.describe(
+        amount="1人あたりの付与額",
+        users="付与するユーザー達（メンションまたはIDを複数指定可）",
+        role="付与するロール（全員に付与）"
+    )
+    async def grant(self, interaction: discord.Interaction, amount: int, users: str = None, role: discord.Role = None):
+        if amount <= 0:
+            return await interaction.response.send_message("❌ 1以上の金額を指定してください。", ephemeral=True)
+        if not users and not role:
+            return await interaction.response.send_message("❌ `users` または `role` のいずれかを指定してください。", ephemeral=True)
+
+        await interaction.response.defer()
+
+        cur_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
+        minus_target_ids = get_setting(self.bot, "MINUS_TARGET_ROLE_IDS") or []
+
+        target_members = self._resolve_targets(interaction.guild, users, role)
+        if not target_members:
+            return await interaction.followup.send("❌ サーバー内に該当するユーザーが見つかりませんでした。", ephemeral=True)
+
+        success_members = []
+        for member in target_members.values():
+            new_bal = await database.add_balance(interaction.guild.id, member.id, amount)
+            success_members.append(member)
+            if new_bal < 0:
+                member_roles = [r.id for r in member.roles]
+                if any(rid in minus_target_ids for rid in member_roles):
+                    await trigger_evaluation_failure(interaction.guild, member, "通貨マイナスになったため", interaction.user, self.bot)
+
+        mentions_str = " ".join(m.mention for m in success_members)
+        if len(success_members) == 1:
+            msg = f"💵 {mentions_str} に **{amount:,} {cur_name}** を付与しました。"
+        else:
+            msg = f"💵 {mentions_str} の計 **{len(success_members)}名** に **{amount:,} {cur_name}**（合計 **{amount * len(success_members):,} {cur_name}**）を付与しました。"
+        if len(msg) > 2000:
+            msg = msg[:1900] + "\n... (省略)"
+        await interaction.followup.send(msg)
+
+        embed = discord.Embed(
+            title="💵 銀行員操作: 付与",
+            description="運営または銀行員によって通貨の付与が行われました。",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name="実行者", value=f"{interaction.user.mention} ({interaction.user.id})", inline=False)
+        if role:
+            embed.add_field(name="対象ロール", value=role.mention, inline=False)
+        targets_val = "\n".join(f"{m.mention} ({m.id})" for m in success_members)
+        if len(targets_val) > 1024:
+            targets_val = targets_val[:1021] + "..."
+        embed.add_field(name=f"対象者一覧 ({len(success_members)}名)", value=targets_val, inline=False)
+        embed.add_field(name="付与額 (1人あたり)", value=f"{amount:,} {cur_name}", inline=True)
+        embed.add_field(name="合計付与人数", value=f"{len(success_members)}名", inline=True)
+        await send_log(self.bot, interaction.guild, "currency", embed)
+
+    @app_commands.command(name="没収", description="【運営・銀行員専用】指定したユーザー（複数）またはロール全員から通貨を没収します")
+    @is_admin_or_banker()
+    @app_commands.describe(
+        amount="1人あたりの没収額",
+        users="没収するユーザー達（メンションまたはIDを複数指定可）",
+        role="没収するロール（全員から没収）"
+    )
+    async def confiscate(self, interaction: discord.Interaction, amount: int, users: str = None, role: discord.Role = None):
+        if amount <= 0:
+            return await interaction.response.send_message("❌ 1以上の金額を指定してください。", ephemeral=True)
+        if not users and not role:
+            return await interaction.response.send_message("❌ `users` または `role` のいずれかを指定してください。", ephemeral=True)
+
+        await interaction.response.defer()
+
+        cur_name = get_setting(self.bot, "CURRENCY_NAME") or "コイン"
+        minus_target_ids = get_setting(self.bot, "MINUS_TARGET_ROLE_IDS") or []
+
+        target_members = self._resolve_targets(interaction.guild, users, role)
+        if not target_members:
+            return await interaction.followup.send("❌ サーバー内に該当するユーザーが見つかりませんでした。", ephemeral=True)
+
+        results = []
+        for member in target_members.values():
+            await database.remove_balance(interaction.guild.id, member.id, amount, force=True)
+            new_bal = await database.get_balance(interaction.guild.id, member.id)
+            results.append((member, new_bal))
+            if new_bal < 0:
+                member_roles = [r.id for r in member.roles]
+                if any(rid in minus_target_ids for rid in member_roles):
+                    await trigger_evaluation_failure(interaction.guild, member, "通貨マイナスになったため", interaction.user, self.bot)
+
+        mentions_str = " ".join(m.mention for m, _ in results)
+        if len(results) == 1:
+            m, bal = results[0]
+            msg = f"💸 {m.mention} から **{amount:,} {cur_name}** を没収しました。（現在の残高: **{bal:,} {cur_name}**）"
+        else:
+            msg = f"💸 {mentions_str} の計 **{len(results)}名** から **{amount:,} {cur_name}**（合計 **{amount * len(results):,} {cur_name}**）を没収しました。"
+        if len(msg) > 2000:
+            msg = msg[:1900] + "\n... (省略)"
+        await interaction.followup.send(msg)
+
+        embed = discord.Embed(
+            title="📉 銀行員操作: 没収",
+            description="運営または銀行員によって通貨の没収が行われました。",
+            color=discord.Color.red(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name="実行者", value=f"{interaction.user.mention} ({interaction.user.id})", inline=False)
+        if role:
+            embed.add_field(name="対象ロール", value=role.mention, inline=False)
+        targets_val = "\n".join(f"{m.mention} ({m.id}) - 新残高: {bal:,} {cur_name}" for m, bal in results)
+        if len(targets_val) > 1024:
+            targets_val = targets_val[:1021] + "..."
+        embed.add_field(name=f"対象者一覧 ({len(results)}名)", value=targets_val, inline=False)
+        embed.add_field(name="没収額 (1人あたり)", value=f"{amount:,} {cur_name}", inline=True)
+        embed.add_field(name="合計没収人数", value=f"{len(results)}名", inline=True)
+        await send_log(self.bot, interaction.guild, "currency", embed)
+
 class Admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -512,10 +645,12 @@ class Admin(commands.Cog):
         # コマンドグループの追加
         self.bot.tree.add_command(AdminGroup(self.bot))
         self.bot.tree.add_command(DowngradeGroup(self.bot))
+        self.bot.tree.add_command(BankerGroup(self.bot))
 
     async def cog_unload(self):
         self.bot.tree.remove_command("運営")
         self.bot.tree.remove_command("評価落ち")
+        self.bot.tree.remove_command("銀行員")
 
     @commands.Cog.listener()
     async def on_message(self, message):
