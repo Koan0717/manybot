@@ -1377,6 +1377,24 @@ async def setup_db_schema(p):
 
         ''')
 
+        await conn.execute('''
+
+            CREATE TABLE IF NOT EXISTS invite_issuers (
+
+                guild_id   BIGINT,
+
+                code       TEXT,
+
+                issuer_id  BIGINT NOT NULL,
+
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                PRIMARY KEY (guild_id, code)
+
+            )
+
+        ''')
+
         try:
             await conn.execute('ALTER TABLE gacha_prizes ADD COLUMN IF NOT EXISTS reward_role_duration_days INTEGER DEFAULT 0')
         except Exception as e:
@@ -4627,6 +4645,29 @@ async def get_heartbeat(guild_id: int) -> dict | None:
             return None
         except Exception:
             return None
+
+
+# ------------------------------------------------------------
+# Invite issuers (招待リンクパネルで発行したユーザーの記録)
+# ------------------------------------------------------------
+
+async def save_invite_issuer(guild_id: int, code: str, issuer_id: int):
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO invite_issuers (guild_id, code, issuer_id)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (guild_id, code) DO UPDATE SET issuer_id = $3
+        ''', guild_id, code, issuer_id)
+
+
+async def get_invite_issuer(guild_id: int, code: str) -> int | None:
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        return await conn.fetchval(
+            'SELECT issuer_id FROM invite_issuers WHERE guild_id = $1 AND code = $2',
+            guild_id, code
+        )
 
 
 async def delete_user_data(guild_id: int, user_id: int):

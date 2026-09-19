@@ -168,13 +168,13 @@ class SelfIntroRoles(commands.Cog):
         except Exception as e:
             print(f"[SelfIntroRoles] Failed to delete welcome message: {e}")
 
-        # 付与完了のリプライ
+        # 付与完了の通知（チャンネルには出さず、本人のDMにだけ送る）
         try:
-            await message.reply(
-                f"✅ {member.mention} 自己紹介ありがとうございます！ロール **{target_role.name}** を付与しました🎉",
-                delete_after=30
+            await member.send(
+                f"✅ 【{guild.name}】自己紹介ありがとうございます！ロール **{target_role.name}** を付与しました🎉"
             )
-        except Exception:
+        except (discord.Forbidden, discord.HTTPException):
+            # DM拒否設定の場合は通知なし（ロールは付与済み）
             pass
 
 

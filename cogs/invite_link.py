@@ -97,6 +97,13 @@ class InviteLinkPanelView(discord.ui.View):
             print(f'[InviteLink] Error creating invite for guild {guild.id}: {e}')
             return await interaction.followup.send(f'❌ 招待リンクの作成に失敗しました: {e}', ephemeral=True)
 
+        # 参加ログで「誰のリンクか」を表示するため、発行者を記録する
+        # (invite.inviter はBot自身になるため)
+        try:
+            await database.save_invite_issuer(guild.id, invite.code, interaction.user.id)
+        except Exception as e:
+            print(f'[InviteLink] Failed to save invite issuer for {invite.code}: {e}')
+
         # DM送信用のEmbed作成
         limit_text = f'{max_uses}回' if max_uses > 0 else '無制限'
         age_text = format_duration(max_age)

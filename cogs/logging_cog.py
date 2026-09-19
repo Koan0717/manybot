@@ -555,6 +555,22 @@ class Logging(commands.Cog):
                 
         return used_invite
 
+    async def resolve_panel_issuer(self, guild: discord.Guild, code: str) -> str:
+        """招待リンクパネルで発行された招待コードの発行者を表示用文字列で返す"""
+        try:
+            issuer_id = await database.get_invite_issuer(guild.id, code)
+        except Exception as e:
+            print(f"[Invite Cache] Failed to load invite issuer for {code}: {e}")
+            issuer_id = None
+
+        if not issuer_id:
+            return "招待リンクパネル（発行者不明）"
+
+        member = guild.get_member(issuer_id)
+        if member:
+            return f"{member.mention} ({member.name})"
+        return f"<@{issuer_id}> (ID: {issuer_id})"
+
     # --- 招待キャッシュ同期リスナー ---
     @commands.Cog.listener()
     async def on_ready(self):
@@ -589,10 +605,13 @@ class Logging(commands.Cog):
         inviter_val = "不明"
         if invite:
             invite_code_val = f"{invite.code} (使用回数: {invite.uses}回)"
-            if invite.inviter:
-                inviter_val = invite.inviter.mention
-            elif invite.code == guild.vanity_url_code:
+            if invite.code == guild.vanity_url_code:
                 inviter_val = "特別リンク（バニティURL）"
+            elif invite.inviter and invite.inviter.id == self.bot.user.id:
+                # 招待リンクパネル経由: Bot名義で作成されるため、記録した発行者を表示する
+                inviter_val = await self.resolve_panel_issuer(guild, invite.code)
+            elif invite.inviter:
+                inviter_val = invite.inviter.mention
         
         embed = discord.Embed(
             description=f"{member.mention} がサーバーに参加しました",
