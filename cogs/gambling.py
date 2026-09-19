@@ -717,7 +717,7 @@ class BlackjackBetModal(discord.ui.Modal, title='ブラックジャック：賭�
             await database.remove_balance(interaction.guild.id, interaction.user.id, bet)
             await database.increment_gambling_count(interaction.guild.id, interaction.user.id, bet)
             
-            view = BlackjackGameView(interaction.user, bet, interaction)
+            view = BlackjackGameView(interaction.user, bet)
             initial_blackjack_embed = await view.check_initial_blackjack()
             if initial_blackjack_embed:
                 await interaction.followup.send(f"🃏 **ブラックジャック開始！** (本日 {count+1}/{max_plays if max_plays > 0 else '無制限'}回目)\n賭け金: **{bet} {currency_name}**", embed=initial_blackjack_embed, ephemeral=True)
@@ -738,11 +738,10 @@ class BlackjackBetModal(discord.ui.Modal, title='ブラックジャック：賭�
                 await interaction.response.send_message("エラーが発生しました。", ephemeral=True)
 
 class BlackjackGameView(discord.ui.View):
-    def __init__(self, user, bet, interaction=None):
+    def __init__(self, user, bet):
         super().__init__(timeout=60)
         self.user = user
         self.bet = bet
-        self.interaction = interaction
         self.deck = create_blackjack_deck()
         self.message = None
         
@@ -1060,6 +1059,9 @@ class BlackjackGameView(discord.ui.View):
         embed = self.build_embed(title=title, color=color, description=description, is_final=True)
 
         # UIを先に更新する (遅延を防ぐため)
+        # ※ タイムアウト時(interaction=None)は必ず self.message(本人用のエフェメラル)を編集する。
+        #    パネルのボタン→モーダル送信の interaction.edit_original_response() は
+        #    エフェメラルではなくパネル本体を編集してしまうため使わない。
         if interaction:
             try:
                 await interaction.edit_original_response(embed=embed, view=self)
@@ -1070,21 +1072,11 @@ class BlackjackGameView(discord.ui.View):
                 except Exception:
                     pass
         else:
-            if self.interaction:
-                try:
-                    await self.interaction.edit_original_response(embed=embed, view=self)
-                except Exception:
-                    try:
-                        if self.message:
-                            await self.message.edit(embed=embed, view=self)
-                    except Exception:
-                        pass
-            else:
-                try:
-                    if self.message:
-                        await self.message.edit(embed=embed, view=self)
-                except Exception:
-                    pass
+            try:
+                if self.message:
+                    await self.message.edit(embed=embed, view=self)
+            except Exception:
+                pass
 
         if win_amount > 0:
             await database.add_balance(interaction.guild.id if interaction else self.user.guild.id, self.user.id, win_amount)
