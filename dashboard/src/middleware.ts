@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   '/api/auth/login',
   '/member',
   '/api/member/discord-login',
+  '/api/member/discord-config',
 ];
 
 export async function middleware(request: NextRequest) {

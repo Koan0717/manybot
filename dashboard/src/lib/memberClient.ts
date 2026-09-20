@@ -71,13 +71,17 @@ export async function memberFetch(path: string, init: RequestInit = {}): Promise
  * SDK で認可コードを取得 → サーバーで検証・トークン発行 → セッションを保存。
  */
 export async function discordActivityLogin(): Promise<MemberState> {
-  const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID;
-  if (!clientId) {
-    throw new Error('DiscordのクライアントIDが設定されていません');
-  }
   // Activity として起動されたときだけ frame_id が付く
   if (!new URLSearchParams(window.location.search).get('frame_id')) {
     throw new Error('Discordアクティビティの中から開いてください（ブラウザからのDiscordログインには未対応です）');
+  }
+
+  // クライアントIDはビルド時の環境変数に頼らず、サーバーから実行時に取得する
+  const configRes = await fetch('/api/member/discord-config');
+  const config = await configRes.json().catch(() => ({}));
+  const clientId: string | undefined = config.client_id;
+  if (!configRes.ok || !clientId) {
+    throw new Error(config.error || 'DiscordのクライアントIDを取得できませんでした');
   }
 
   const { DiscordSDK } = await import('@discord/embedded-app-sdk');

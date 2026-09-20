@@ -692,7 +692,7 @@ class CustomTicketTargetRoleSelectView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         channel = interaction.channel
         
-        await database.save_custom_ticket_panel(
+        panel_id = await database.save_custom_ticket_panel(
             guild_id=channel.guild.id,
             channel_id=channel.id,
             panel_title=self.panel_title,
@@ -703,19 +703,16 @@ class CustomTicketTargetRoleSelectView(discord.ui.View):
             target_role_ids=target_role_ids,
             ticket_prefix=self.ticket_prefix
         )
-        
+
         embed = discord.Embed(
             title=self.panel_title,
             description=self.panel_description,
             color=discord.Color.blue()
         )
-        
-        view = CustomTicketPanelView()
-        button = view.children[0]
-        button.label = self.button_label
-        if self.button_emoji:
-            button.emoji = self.button_emoji
-            
+
+        view = discord.ui.View(timeout=None)
+        view.add_item(CustomTicketPanelButton(panel_id, label=self.button_label, emoji=self.button_emoji))
+
         await channel.send(embed=embed, view=view)
         await interaction.followup.send("✅ カスタムチケットパネルを設置しました！", ephemeral=True)
 
@@ -728,7 +725,35 @@ class CustomTicketTargetRoleSelect(discord.ui.RoleSelect):
         target_role_ids = [r.id for r in roles]
         await self.view.save_and_send_panel(interaction, target_role_ids)
 
+class CustomTicketPanelButton(discord.ui.DynamicItem[discord.ui.Button], template=r"custom_ticket_panel:(?P<panel_id>[0-9]+)"):
+    """パネルごとに固有のcustom_idを持つボタン。同じチャンネルに複数のパネルを置いても区別できる。"""
+
+    def __init__(self, panel_id: int, label: str = "チケット作成", emoji: str = None):
+        super().__init__(discord.ui.Button(
+            label=label,
+            emoji=emoji or None,
+            style=discord.ButtonStyle.primary,
+            custom_id=f"custom_ticket_panel:{panel_id}"
+        ))
+        self.panel_id = panel_id
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match, /):
+        return cls(int(match["panel_id"]))
+
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            modal = CustomTicketRequestModal(target_member=None, panel=None, channel_id=interaction.channel.id, panel_id=self.panel_id)
+            await interaction.response.send_modal(modal)
+        except Exception as e:
+            print(f"[CustomTicket Error] {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
+
 class CustomTicketPanelView(discord.ui.View):
+    """旧形式(固定custom_id)のパネル用。既存メッセージのボタンを動かし続けるために残している。"""
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -805,11 +830,12 @@ class CustomTicketSelectView(discord.ui.View):
 class CustomTicketRequestModal(discord.ui.Modal):
     details = discord.ui.TextInput(label="ご用件・相談内容の詳細", style=discord.TextStyle.paragraph, placeholder="内容を詳しく入力してください。", required=True, max_length=1000)
 
-    def __init__(self, target_member=None, panel=None, extra_member=None, channel_id=None):
+    def __init__(self, target_member=None, panel=None, extra_member=None, channel_id=None, panel_id=None):
         self.target_member = target_member
         self.panel = panel
         self.extra_member = extra_member
         self.channel_id = channel_id
+        self.panel_id = panel_id
         title = "お問い合わせ"
         if isinstance(panel, dict) and panel.get("panel_title"):
             title = panel["panel_title"]
@@ -822,8 +848,8 @@ class CustomTicketRequestModal(discord.ui.Modal):
         guild = interaction.guild
         bot = interaction.client
         # ボタン押下時にpanelを渡さなかった場合、ここでDB取得
-        if self.panel is None and self.channel_id:
-            self.panel = await database.get_custom_ticket_panel(interaction.guild.id, self.channel_id)
+        if self.panel is None and (self.channel_id or self.panel_id):
+            self.panel = await database.get_custom_ticket_panel(interaction.guild.id, self.channel_id, self.panel_id)
         if not self.panel:
             return await interaction.followup.send("❌ パネルの設定が見つかりません。設定が削除された可能性があります。", ephemeral=True)
             
@@ -1085,7 +1111,8 @@ class Utility(commands.Cog):
         self.bot.add_view(InquiryRequestPanelView())
         self.bot.add_view(AnonymousChatPanelView())
         self.bot.add_view(CustomTicketPanelView())
-        
+        self.bot.add_dynamic_items(CustomTicketPanelButton)
+
         # コマンドグループの追加
         self.bot.tree.add_command(EventGroup(self.bot), override=True)
 

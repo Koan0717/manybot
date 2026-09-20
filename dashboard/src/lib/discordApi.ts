@@ -77,11 +77,32 @@ export async function listAllGuilds(authorization: string): Promise<DiscordGuild
 export const listBotGuilds = () => listAllGuilds(botAuthorization());
 export const listUserGuilds = (accessToken: string) => listAllGuilds(`Bearer ${accessToken}`);
 
+let cachedClientId: string | null = null;
+
+/**
+ * DiscordアプリケーションのクライアントID。
+ * 環境変数があればそれを使い、無ければ DISCORD_BOT_TOKEN から Discord API で取得する
+ * （/api/system/status と同じ方式。NEXT_PUBLIC_ の値はビルド時に埋め込まれるため、実行時に取れる形にしてある）。
+ */
+export async function getClientId(): Promise<string> {
+  const fromEnv = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || process.env.DISCORD_CLIENT_ID;
+  if (fromEnv) return fromEnv;
+  if (cachedClientId) return cachedClientId;
+  const app = await botRequest<{ id: string }>('/oauth2/applications/@me');
+  cachedClientId = app.id;
+  return app.id;
+}
+
 export async function exchangeCodeForToken(code: string): Promise<string> {
-  const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || process.env.DISCORD_CLIENT_ID;
   const clientSecret = process.env.DISCORD_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
-    throw new DiscordApiError(500, 'DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET が未設定です');
+  if (!clientSecret) {
+    throw new DiscordApiError(500, 'DISCORD_CLIENT_SECRET が未設定です');
+  }
+  let clientId: string;
+  try {
+    clientId = await getClientId();
+  } catch {
+    throw new DiscordApiError(500, 'DiscordのクライアントIDを取得できませんでした（DISCORD_BOT_TOKEN を確認してください）');
   }
 
   const res = await fetch(`${API}/oauth2/token`, {

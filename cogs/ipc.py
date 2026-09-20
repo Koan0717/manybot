@@ -254,7 +254,7 @@ class IPC(commands.Cog):
                         embed = discord.Embed(title="🛒 ショップ", description="ポイントを使ってアイテムを購入できます。", color=discord.Color.gold())
                         view = ShopPanelView()
                     elif panel_type == "custom_ticket":
-                        panel = await database.get_custom_ticket_panel(guild_id, channel_id)
+                        panel = await database.get_custom_ticket_panel(guild_id, channel_id, req.get("panel_id"))
                         if panel:
                             embed = discord.Embed(
                                 title=panel.get("panel_title", "🎫 カスタムチケット"),
@@ -279,13 +279,22 @@ class IPC(commands.Cog):
                             cid = custom_id_map.get(ptype, "persistent_custom_ticket_panel_btn")
                             
                             emoji_str = panel.get("button_emoji")
-                            btn = discord.ui.Button(
-                                label=panel.get("button_label", "チケット作成"),
-                                emoji=emoji_str if emoji_str else None,
-                                custom_id=cid,
-                                style=discord.ButtonStyle.primary
-                            )
-                            view.add_item(btn)
+                            if ptype == "custom_ticket":
+                                # パネルごとに固有のcustom_idにして、同じチャンネルの複数パネルを区別する
+                                from cogs.utility import CustomTicketPanelButton
+                                view.add_item(CustomTicketPanelButton(
+                                    panel["id"],
+                                    label=panel.get("button_label", "チケット作成"),
+                                    emoji=emoji_str
+                                ))
+                            else:
+                                btn = discord.ui.Button(
+                                    label=panel.get("button_label", "チケット作成"),
+                                    emoji=emoji_str if emoji_str else None,
+                                    custom_id=cid,
+                                    style=discord.ButtonStyle.primary
+                                )
+                                view.add_item(btn)
                     elif panel_type == "inn":
                         from cogs.rooms import RoomView
                         embed = discord.Embed(title="🏨 一般宿", description="一般宿の作成はこちらのボタンからどうぞ。", color=discord.Color.green())

@@ -2698,92 +2698,113 @@ async def get_panel_channel_by_dest(dest_channel_id: int) -> list[int]:
 
 # --- 繧E繧E繧E繝繝Eこ繝Eヨ繝代ロ繝ｫ邂｡送EE畑髢E謨E ---
 
-async def save_custom_ticket_panel(guild_id: int, channel_id: int, panel_title: str, panel_description: str, button_label: str = "チケットを作成する", button_emoji: str = None, mention_role_ids: list[int] = None, target_role_ids: list[int] = None, ticket_prefix: str = "ticket", panel_type: str = "custom_ticket"):
+_ticket_schema_ready = set()
 
+
+async def _ensure_ticket_panel_schema(p):
+    """1チャンネルに複数パネルを置けるよう、パネルIDの付与とチャンネルの一意制約の撤廃を行う(冪等)。"""
+    if id(p) in _ticket_schema_ready:
+        return
+    ok = True
+    try:
+        async with p.acquire() as conn:
+            for sql in (
+                "ALTER TABLE panel_requests ADD COLUMN IF NOT EXISTS panel_id BIGINT",
+                "ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS guild_id BIGINT",
+                "ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS id SERIAL",
+                "ALTER TABLE custom_ticket_panels DROP CONSTRAINT IF EXISTS custom_ticket_panels_pkey",
+                "DROP INDEX IF EXISTS idx_custom_ticket_panels_channel_id",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_ticket_panels_id ON custom_ticket_panels (id)",
+            ):
+                try:
+                    await conn.execute(sql)
+                except Exception as e:
+                    ok = False
+                    print(f"[Migration] custom_ticket_panels schema warning ({sql}): {e}")
+    except Exception as e:
+        ok = False
+        print(f"[Migration] custom_ticket_panels schema check failed: {e}")
+    if ok:
+        _ticket_schema_ready.add(id(p))
+
+
+async def save_custom_ticket_panel(guild_id: int, channel_id: int, panel_title: str, panel_description: str, button_label: str = "チケットを作成する", button_emoji: str = None, mention_role_ids: list[int] = None, target_role_ids: list[int] = None, ticket_prefix: str = "ticket", panel_type: str = "custom_ticket", panel_id: int = None) -> int:
+    """パネルを保存してそのIDを返す。panel_id指定なら更新、未指定なら同じチャンネルでも新規追加する。"""
     mention_role_ids = mention_role_ids or []
-
     target_role_ids = target_role_ids or []
 
     p = await get_pool(guild_id)
+    await _ensure_ticket_panel_schema(p)
     async with p.acquire() as conn:
-        try:
-            await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS guild_id BIGINT")
-        except Exception:
-            pass
-        res = await conn.execute('''
-            UPDATE custom_ticket_panels SET
-                guild_id = $10,
-                panel_title = $2,
-                panel_description = $3,
-                button_label = $4,
-                button_emoji = $5,
-                mention_role_ids = $6,
-                target_role_ids = $7,
-                ticket_prefix = $8,
-                panel_type = $9
-            WHERE channel_id = $1
-        ''', channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type, guild_id)
-        
-        # If no row updated, insert
-        if res.endswith(" 0"):
-            await conn.execute('''
-                INSERT INTO custom_ticket_panels (
-                    guild_id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            ''', guild_id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type)
+        if panel_id is not None:
+            updated = await conn.fetchval('''
+                UPDATE custom_ticket_panels SET
+                    panel_title = $2,
+                    panel_description = $3,
+                    button_label = $4,
+                    button_emoji = $5,
+                    mention_role_ids = $6,
+                    target_role_ids = $7,
+                    ticket_prefix = $8,
+                    panel_type = $9
+                WHERE id = $1 AND (guild_id = $10 OR guild_id IS NULL)
+                RETURNING id
+            ''', panel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type, guild_id)
+            if updated is not None:
+                return updated
+
+        return await conn.fetchval('''
+            INSERT INTO custom_ticket_panels (
+                guild_id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id
+        ''', guild_id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type)
 
 
-
-async def get_custom_ticket_panel(guild_id: int, channel_id: int) -> dict:
-
+async def get_custom_ticket_panel(guild_id: int, channel_id: int, panel_id: int = None) -> dict:
+    """panel_id指定ならそのパネル、未指定(旧ボタン)ならそのチャンネルで最も古いパネルを返す。"""
     p = await get_pool(guild_id)
-
+    await _ensure_ticket_panel_schema(p)
     async with p.acquire() as conn:
-
-        row = await conn.fetchrow('''
-
-            SELECT panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type 
-
-            FROM custom_ticket_panels 
-
-            WHERE channel_id = $1
-
-        ''', channel_id)
+        if panel_id is not None:
+            row = await conn.fetchrow('''
+                SELECT id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+                FROM custom_ticket_panels
+                WHERE id = $1
+            ''', panel_id)
+        else:
+            row = await conn.fetchrow('''
+                SELECT id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+                FROM custom_ticket_panels
+                WHERE channel_id = $1
+                ORDER BY id ASC
+                LIMIT 1
+            ''', channel_id)
 
         if row:
-
             return {
-
+                "id": row["id"],
                 "panel_title": row["panel_title"],
-
                 "panel_description": row["panel_description"],
-
                 "button_label": row["button_label"],
-
                 "button_emoji": row["button_emoji"],
-
                 "mention_role_ids": row["mention_role_ids"] or [],
-
                 "target_role_ids": row["target_role_ids"] or [],
-
                 "ticket_prefix": row["ticket_prefix"] or "ticket",
-
-                "panel_type": (row["panel_type"] if "panel_type" in row.keys() else None) or "custom_ticket"
-
+                "panel_type": row["panel_type"] or "custom_ticket"
             }
 
         return None
 
 
-
-async def remove_custom_ticket_panel(guild_id: int, channel_id: int):
-
+async def remove_custom_ticket_panel(guild_id: int, channel_id: int, panel_id: int = None):
+    """panel_id指定ならそのパネルのみ、未指定ならそのチャンネルのパネルをすべて削除する。"""
     p = await get_pool(guild_id)
-
     async with p.acquire() as conn:
-
-        await conn.execute('DELETE FROM custom_ticket_panels WHERE channel_id = $1', channel_id)
-
+        if panel_id is not None:
+            await conn.execute('DELETE FROM custom_ticket_panels WHERE id = $1', panel_id)
+        else:
+            await conn.execute('DELETE FROM custom_ticket_panels WHERE channel_id = $1', channel_id)
 
 
 async def get_panel_requests(guild_ids: list[int] = None) -> list[dict]:
@@ -2794,17 +2815,19 @@ async def get_panel_requests(guild_ids: list[int] = None) -> list[dict]:
 
     for p in pools:
 
+        await _ensure_ticket_panel_schema(p)
+
         try:
 
             async with p.acquire() as conn:
 
                 if guild_ids is not None:
 
-                    rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type FROM panel_requests WHERE guild_id = ANY($1::bigint[]) ORDER BY created_at ASC LIMIT 10', guild_ids)
+                    rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type, panel_id FROM panel_requests WHERE guild_id = ANY($1::bigint[]) ORDER BY created_at ASC LIMIT 10', guild_ids)
 
                 else:
 
-                    rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type FROM panel_requests ORDER BY created_at ASC LIMIT 10')
+                    rows = await conn.fetch('SELECT id, guild_id, channel_id, panel_type, panel_id FROM panel_requests ORDER BY created_at ASC LIMIT 10')
 
                 all_requests.extend([dict(row) for row in rows])
 

@@ -52,16 +52,16 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
     });
   }, [guildId]);
 
-  const handleDelete = async (channelId: string) => {
+  const handleDelete = async (panel: any) => {
     if (!confirm('本当にこのチケットパネルを削除しますか？\n(既に送信されているパネルのメッセージは自動的には消えません)')) return;
     try {
       const res = await fetch(`/api/guilds/${guildId}/tickets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', channel_id: channelId })
+        body: JSON.stringify({ action: 'delete', panel_id: panel.id, channel_id: panel.channel_id })
       });
       if (res.ok) {
-        setPanels(prev => prev.filter(p => p.channel_id !== channelId));
+        setPanels(prev => prev.filter(p => p.id !== panel.id));
       } else {
         toast.error('削除に失敗しました');
       }
@@ -124,7 +124,8 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'save',
-          panel: formData,
+          panel_id: editingPanel?.id,
+          panel: { ...formData, panel_id: editingPanel?.id },
           ...formData
         })
       });
@@ -133,11 +134,11 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         toast.success('チケットパネル設定を保存しました');
         // Update local list
         setPanels(prev => {
-          const exists = prev.some(p => p.channel_id === formData.channel_id);
+          const exists = editingPanel && prev.some(p => p.id === data.id);
           if (exists) {
-            return prev.map(p => p.channel_id === formData.channel_id ? { ...p, ...formData } : p);
+            return prev.map(p => p.id === data.id ? { ...p, ...formData } : p);
           } else {
-            return [...prev, { ...formData }];
+            return [...prev, { ...formData, id: data.id }];
           }
         });
         closeModal();
@@ -245,7 +246,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
             {panels.map(panel => {
               const ch = channels.find(c => c.id === panel.channel_id);
               return (
-                <div key={panel.channel_id} className="bg-zinc-900 border border-zinc-700 rounded-lg p-5 hover:border-zinc-500 transition-colors">
+                <div key={panel.id ?? panel.channel_id} className="bg-zinc-900 border border-zinc-700 rounded-lg p-5 hover:border-zinc-500 transition-colors">
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-lg font-bold text-white flex items-center font-tech">
@@ -258,7 +259,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                     </div>
                     <div className="space-x-2 font-tech flex-shrink-0">
                       <button onClick={() => openModal(panel)} className="text-blue-400 hover:text-blue-300 text-sm">編集</button>
-                      <button onClick={() => handleDelete(panel.channel_id)} className="text-red-500 hover:text-red-400 text-sm">削除</button>
+                      <button onClick={() => handleDelete(panel)} className="text-red-500 hover:text-red-400 text-sm">削除</button>
                     </div>
                   </div>
                   <div className="bg-zinc-800 p-3 rounded text-sm mb-3 border border-zinc-700/50">
@@ -277,10 +278,10 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                     onClick={async () => {
                       if (!confirm('このチャンネルにチケット作成パネルを送信しますか？')) return;
                       try {
-                        const res = await fetch(`/api/guilds/${guildId}/rooms`, {
+                        const res = await fetch(`/api/guilds/${guildId}/tickets`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ action: 'deploy_panel', channel_id: panel.channel_id, panel_type: 'custom_ticket' })
+                          body: JSON.stringify({ action: 'deploy', panel_id: panel.id })
                         });
                         if (res.ok) toast.success('パネルの設置をリクエストしました！');
                         else toast.error('リクエストに失敗しました。');

@@ -113,7 +113,9 @@ npm start
 
 1. アプリケーションの **Activities** を有効化する
 2. **Activities → URL Mappings** で `/` をダッシュボードの公開ホストに向ける
-3. **OAuth2** で Client Secret を取得し、`DISCORD_CLIENT_SECRET` に設定する（`NEXT_PUBLIC_DISCORD_CLIENT_ID` と `DISCORD_BOT_TOKEN` も必要）
+3. **OAuth2** で Client Secret を取得し、`DISCORD_CLIENT_SECRET` に設定する（設定後は再デプロイ／再起動が必要）
+
+クライアントID は `DISCORD_BOT_TOKEN` から自動取得されるので、この機能のために `NEXT_PUBLIC_DISCORD_CLIENT_ID` を追加する必要はありません（設定してあればそちらを優先します）。
 
 選択できるのは「Botが参加していて、本人も参加しているサーバー」だけです。表示・送金の対象はサーバー側で本人確認したDiscord IDで固定され、他人のデータには触れません。送金は `/pay` と同じ通貨ログに記録され、サーバー側で `/pay` をOFFにしている場合はWebからも送金できません。
 
