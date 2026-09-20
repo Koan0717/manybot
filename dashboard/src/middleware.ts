@@ -75,11 +75,10 @@ export async function middleware(request: NextRequest) {
               // Discordアクティビティの起動パラメータ(frame_id 等)。Discord SDK は現在のURLからこれを読むので、
               // /login へ移る前に退避し、リダイレクト先にも引き継ぐ（無いとDiscordログインが初期化できない）。
               const launchSearch = window.location.search;
-              try {
-                if (new URLSearchParams(launchSearch).get('frame_id')) {
-                  sessionStorage.setItem('discord_activity_query', launchSearch);
-                }
-              } catch (e) {}
+              if (new URLSearchParams(launchSearch).get('frame_id')) {
+                try { sessionStorage.setItem('discord_activity_query', launchSearch); } catch (e) {}
+                try { window.name = '__discord_activity_query=' + launchSearch; } catch (e) {}
+              }
 
               const token = localStorage.getItem('dashboard_session');
               if (token) {

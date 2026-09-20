@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { KeyRound, Loader2, MessageCircle } from 'lucide-react';
-import { discordActivityLogin } from '@/lib/memberClient';
+import { LOGIN_STEP_LABEL, LoginStep, discordActivityLogin, restoreActivityParams } from '@/lib/memberClient';
 
 function LoginForm() {
   const router = useRouter();
@@ -18,16 +18,24 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [discordLoading, setDiscordLoading] = useState(false);
+  const [loginStep, setLoginStep] = useState<LoginStep | null>(null);
+
+  // Activity の起動パラメータ(frame_id 等)がURLに残っているうちに退避する（Discord SDK がURLから読むため）
+  useEffect(() => {
+    restoreActivityParams();
+  }, []);
 
   const handleDiscordLogin = async () => {
     setError('');
     setDiscordLoading(true);
+    setLoginStep(null);
     try {
-      await discordActivityLogin();
+      await discordActivityLogin(setLoginStep);
       router.push('/member');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Discordログインに失敗しました');
       setDiscordLoading(false);
+      setLoginStep(null);
     }
   };
 
@@ -104,7 +112,7 @@ function LoginForm() {
               className="w-full py-3 px-4 bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-zinc-700 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-[#5865F2]/20 active:scale-[0.98] flex items-center justify-center gap-2"
             >
               {discordLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageCircle className="w-5 h-5" />}
-              {discordLoading ? 'Discordで認証中...' : 'Discordでログイン'}
+              {discordLoading ? (loginStep ? LOGIN_STEP_LABEL[loginStep] : 'Discordで認証中...') : 'Discordでログイン'}
             </button>
 
             <button
