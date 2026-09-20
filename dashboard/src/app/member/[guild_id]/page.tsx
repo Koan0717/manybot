@@ -253,7 +253,7 @@ export default function MemberGuildPage() {
   // サーバーを切り替えたときに前のサーバーの表示が残らないよう、guildId ごとに取り直す
   useEffect(() => {
     if (!loadMemberState()) {
-      router.replace('/login');
+      router.replace(`/login${window.location.search}`);
       return;
     }
     let cancelled = false;

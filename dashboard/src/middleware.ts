@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import * as jose from 'jose';
+import { ACTIVITY_STASH_SCRIPT } from '@/lib/activityStash';
 
 const COOKIE_NAME = 'dashboard_session';
 
@@ -31,14 +32,10 @@ function clientLoginRedirectPage(opts: { dropStoredToken: boolean; clearCookie: 
           <body style="background-color: #09090b; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif;">
             <div>認証情報を確認しています...</div>
             <script>
-              // Discordアクティビティの起動パラメータ(frame_id 等)。Discord SDK は現在のURLからこれを読むので、
-              // /login へ移る前に退避し、リダイレクト先にも引き継ぐ（無いとDiscordログインが初期化できない）。
+              // Discordアクティビティの起動パラメータ(frame_id 等)を退避し、リダイレクト先にも引き継ぐ
+              // （Discord SDK は現在のURLからこれを読むので、無いとDiscordログインが初期化できない）。
+              ${ACTIVITY_STASH_SCRIPT}
               const launchSearch = window.location.search;
-              if (new URLSearchParams(launchSearch).get('frame_id')) {
-                try { sessionStorage.setItem('discord_activity_query', launchSearch); } catch (e) {}
-                try { window.name = '__discord_activity_query=' + launchSearch; } catch (e) {}
-                try { localStorage.setItem('discord_activity_query_backup', JSON.stringify({ q: launchSearch, t: Date.now() })); } catch (e) {}
-              }
 
               // 直前にこの端末のトークンで試して無効だった場合は捨てる（同じトークンで繰り返さない）
               const dropStoredToken = ${opts.dropStoredToken ? 'true' : 'false'};

@@ -1,4 +1,11 @@
 // Discordログインしたメンバー用のクライアント側ヘルパー（ブラウザ／Activity iframe 内でのみ使う）
+import {
+  ACTIVITY_QUERY_KEY,
+  BACKUP_KEY,
+  BACKUP_TTL_MS,
+  TRANSIENT_PARAMS,
+  WINDOW_NAME_PREFIX,
+} from '@/lib/activityStash';
 
 export interface MemberUser {
   id: string;
@@ -61,19 +68,10 @@ export async function memberFetch(path: string, init: RequestInit = {}): Promise
   const res = await fetch(path, { ...init, headers });
   if (res.status === 401) {
     clearMemberState();
-    window.location.replace('/login');
+    window.location.replace(`/login${window.location.search}`);
   }
   return res;
 }
-
-const ACTIVITY_QUERY_KEY = 'discord_activity_query';
-// sessionStorage が使えない環境の予備。window.name は同じタブの遷移をまたいで残る
-const WINDOW_NAME_PREFIX = '__discord_activity_query=';
-// ログイン画面へのリダイレクトで付くものは退避しない
-const TRANSIENT_PARAMS = ['redirect', 'session_token'];
-// 上の2つが使えない環境の最後の予備。古い frame_id を後日使い回さないよう、短時間だけ有効にする
-const BACKUP_KEY = 'discord_activity_query_backup';
-const BACKUP_TTL_MS = 5 * 60 * 1000;
 
 function stashActivityQuery(search: string) {
   const params = new URLSearchParams(search);

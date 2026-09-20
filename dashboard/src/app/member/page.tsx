@@ -12,7 +12,7 @@ export default function MemberHome() {
   useEffect(() => {
     const s = loadMemberState();
     if (!s) {
-      router.replace('/login');
+      router.replace(`/login${window.location.search}`);
       return;
     }
     setState(s);
@@ -20,7 +20,7 @@ export default function MemberHome() {
 
   const logout = () => {
     clearMemberState();
-    router.replace('/login');
+    router.replace(`/login${window.location.search}`);
   };
 
   if (!state) {
