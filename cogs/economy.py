@@ -43,20 +43,30 @@ class Economy(commands.Cog):
             await interaction.followup.send("送金先のユーザーが見つかりませんでした。メンションまたはIDで指定してください。", ephemeral=True)
             return
 
+        # ダッシュボードの「Botへの送金」設定（未設定はON＝許可）
+        allow_pay_to_bot = get_setting(self.bot, "ALLOW_PAY_TO_BOT", interaction.guild.id) not in (False, "false")
+
         target_members = []
         not_found = []
+        skipped_bots = 0
         for uid_str in raw_ids:
             uid = int(uid_str)
             if uid == interaction.user.id:
                 continue  # 自分自身はスキップ
             member = interaction.guild.get_member(uid)
             if member:
+                if member.bot and not allow_pay_to_bot:
+                    skipped_bots += 1
+                    continue
                 target_members.append(member)
             else:
                 not_found.append(uid_str)
 
         if not target_members:
-            await interaction.followup.send("送金先のユーザーがサーバー内に見つかりませんでした。", ephemeral=True)
+            if skipped_bots:
+                await interaction.followup.send("このサーバーではBotへの送金がOFFになっています。", ephemeral=True)
+            else:
+                await interaction.followup.send("送金先のユーザーがサーバー内に見つかりませんでした。", ephemeral=True)
             return
 
         success_members = []
@@ -82,6 +92,8 @@ class Economy(commands.Cog):
             msg += f"\n⚠️ 残高不足により {len(failed_members)}名 への送金は失敗しました。"
         if not_found:
             msg += f"\n⚠️ サーバーに存在しないため {len(not_found)}名 はスキップしました。"
+        if skipped_bots:
+            msg += f"\n⚠️ Botへの送金はOFFのため {skipped_bots}件 はスキップしました。"
 
         if len(msg) > 2000:
             msg = msg[:1900] + "\n... (省略)"

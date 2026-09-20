@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 
-
+// 保存直後の変更が古いキャッシュで隠れないよう、常に動的に評価する
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: Request,
@@ -12,29 +13,29 @@ export async function GET(
   const token = process.env.DISCORD_BOT_TOKEN;
 
   try {
-    // 1. Fetch guild channels to know which channels belong to this guild
-    const response = await fetch(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
-      headers: { Authorization: `Bot ${token}` },
-      next: { revalidate: 60 }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Discord API error: ${response.status}`);
+    // 1. guild_id で紐づくパネルを主軸にする。
+    //    (guild_id が未記録の旧データ用に、Discordのチャンネル一覧に含まれるものも拾う)
+    let channelIds: string[] = [];
+    try {
+      const response = await fetch(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
+        headers: { Authorization: `Bot ${token}` },
+        cache: 'no-store'
+      });
+      if (response.ok) {
+        const channels = await response.json();
+        channelIds = channels.map((c: any) => BigInt(c.id).toString());
+      } else {
+        console.warn(`[Tickets] Discord API error: ${response.status}`);
+      }
+    } catch (e: any) {
+      console.warn('[Tickets] failed to fetch guild channels:', e.message);
     }
 
-    const channels = await response.json();
-    const channelIds = channels.map((c: any) => BigInt(c.id).toString());
-
-    if (channelIds.length === 0) {
-      return NextResponse.json([]);
-    }
-
-    // 2. Fetch ticket panels only for these channels
     const result = await pool.query(
-      `SELECT channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type 
-       FROM custom_ticket_panels 
-       WHERE channel_id = ANY($1::bigint[])`,
-      [channelIds]
+      `SELECT channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+       FROM custom_ticket_panels
+       WHERE guild_id = $1::bigint OR channel_id = ANY($2::bigint[])`,
+      [guildId, channelIds]
     );
 
     return NextResponse.json(result.rows);

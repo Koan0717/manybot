@@ -81,6 +81,7 @@ DATABASE_URL=postgresql://ユーザー名:パスワード@ホスト:ポート/DB
 DISCORD_BOT_TOKEN=Bot本体と同じトークン
 BOT_TOKEN=（同上、コード内で参照名が2種類あるため両方設定推奨）
 NEXT_PUBLIC_DISCORD_CLIENT_ID=DiscordアプリケーションのクライアントID
+DISCORD_CLIENT_SECRET=Discordアプリケーションの Client Secret（「Discordでログイン」に必須。サーバー側だけで使用）
 DASHBOARD_USERNAME=ダッシュボードログイン用ユーザー名
 DASHBOARD_PASSWORD=ダッシュボードログイン用パスワード
 JWT_SECRET=任意のランダムな秘密文字列
@@ -98,6 +99,25 @@ npm run dev
 npm run build
 npm start
 ```
+
+### Discordアクティビティ（メンバー向け画面）
+
+ログイン画面には 2 つのボタンがあります。
+
+| ボタン | 対象 | 内容 |
+|---|---|---|
+| Discordでログイン | サーバーのメンバー | Discordで認証 → サーバーを選択 → プロフィール（通貨・レベル）／送金／役職 |
+| 専用ログイン | 管理者・運営 | 従来どおりの ID / パスワード（管理ダッシュボード） |
+
+「Discordでログイン」は **Discordアクティビティの中でのみ** 動作します。Discord Developer Portal で次を設定してください。
+
+1. アプリケーションの **Activities** を有効化する
+2. **Activities → URL Mappings** で `/` をダッシュボードの公開ホストに向ける
+3. **OAuth2** で Client Secret を取得し、`DISCORD_CLIENT_SECRET` に設定する（`NEXT_PUBLIC_DISCORD_CLIENT_ID` と `DISCORD_BOT_TOKEN` も必要）
+
+選択できるのは「Botが参加していて、本人も参加しているサーバー」だけです。表示・送金の対象はサーバー側で本人確認したDiscord IDで固定され、他人のデータには触れません。送金は `/pay` と同じ通貨ログに記録され、サーバー側で `/pay` をOFFにしている場合はWebからも送金できません。
+
+**Botへの送金**は、ダッシュボードの「経済・レベリング設定」にある「Botへの送金を許可する」で サーバーごとに ON/OFF できます（デフォルトはON、設定キーは `ALLOW_PAY_TO_BOT`）。OFFにすると `/pay` でもアクティビティの送金でも、Botを送金先にできません。
 
 ---
 

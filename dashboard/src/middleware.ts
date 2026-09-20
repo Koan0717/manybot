@@ -5,9 +5,13 @@ import * as jose from 'jose';
 const COOKIE_NAME = 'dashboard_session';
 
 // Routes that don't require authentication
+// /member 配下のページは中身のないクライアント側の殻で、データは /api/member/* から
+// Authorization ヘッダー付きで取得する（そちらはトークン必須）。
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth/login',
+  '/member',
+  '/api/member/discord-login',
 ];
 
 export async function middleware(request: NextRequest) {
@@ -98,6 +102,18 @@ export async function middleware(request: NextRequest) {
     const role = payload.role as string;
     const guildId = payload.guild_id as string | undefined;
     const botId = payload.bot_id as string | undefined;
+
+    // Discordログインのメンバーは /api/member/* だけ。ここで弾かないと、
+    // guild_id を持たないトークンは下の「Admin account: full access」に落ちてしまう。
+    if (role === 'member') {
+      if (pathname.startsWith('/api/member/')) {
+        return NextResponse.next();
+      }
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'メンバーにはこの操作の権限がありません' }, { status: 403 });
+      }
+      return NextResponse.redirect(new URL('/member', request.url));
+    }
 
     // Dedicated Bot Sub-Account restriction
     if (botId && guildId) {

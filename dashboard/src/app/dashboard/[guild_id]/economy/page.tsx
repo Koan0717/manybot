@@ -13,6 +13,7 @@ interface EconomySettings {
   TC_XP_REWARD: number;
   TC_XP_COOLDOWN: number;
   VC_XP_PER_MIN: number;
+  ALLOW_PAY_TO_BOT: boolean;
 }
 
 export default function EconomySettingsPage() {
@@ -26,6 +27,7 @@ export default function EconomySettingsPage() {
     TC_XP_REWARD: 10,
     TC_XP_COOLDOWN: 10,
     VC_XP_PER_MIN: 15,
+    ALLOW_PAY_TO_BOT: true,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -40,7 +42,12 @@ export default function EconomySettingsPage() {
       const res = await fetch(`/api/guilds/${guildId}/settings`);
       if (res.ok) {
         const data = await res.json();
-        setSettings(prev => ({ ...prev, ...data }));
+        setSettings(prev => ({
+          ...prev,
+          ...data,
+          // 未設定・不正な値はON（許可）扱い。"false" 文字列で保存された場合もOFFにする
+          ALLOW_PAY_TO_BOT: !(data.ALLOW_PAY_TO_BOT === false || data.ALLOW_PAY_TO_BOT === 'false'),
+        }));
       }
     } catch (err) {
       console.error(err);
@@ -64,6 +71,7 @@ export default function EconomySettingsPage() {
             TC_XP_REWARD: Number(settings.TC_XP_REWARD),
             TC_XP_COOLDOWN: Number(settings.TC_XP_COOLDOWN),
             VC_XP_PER_MIN: Number(settings.VC_XP_PER_MIN),
+            ALLOW_PAY_TO_BOT: settings.ALLOW_PAY_TO_BOT,
         }),
       });
       const data = await res.json();
@@ -148,6 +156,24 @@ export default function EconomySettingsPage() {
                 onChange={handleChange}
                 className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all"
               />
+            </div>
+
+            <div className="pt-2 border-t border-gray-700 flex items-center justify-between gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400">Botへの送金を許可する</label>
+                <p className="text-xs text-gray-500 mt-1">
+                  OFFにすると、/pay とDiscordアクティビティの送金で、Botを送金先に指定できなくなります。
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={settings.ALLOW_PAY_TO_BOT}
+                  onChange={(e) => setSettings(prev => ({ ...prev, ALLOW_PAY_TO_BOT: e.target.checked }))}
+                />
+                <div className="w-14 h-7 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-purple-600"></div>
+              </label>
             </div>
           </div>
         </motion.div>

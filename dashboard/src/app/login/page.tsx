@@ -3,16 +3,33 @@
 import { useState, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { KeyRound, Loader2, MessageCircle } from 'lucide-react';
+import { discordActivityLogin } from '@/lib/memberClient';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/';
 
+  // 'choose': 2つのボタンを表示 / 'password': 従来のID・パスワードのフォームを表示
+  const [mode, setMode] = useState<'choose' | 'password'>('choose');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [discordLoading, setDiscordLoading] = useState(false);
+
+  const handleDiscordLogin = async () => {
+    setError('');
+    setDiscordLoading(true);
+    try {
+      await discordActivityLogin();
+      router.push('/member');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Discordログインに失敗しました');
+      setDiscordLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -66,10 +83,49 @@ function LoginForm() {
             </svg>
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Many bot</h1>
-          <p className="text-zinc-500 mt-2 text-sm">ダッシュボードにログイン</p>
+          <p className="text-zinc-500 mt-2 text-sm">
+            {mode === 'choose' ? 'ログイン方法を選んでください' : '専用ログイン'}
+          </p>
         </div>
 
-        {/* Login Card */}
+        {/* Login method chooser */}
+        {mode === 'choose' && (
+          <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/80 rounded-2xl p-8 shadow-2xl shadow-black/40 space-y-4">
+            {error && (
+              <div className="bg-red-950/60 border border-red-800/60 text-red-300 px-4 py-3 rounded-xl text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleDiscordLogin}
+              disabled={discordLoading}
+              className="w-full py-3 px-4 bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-zinc-700 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-[#5865F2]/20 active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              {discordLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageCircle className="w-5 h-5" />}
+              {discordLoading ? 'Discordで認証中...' : 'Discordでログイン'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setError(''); setMode('password'); }}
+              disabled={discordLoading}
+              className="w-full py-3 px-4 bg-zinc-800 hover:bg-zinc-700 disabled:cursor-not-allowed border border-zinc-700 text-zinc-200 font-semibold rounded-xl transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <KeyRound className="w-5 h-5" />
+              専用ログイン
+            </button>
+
+            <p className="text-center text-zinc-600 text-xs pt-2 leading-relaxed">
+              Discordでログイン: サーバーのメンバー向け（プロフィール・送金）<br />
+              専用ログイン: 管理者・運営向け（ID／パスワード）
+            </p>
+          </div>
+        )}
+
+        {/* Login Card (専用ログイン) */}
+        {mode === 'password' && (
         <form
           onSubmit={handleSubmit}
           className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/80 rounded-2xl p-8 shadow-2xl shadow-black/40"
@@ -165,12 +221,23 @@ function LoginForm() {
               'ログイン'
             )}
           </button>
+
+          <button
+            type="button"
+            onClick={() => { setError(''); setMode('choose'); }}
+            className="w-full mt-3 py-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            ← ログイン方法の選択に戻る
+          </button>
         </form>
+        )}
 
         {/* Footer note */}
-        <p className="text-center text-zinc-700 text-xs mt-6">
-          管理者のみアクセスできます
-        </p>
+        {mode === 'password' && (
+          <p className="text-center text-zinc-700 text-xs mt-6">
+            管理者のみアクセスできます
+          </p>
+        )}
       </div>
     </main>
   );
