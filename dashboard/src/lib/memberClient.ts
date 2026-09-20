@@ -71,6 +71,9 @@ const ACTIVITY_QUERY_KEY = 'discord_activity_query';
 const WINDOW_NAME_PREFIX = '__discord_activity_query=';
 // ログイン画面へのリダイレクトで付くものは退避しない
 const TRANSIENT_PARAMS = ['redirect', 'session_token'];
+// 上の2つが使えない環境の最後の予備。古い frame_id を後日使い回さないよう、短時間だけ有効にする
+const BACKUP_KEY = 'discord_activity_query_backup';
+const BACKUP_TTL_MS = 5 * 60 * 1000;
 
 function stashActivityQuery(search: string) {
   const params = new URLSearchParams(search);
@@ -82,12 +85,19 @@ function stashActivityQuery(search: string) {
   try {
     window.name = WINDOW_NAME_PREFIX + value;
   } catch {}
+  try {
+    localStorage.setItem(BACKUP_KEY, JSON.stringify({ q: value, t: Date.now() }));
+  } catch {}
 }
 
 function readStashedActivityQuery(): string | null {
   const readers = [
     () => sessionStorage.getItem(ACTIVITY_QUERY_KEY),
     () => (window.name.startsWith(WINDOW_NAME_PREFIX) ? window.name.slice(WINDOW_NAME_PREFIX.length) : null),
+    () => {
+      const backup = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null');
+      return backup && Date.now() - backup.t < BACKUP_TTL_MS ? (backup.q as string) : null;
+    },
   ];
   for (const read of readers) {
     try {
@@ -124,14 +134,34 @@ export function restoreActivityParams(): boolean {
   }
 }
 
-// 「Activityの中から開いてください」が出たときに、原因を切り分けるための情報（値は出さず、名前だけ）
+// 「Activityの中から開いてください」が出たときに、原因を切り分けるための情報（値は出さず、名前と有無だけ）
 function activityDiagnostics(): string {
   const keys = Array.from(new URLSearchParams(window.location.search).keys()).join(',') || 'なし';
   let inFrame = true;
   try {
     inFrame = window.self !== window.top;
   } catch {}
-  return `診断r2: iframe=${inFrame ? 'はい' : 'いいえ'} / host=${window.location.host} / URLパラメータ=${keys}`;
+  const has = (read: () => unknown) => {
+    try {
+      return read() ? 'あり' : 'なし';
+    } catch {
+      return '使用不可';
+    }
+  };
+  let redirects = '?';
+  try {
+    const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    if (nav) redirects = String(nav.redirectCount);
+  } catch {}
+  const parts = [
+    `iframe=${inFrame ? 'はい' : 'いいえ'}`,
+    `host=${window.location.host}`,
+    `URLパラメータ=${keys}`,
+    `退避(ss/name/ls)=${has(() => sessionStorage.getItem(ACTIVITY_QUERY_KEY))}/${has(() => window.name.startsWith(WINDOW_NAME_PREFIX))}/${has(() => localStorage.getItem(BACKUP_KEY))}`,
+    `リダイレクト数=${redirects}`,
+    `referrer=${document.referrer || 'なし'}`,
+  ];
+  return `診断r3: ${parts.join(' / ')}`;
 }
 
 const withTimeout = <T,>(promise: Promise<T>, ms: number, message: string) => {

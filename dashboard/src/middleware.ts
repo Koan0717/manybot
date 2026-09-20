@@ -15,6 +15,66 @@ const PUBLIC_PATHS = [
   '/api/member/discord-config',
 ];
 
+/**
+ * 未ログイン（または無効なトークン）のページ表示には、サーバーでリダイレクトせずこのHTMLを返し、
+ * ブラウザ側のスクリプトに /login への移動を任せる。
+ *
+ * サーバーは Discord のプロキシ越しにリクエストを受けるため、Activity の起動パラメータ(frame_id 等)を
+ * 見られないことがある。サーバーで先にリダイレクトするとブラウザがそれを見る前にURLが切り替わり、
+ * Discord SDK が初期化できなくなる。ブラウザ側なら window.location.search に本物のパラメータがある。
+ */
+function clientLoginRedirectPage(opts: { dropStoredToken: boolean; clearCookie: boolean }) {
+  const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>認証を確認中...</title></head>
+          <body style="background-color: #09090b; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif;">
+            <div>認証情報を確認しています...</div>
+            <script>
+              // Discordアクティビティの起動パラメータ(frame_id 等)。Discord SDK は現在のURLからこれを読むので、
+              // /login へ移る前に退避し、リダイレクト先にも引き継ぐ（無いとDiscordログインが初期化できない）。
+              const launchSearch = window.location.search;
+              if (new URLSearchParams(launchSearch).get('frame_id')) {
+                try { sessionStorage.setItem('discord_activity_query', launchSearch); } catch (e) {}
+                try { window.name = '__discord_activity_query=' + launchSearch; } catch (e) {}
+                try { localStorage.setItem('discord_activity_query_backup', JSON.stringify({ q: launchSearch, t: Date.now() })); } catch (e) {}
+              }
+
+              // 直前にこの端末のトークンで試して無効だった場合は捨てる（同じトークンで繰り返さない）
+              const dropStoredToken = ${opts.dropStoredToken ? 'true' : 'false'};
+              let token = null;
+              try {
+                if (dropStoredToken) localStorage.removeItem('dashboard_session');
+                else token = localStorage.getItem('dashboard_session');
+              } catch (e) {}
+
+              if (token) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('session_token', token);
+                window.location.replace(url.toString());
+              } else {
+                const loginUrl = new URL('/login', window.location.origin);
+                new URLSearchParams(launchSearch).forEach(function (value, key) {
+                  if (key !== 'redirect' && key !== 'session_token') loginUrl.searchParams.set(key, value);
+                });
+                loginUrl.searchParams.set('redirect', window.location.pathname);
+                window.location.replace(loginUrl.toString());
+              }
+            </script>
+          </body>
+        </html>
+      `;
+  const response = new NextResponse(html, { headers: { 'Content-Type': 'text/html' } });
+  if (opts.clearCookie) {
+    // 無効なCookieが残っていると、毎回ここに来て（Cookieが優先されるため）他のトークンも使えない
+    response.headers.append(
+      'Set-Cookie',
+      `${COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None; Partitioned`
+    );
+  }
+  return response;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -65,38 +125,7 @@ export async function middleware(request: NextRequest) {
     
     const isRSC = request.headers.has('RSC') || request.headers.get('x-middleware-prefetch');
     if (!isRSC && pathname !== '/login') {
-      return new NextResponse(`
-        <!DOCTYPE html>
-        <html>
-          <head><title>認証を確認中...</title></head>
-          <body style="background-color: #09090b; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif;">
-            <div>認証情報を確認しています...</div>
-            <script>
-              // Discordアクティビティの起動パラメータ(frame_id 等)。Discord SDK は現在のURLからこれを読むので、
-              // /login へ移る前に退避し、リダイレクト先にも引き継ぐ（無いとDiscordログインが初期化できない）。
-              const launchSearch = window.location.search;
-              if (new URLSearchParams(launchSearch).get('frame_id')) {
-                try { sessionStorage.setItem('discord_activity_query', launchSearch); } catch (e) {}
-                try { window.name = '__discord_activity_query=' + launchSearch; } catch (e) {}
-              }
-
-              const token = localStorage.getItem('dashboard_session');
-              if (token) {
-                const url = new URL(window.location.href);
-                url.searchParams.set('session_token', token);
-                window.location.replace(url.toString());
-              } else {
-                const loginUrl = new URL('/login', window.location.origin);
-                new URLSearchParams(launchSearch).forEach(function (value, key) {
-                  if (key !== 'redirect' && key !== 'session_token') loginUrl.searchParams.set(key, value);
-                });
-                loginUrl.searchParams.set('redirect', window.location.pathname);
-                window.location.replace(loginUrl.toString());
-              }
-            </script>
-          </body>
-        </html>
-      `, { headers: { 'Content-Type': 'text/html' } });
+      return clientLoginRedirectPage({ dropStoredToken: false, clearCookie: false });
     }
 
     // Redirect to login page for RSC requests
@@ -192,8 +221,13 @@ export async function middleware(request: NextRequest) {
         { status: 401 }
       );
     }
+    const isRSC = request.headers.has('RSC') || request.headers.get('x-middleware-prefetch');
+    if (!isRSC) {
+      // session_token が付いていれば、ブラウザ側が保存済みトークンで試した結果が無効だった、ということ
+      const triedStoredToken = request.nextUrl.searchParams.has('session_token');
+      return clientLoginRedirectPage({ dropStoredToken: triedStoredToken, clearCookie: true });
+    }
     const loginUrl = new URL('/login', request.url);
-    // Discordアクティビティの起動パラメータ(frame_id 等)を落とさない。Discord SDK が現在のURLから読むため
     request.nextUrl.searchParams.forEach((value, key) => {
       if (key !== 'session_token' && key !== 'redirect') loginUrl.searchParams.set(key, value);
     });
