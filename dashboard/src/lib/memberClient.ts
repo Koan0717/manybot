@@ -254,7 +254,11 @@ export async function discordActivityLogin(onStep?: (step: LoginStep) => void): 
     code = result.code;
   } catch (e) {
     const detail = e instanceof Error ? e.message : (e as { message?: string })?.message;
-    throw new Error(`Discordでの認可に失敗しました${detail ? `: ${detail}` : ''}`);
+    // Activity の認可には、Developer Portal の OAuth2 に Redirect URI が1つ登録されている必要がある
+    const hint = detail?.includes('redirect_uri')
+      ? '（Discord Developer Portal の OAuth2 → Redirects に https://127.0.0.1 を追加して保存してください）'
+      : '';
+    throw new Error(`Discordでの認可に失敗しました${detail ? `: ${detail}` : ''}${hint}`);
   }
 
   // 4) サーバー側で認可コードを検証し、所属サーバーを取得

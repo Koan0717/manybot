@@ -114,6 +114,7 @@ npm start
 1. アプリケーションの **Activities** を有効化する
 2. **Activities → URL Mappings** で `/` をダッシュボードの公開ホストに向ける
 3. **OAuth2** で Client Secret を取得し、`DISCORD_CLIENT_SECRET` に設定する（設定後は再デプロイ／再起動が必要）
+4. **OAuth2 → Redirects** に `https://127.0.0.1` を1つ追加して保存する（ダミーで構いません。実際のリダイレクトは SDK が処理しますが、未登録だと認可で `Missing "redirect_uri"` になります）
 
 クライアントID は `DISCORD_BOT_TOKEN` から自動取得されるので、この機能のために `NEXT_PUBLIC_DISCORD_CLIENT_ID` を追加する必要はありません（設定してあればそちらを優先します）。
 
