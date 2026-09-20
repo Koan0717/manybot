@@ -4,6 +4,8 @@ import { DiscordGuildSummary, DiscordRole, botRequest, memberAvatarUrl, memberDi
 import { requireGuildMember } from '@/lib/memberAuth';
 import { isBotTransferAllowed } from '@/lib/memberSettings';
 
+export const dynamic = 'force-dynamic';
+
 // database.get_next_level_xp と同じ式（XPはレベルアップごとに繰り越し形式で保存されている）
 const nextLevelXp = (level: number) => Math.floor(100 * Math.pow(level, 1.2) + 100);
 

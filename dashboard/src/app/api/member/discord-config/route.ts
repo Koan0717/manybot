@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getClientId } from '@/lib/discordApi';
 
+// 引数を使わないGETはビルド時に事前生成されてしまい、その最中の no-store fetch が
+// DYNAMIC_SERVER_USAGE になる。常にリクエスト時に実行する。
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/member/discord-config
  * ログイン画面が Activity SDK の初期化に使うクライアントIDを返す（公開情報。シークレットは返さない）。

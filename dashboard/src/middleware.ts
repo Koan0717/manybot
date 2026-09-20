@@ -72,6 +72,15 @@ export async function middleware(request: NextRequest) {
           <body style="background-color: #09090b; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif;">
             <div>認証情報を確認しています...</div>
             <script>
+              // Discordアクティビティの起動パラメータ(frame_id 等)。Discord SDK は現在のURLからこれを読むので、
+              // /login へ移る前に退避し、リダイレクト先にも引き継ぐ（無いとDiscordログインが初期化できない）。
+              const launchSearch = window.location.search;
+              try {
+                if (new URLSearchParams(launchSearch).get('frame_id')) {
+                  sessionStorage.setItem('discord_activity_query', launchSearch);
+                }
+              } catch (e) {}
+
               const token = localStorage.getItem('dashboard_session');
               if (token) {
                 const url = new URL(window.location.href);
@@ -79,6 +88,9 @@ export async function middleware(request: NextRequest) {
                 window.location.replace(url.toString());
               } else {
                 const loginUrl = new URL('/login', window.location.origin);
+                new URLSearchParams(launchSearch).forEach(function (value, key) {
+                  if (key !== 'redirect' && key !== 'session_token') loginUrl.searchParams.set(key, value);
+                });
                 loginUrl.searchParams.set('redirect', window.location.pathname);
                 window.location.replace(loginUrl.toString());
               }
@@ -182,6 +194,10 @@ export async function middleware(request: NextRequest) {
       );
     }
     const loginUrl = new URL('/login', request.url);
+    // Discordアクティビティの起動パラメータ(frame_id 等)を落とさない。Discord SDK が現在のURLから読むため
+    request.nextUrl.searchParams.forEach((value, key) => {
+      if (key !== 'session_token' && key !== 'redirect') loginUrl.searchParams.set(key, value);
+    });
     return NextResponse.redirect(loginUrl);
   }
 

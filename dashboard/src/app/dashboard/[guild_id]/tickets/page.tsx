@@ -26,6 +26,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
     button_emoji: '',
     mention_role_ids: [] as string[],
     target_role_ids: [] as string[],
+    staff_role_ids: [] as string[],
     ticket_prefix: 'ticket',
     panel_type: 'custom_ticket'
   });
@@ -81,6 +82,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         button_emoji: panel.button_emoji || '',
         mention_role_ids: panel.mention_role_ids?.map(String) || [],
         target_role_ids: panel.target_role_ids?.map(String) || [],
+        staff_role_ids: panel.staff_role_ids?.map(String) || [],
         ticket_prefix: panel.ticket_prefix || 'ticket',
         panel_type: panel.panel_type || 'custom_ticket'
       });
@@ -94,6 +96,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         button_emoji: '🎫',
         mention_role_ids: [],
         target_role_ids: [],
+        staff_role_ids: [],
         ticket_prefix: 'ticket',
         panel_type: 'custom_ticket'
       });
@@ -114,6 +117,11 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
     }
     if (!formData.panel_title) {
       toast.error('パネルのタイトルを入力してください');
+      return;
+    }
+
+    if (formData.panel_type === 'reservation' && formData.staff_role_ids.length === 0) {
+      toast.error('指名できる担当者のロールを1つ以上選択してください');
       return;
     }
 
@@ -157,7 +165,8 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
     { value: 'stamp', label: '🎨 スタンプ・紋章制作依頼チケット (担当製作者選択)' },
     { value: 'confession', label: '⛪ 懺悔室・告解チケット (告解司祭用)' },
     { value: 'interview', label: '📝 面接チケット' },
-    { value: 'anonymous_chat', label: '🎭 匿名チャットチケット' }
+    { value: 'anonymous_chat', label: '🎭 匿名チャットチケット' },
+    { value: 'reservation', label: '📅 予約制チケット (担当者を指名)' }
   ];
 
   const handlePanelTypeChange = (newType: string) => {
@@ -186,6 +195,12 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         presetLabel = '面接を開始する';
         presetEmoji = '📝';
         presetPrefix = 'interview';
+      } else if (newType === 'reservation') {
+        presetTitle = '📅 予約チケット';
+        presetDesc = '予約したい担当者を選んで、下のボタンからチケットを作成してください。';
+        presetLabel = '予約する';
+        presetEmoji = '📅';
+        presetPrefix = 'reserve';
       } else if (newType === 'anonymous_chat') {
         presetTitle = '🎭 匿名チャット';
         presetDesc = '匿名で質問や意見を投稿できるチケットを作成します。';
@@ -271,6 +286,9 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                   </div>
                   <div className="text-xs text-zinc-500 space-y-1 mb-4 font-tech">
                     <p>チケットの接頭辞: <span className="text-zinc-300 font-mono">{panel.ticket_prefix}-001</span></p>
+                    {panel.panel_type === 'reservation' && (
+                      <p>指名できる担当者: {panel.staff_role_ids?.length || 0} 個のロール</p>
+                    )}
                     <p>メンション: {panel.mention_role_ids?.length || 0} 個のロール</p>
                     <p>利用可能: {panel.target_role_ids?.length ? `${panel.target_role_ids.length} 個のロール` : '全員'}</p>
                   </div>
@@ -383,6 +401,21 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                     />
                   </div>
                 </div>
+
+                {formData.panel_type === 'reservation' && (
+                  <div>
+                    <label className="block text-sm text-zinc-400 mb-1 font-tech">指名できる担当者のロール <span className="text-red-500">*</span></label>
+                    <RoleSelect
+                      label="指名できる担当者のロール"
+                      placeholder="担当者が持つロールを選択..."
+                      roles={roles}
+                      value={formData.staff_role_ids}
+                      onChange={(ids: any) => setFormData({ ...formData, staff_role_ids: ids })}
+                      multiple={true}
+                    />
+                    <p className="text-xs text-zinc-500 mt-1 font-tech">このロールを持つメンバーが、ボタンを押した人に選択肢として表示され、指名されたメンバー宛にチケットが作成されます。</p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm text-zinc-400 mb-1 font-tech">チケット作成時にメンションするロール</label>

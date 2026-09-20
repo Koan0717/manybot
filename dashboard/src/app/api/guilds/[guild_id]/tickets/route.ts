@@ -31,6 +31,7 @@ async function ensureSchema(pool: Pool) {
     )`,
     `ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS guild_id BIGINT`,
     `ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS id SERIAL`,
+    `ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS staff_role_ids BIGINT[] DEFAULT '{}'::BIGINT[]`,
     `ALTER TABLE custom_ticket_panels DROP CONSTRAINT IF EXISTS custom_ticket_panels_pkey`,
     `DROP INDEX IF EXISTS idx_custom_ticket_panels_channel_id`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_ticket_panels_id ON custom_ticket_panels (id)`,
@@ -86,7 +87,7 @@ export async function GET(
     }
 
     const result = await pool.query(
-      `SELECT id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
+      `SELECT id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, staff_role_ids, ticket_prefix, panel_type
        FROM custom_ticket_panels
        WHERE guild_id = $1::bigint OR channel_id = ANY($2::bigint[])
        ORDER BY id ASC`,
@@ -111,7 +112,7 @@ export async function POST(
 
     if (action === 'save') {
       const panel = body.panel || body;
-      const { panel_id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type } = panel;
+      const { panel_id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, staff_role_ids, ticket_prefix, panel_type } = panel;
 
       if (!channel_id) {
         return NextResponse.json({ error: 'channel_id is required' }, { status: 400 });
@@ -128,6 +129,7 @@ export async function POST(
         target_role_ids || [],
         ticket_prefix || 'ticket',
         panel_type || 'custom_ticket',
+        staff_role_ids || [],
       ];
 
       // panel_id があれば既存パネルの更新、なければ (同じチャンネルでも) 新規追加
@@ -136,10 +138,10 @@ export async function POST(
         const updateRes = await pool.query(
           `UPDATE custom_ticket_panels SET
             guild_id = $1, panel_title = $2, panel_description = $3, button_label = $4, button_emoji = $5,
-            mention_role_ids = $6, target_role_ids = $7, ticket_prefix = $8, panel_type = $9
+            mention_role_ids = $6, target_role_ids = $7, ticket_prefix = $8, panel_type = $9, staff_role_ids = $11
            WHERE id = $10 AND (guild_id = $1 OR guild_id IS NULL)
            RETURNING id`,
-          [guildId, ...values, panel_id]
+          [guildId, ...values.slice(0, 8), panel_id, values[8]]
         );
         savedId = updateRes.rows[0]?.id ?? null;
       }
@@ -147,8 +149,8 @@ export async function POST(
       if (savedId === null) {
         const insertRes = await pool.query(
           `INSERT INTO custom_ticket_panels (
-            guild_id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            guild_id, channel_id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type, staff_role_ids
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
           RETURNING id`,
           [guildId, channel_id, ...values]
         );

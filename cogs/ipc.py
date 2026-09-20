@@ -279,7 +279,14 @@ class IPC(commands.Cog):
                             cid = custom_id_map.get(ptype, "persistent_custom_ticket_panel_btn")
                             
                             emoji_str = panel.get("button_emoji")
-                            if ptype == "custom_ticket":
+                            if ptype == "reservation":
+                                from cogs.utility import ReservationPanelButton
+                                view.add_item(ReservationPanelButton(
+                                    panel["id"],
+                                    label=panel.get("button_label", "予約する"),
+                                    emoji=emoji_str
+                                ))
+                            elif ptype == "custom_ticket":
                                 # パネルごとに固有のcustom_idにして、同じチャンネルの複数パネルを区別する
                                 from cogs.utility import CustomTicketPanelButton
                                 view.add_item(CustomTicketPanelButton(

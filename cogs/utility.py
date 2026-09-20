@@ -752,6 +752,122 @@ class CustomTicketPanelButton(discord.ui.DynamicItem[discord.ui.Button], templat
             else:
                 await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
+class ReservationSelectView(discord.ui.View):
+    """予約制チケット: 指名できる担当者(指定ロールの所持者)から1人を選ぶ。25人を超える場合はページ送りする。"""
+    PAGE_SIZE = 25
+
+    def __init__(self, panel: dict, members: list):
+        super().__init__(timeout=180)
+        self.panel = panel
+        self.members = members
+        self.page = 0
+        self._render()
+
+    @property
+    def _page_count(self) -> int:
+        return max(1, -(-len(self.members) // self.PAGE_SIZE))
+
+    def _render(self):
+        self.clear_items()
+        start = self.page * self.PAGE_SIZE
+        options = [
+            discord.SelectOption(
+                label=m.display_name[:100],
+                value=str(m.id),
+                description=m.name[:100]
+            )
+            for m in self.members[start:start + self.PAGE_SIZE]
+        ]
+        select = discord.ui.Select(placeholder="指名する担当者を選択してください...", options=options, row=0)
+        select.callback = self._select_callback
+        self.add_item(select)
+
+        if self._page_count > 1:
+            prev_btn = discord.ui.Button(label="◀ 前へ", style=discord.ButtonStyle.secondary, disabled=self.page == 0, row=1)
+            prev_btn.callback = self._prev_callback
+            self.add_item(prev_btn)
+            self.add_item(discord.ui.Button(label=f"{self.page + 1} / {self._page_count}", style=discord.ButtonStyle.secondary, disabled=True, row=1))
+            next_btn = discord.ui.Button(label="次へ ▶", style=discord.ButtonStyle.secondary, disabled=self.page >= self._page_count - 1, row=1)
+            next_btn.callback = self._next_callback
+            self.add_item(next_btn)
+
+    async def _prev_callback(self, interaction: discord.Interaction):
+        self.page = max(0, self.page - 1)
+        self._render()
+        await interaction.response.edit_message(view=self)
+
+    async def _next_callback(self, interaction: discord.Interaction):
+        self.page = min(self._page_count - 1, self.page + 1)
+        self._render()
+        await interaction.response.edit_message(view=self)
+
+    async def _select_callback(self, interaction: discord.Interaction):
+        try:
+            user_id = int(interaction.data['values'][0])
+            target_member = interaction.guild.get_member(user_id)
+            if not target_member:
+                try:
+                    target_member = await interaction.guild.fetch_member(user_id)
+                except Exception:
+                    pass
+            if not target_member:
+                return await interaction.response.send_message("メンバーが見つかりませんでした。", ephemeral=True)
+            await interaction.response.send_modal(CustomTicketRequestModal(target_member=target_member, panel=self.panel))
+        except Exception as e:
+            print(f"[Reservation Error] {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
+
+class ReservationPanelButton(discord.ui.DynamicItem[discord.ui.Button], template=r"reservation_panel:(?P<panel_id>[0-9]+)"):
+    """予約制チケットのパネルボタン。押すと指名対象ロールを持つ人の選択リストを表示する。"""
+
+    def __init__(self, panel_id: int, label: str = "予約する", emoji: str = None):
+        super().__init__(discord.ui.Button(
+            label=label,
+            emoji=emoji or None,
+            style=discord.ButtonStyle.primary,
+            custom_id=f"reservation_panel:{panel_id}"
+        ))
+        self.panel_id = panel_id
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match, /):
+        return cls(int(match["panel_id"]))
+
+    async def callback(self, interaction: discord.Interaction):
+        try:
+            guild = interaction.guild
+            panel = await database.get_custom_ticket_panel(guild.id, interaction.channel.id, self.panel_id)
+            if not panel:
+                return await interaction.response.send_message("❌ パネルの設定が見つかりません。設定が削除された可能性があります。", ephemeral=True)
+
+            # ボタン利用可能ロールの確認 (指定なしなら全員)
+            target_role_ids = {int(rid) for rid in panel.get("target_role_ids", [])}
+            if target_role_ids and not (target_role_ids & {r.id for r in interaction.user.roles}):
+                return await interaction.response.send_message("❌ このチケットを作成する権限がありません。", ephemeral=True)
+
+            # 指名対象ロールを持つメンバーを集める (Botと自分自身は除く)
+            staff_role_ids = {int(rid) for rid in panel.get("staff_role_ids", [])}
+            members = {}
+            for rid in staff_role_ids:
+                role = guild.get_role(rid)
+                if role:
+                    for m in role.members:
+                        if not m.bot and m.id != interaction.user.id:
+                            members[m.id] = m
+            if not members:
+                return await interaction.response.send_message("❌ 現在、指名できる担当者がいません。", ephemeral=True)
+
+            sorted_members = sorted(members.values(), key=lambda m: m.display_name)
+            view = ReservationSelectView(panel, sorted_members)
+            await interaction.response.send_message("指名する担当者を選択してください：", view=view, ephemeral=True)
+        except Exception as e:
+            print(f"[Reservation Error] {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
+
 class CustomTicketPanelView(discord.ui.View):
     """旧形式(固定custom_id)のパネル用。既存メッセージのボタンを動かし続けるために残している。"""
     def __init__(self):
@@ -1111,7 +1227,7 @@ class Utility(commands.Cog):
         self.bot.add_view(InquiryRequestPanelView())
         self.bot.add_view(AnonymousChatPanelView())
         self.bot.add_view(CustomTicketPanelView())
-        self.bot.add_dynamic_items(CustomTicketPanelButton)
+        self.bot.add_dynamic_items(CustomTicketPanelButton, ReservationPanelButton)
 
         # コマンドグループの追加
         self.bot.tree.add_command(EventGroup(self.bot), override=True)

@@ -66,13 +66,40 @@ export async function memberFetch(path: string, init: RequestInit = {}): Promise
   return res;
 }
 
+const ACTIVITY_QUERY_KEY = 'discord_activity_query';
+
+/**
+ * Activity として起動されたときだけ、URL に frame_id 等が付く。Discord SDK は現在のURLからそれを読むため、
+ * 画面遷移（リダイレクト）で失われていたら、退避しておいた起動パラメータをURLに戻す。
+ * Activity ではない（frame_id が見つからない）場合は false。
+ */
+function restoreActivityParams(): boolean {
+  const current = new URLSearchParams(window.location.search);
+  if (current.get('frame_id')) {
+    try {
+      sessionStorage.setItem(ACTIVITY_QUERY_KEY, window.location.search);
+    } catch {}
+    return true;
+  }
+  try {
+    const stashed = sessionStorage.getItem(ACTIVITY_QUERY_KEY);
+    if (stashed && new URLSearchParams(stashed).get('frame_id')) {
+      new URLSearchParams(stashed).forEach((value, key) => {
+        if (!current.has(key)) current.set(key, value);
+      });
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}?${current.toString()}`);
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
 /**
  * Discordアクティビティ内でのログイン。
  * SDK で認可コードを取得 → サーバーで検証・トークン発行 → セッションを保存。
  */
 export async function discordActivityLogin(): Promise<MemberState> {
-  // Activity として起動されたときだけ frame_id が付く
-  if (!new URLSearchParams(window.location.search).get('frame_id')) {
+  if (!restoreActivityParams()) {
     throw new Error('Discordアクティビティの中から開いてください（ブラウザからのDiscordログインには未対応です）');
   }
 

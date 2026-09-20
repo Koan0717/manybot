@@ -4,6 +4,8 @@ import { DiscordGuildMember, botRequest, memberAvatarUrl, memberDisplayName } fr
 import { requireGuildMember } from '@/lib/memberAuth';
 import { isBotTransferAllowed } from '@/lib/memberSettings';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/member/guilds/[guild_id]/members?q=名前
  * 送金先の候補検索。自分自身は除く。Botは「Botへの送金を許可する」設定がONのときだけ含める。
