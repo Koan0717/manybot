@@ -640,6 +640,106 @@ async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
 
 
 
+async def resolve_room_channel(bot, channel_id: int):
+    """部屋チャンネルの実体を取得する。
+
+    戻り値: (channel, deleted)
+      channel : 取得できたチャンネル (取得できなければ None)
+      deleted : Discord上から確実に消えていると判断できる場合のみ True
+    """
+    ch = bot.get_channel(channel_id)
+    if ch is not None:
+        return ch, False
+    try:
+        ch = await bot.fetch_channel(channel_id)
+        return ch, False
+    except discord.NotFound:
+        # チャンネルが存在しないことが確定
+        return None, True
+    except Exception as e:
+        # 権限不足や一時的な通信エラー。存在有無が判断できないので削除はしない
+        print(f"[Rooms] channel fetch error ({channel_id}): {e}")
+        return None, False
+
+
+async def find_existing_room(bot, guild: discord.Guild, owner_id: int, room_types: list):
+    """このギルドで実際に有効な部屋があるか調べる。
+
+    戻り値: (exists, channel)
+      exists  : 有効な部屋が存在する場合 True
+      channel : その部屋のチャンネル (取得できなかった場合は None)
+
+    DBに残っているだけの下記レコードは「部屋あり」と判定せず、その場で整理する。
+      * チャンネルが既に削除済みのレコード
+      * 他ギルドの部屋のレコード (DBを複数ギルドで共有している場合)
+      * 有効期限切れのまま消し忘れているレコード
+    """
+    try:
+        rows = await database.get_owned_rooms(owner_id, room_types, guild.id)
+    except Exception as e:
+        print(f"[Rooms] get_owned_rooms error: {e}")
+        return False, None
+
+    now = database.get_now_naive()
+
+    for row in rows:
+        channel_id = row["channel_id"]
+        row_guild_id = row.get("guild_id")
+        channel, deleted = await resolve_room_channel(bot, channel_id)
+
+        if deleted:
+            # チャンネルが存在しないので古いレコードを削除して続行
+            try:
+                await database.remove_room(channel_id)
+            except Exception as e:
+                print(f"[Rooms] stale room cleanup error ({channel_id}): {e}")
+            if hasattr(bot, "empty_custom_vcs"):
+                bot.empty_custom_vcs.pop(channel_id, None)
+            continue
+
+        if channel is None:
+            # 存在を確認できなかったレコード。
+            # このギルドのものと確定している場合のみ安全側に倒して「部屋あり」とする
+            if row_guild_id == guild.id:
+                return True, None
+            continue
+
+        channel_guild_id = channel.guild.id if getattr(channel, "guild", None) else None
+
+        # guild_id が未設定の古いレコードは、実チャンネルから判明したギルドIDを補完する
+        if row_guild_id is None and channel_guild_id:
+            try:
+                await database.set_room_guild(channel_id, channel_guild_id)
+            except Exception as e:
+                print(f"[Rooms] set_room_guild error ({channel_id}): {e}")
+
+        if channel_guild_id != guild.id:
+            # 他ギルドの部屋なので、このギルドの重複判定には使わない
+            continue
+
+        expire_at = row.get("expire_at")
+        if expire_at is not None:
+            if expire_at.tzinfo:
+                expire_at = expire_at.astimezone(JST).replace(tzinfo=None)
+            if expire_at <= now:
+                # 期限切れのまま残っている部屋は削除して新規作成を許可する
+                try:
+                    await channel.delete()
+                except Exception as e:
+                    print(f"[Rooms] expired room delete error ({channel_id}): {e}")
+                try:
+                    await database.remove_room(channel_id)
+                except Exception as e:
+                    print(f"[Rooms] expired room record delete error ({channel_id}): {e}")
+                if hasattr(bot, "empty_custom_vcs"):
+                    bot.empty_custom_vcs.pop(channel_id, None)
+                continue
+
+        return True, channel
+
+    return False, None
+
+
 async def process_room_purchase(bot, interaction: discord.Interaction, room_type: str, duration: int, panel_id: str = None, custom_name: str = None, override_price: int = None):
     owner_id = interaction.user.id
     if not hasattr(bot, 'processing_rooms'):
@@ -662,47 +762,22 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
     await interaction.response.defer(ephemeral=True)
     owner_id = interaction.user.id
 
-    # DBに宿レコードが残っていてもチャンネルが存在しない場合は古いレコードを削除して続行
     guild_id = interaction.guild.id
 
-    async def _clean_stale_rooms(types: list):
-        """DBに残っているが実際にはチャンネルが存在しない古いレコードを削除する"""
-        try:
-            pool = await database.get_pool(guild_id)
-            async with pool.acquire() as conn:
-                rows = await conn.fetch(
-                    'SELECT channel_id FROM rooms WHERE owner_id = $1 AND room_type = ANY($2)',
-                    owner_id, types
-                )
-            for row in rows:
-                ch = bot.get_channel(row["channel_id"])
-                if ch is None:
-                    try:
-                        ch = await bot.fetch_channel(row["channel_id"])
-                    except Exception:
-                        ch = None
-                if ch is None:
-                    # チャンネルが存在しないのでDBから削除
-                    await database.remove_room(row["channel_id"])
-        except Exception as e:
-            print(f"[RoomPurchase] stale room cleanup error: {e}")
-
-    if room_type in ["宿", "高級宿"]:
-        await _clean_stale_rooms(["宿", "高級宿"])
-        if await database.has_room_type(owner_id, ["宿", "高級宿"], guild_id):
-            return await interaction.edit_original_response(content="既に「宿」を持っています！(1人1つまで)")
-    if room_type == "カスタムVC":
-        await _clean_stale_rooms(["カスタムVC"])
-        if await database.has_room_type(owner_id, ["カスタムVC"], guild_id):
-            return await interaction.edit_original_response(content="既に「カスタムVC」を持っています！")
-    if room_type == "ゲームVC":
-        await _clean_stale_rooms(["ゲームVC"])
-        if await database.has_room_type(owner_id, ["ゲームVC"], guild_id):
-            return await interaction.edit_original_response(content="既に「ゲームVC」を持っています！(1人1つまで)")
-    if room_type == "賭博VC":
-        await _clean_stale_rooms(["賭博VC"])
-        if await database.has_room_type(owner_id, ["賭博VC"], guild_id):
-            return await interaction.edit_original_response(content="既に「賭博VC」を持っています！(1人1つまで)")
+    duplicate_checks = {
+        "宿": (["宿", "高級宿"], "既に「宿」を持っています！(1人1つまで)"),
+        "高級宿": (["宿", "高級宿"], "既に「宿」を持っています！(1人1つまで)"),
+        "カスタムVC": (["カスタムVC"], "既に「カスタムVC」を持っています！"),
+        "ゲームVC": (["ゲームVC"], "既に「ゲームVC」を持っています！(1人1つまで)"),
+        "賭博VC": (["賭博VC"], "既に「賭博VC」を持っています！(1人1つまで)"),
+    }
+    if room_type in duplicate_checks:
+        check_types, dup_message = duplicate_checks[room_type]
+        exists, existing_channel = await find_existing_room(bot, interaction.guild, owner_id, check_types)
+        if exists:
+            if existing_channel is not None:
+                dup_message = f"{dup_message}\n{existing_channel.mention}"
+            return await interaction.edit_original_response(content=dup_message)
     
     if override_price is not None:
         price = override_price

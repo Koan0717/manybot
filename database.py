@@ -320,7 +320,9 @@ async def setup_db_schema(p):
 
                 room_type TEXT,
 
-                expire_at TIMESTAMP
+                expire_at TIMESTAMP,
+
+                guild_id BIGINT
 
             )
 
@@ -464,6 +466,20 @@ async def setup_db_schema(p):
         except Exception as e:
 
             print(f"[Migration] rooms migration warning: {e}")
+
+
+
+        try:
+
+            # 複数ギルドが同一DBを共有する構成では guild_id が無いと
+            # 「他サーバーで作った部屋」まで重複判定に引っかかってしまうため追加
+            await conn.execute('ALTER TABLE rooms ADD COLUMN IF NOT EXISTS guild_id BIGINT')
+
+            await conn.execute('CREATE INDEX IF NOT EXISTS rooms_owner_guild_idx ON rooms (owner_id, guild_id)')
+
+        except Exception as e:
+
+            print(f"[Migration] rooms guild_id migration warning: {e}")
 
 
 
@@ -1822,8 +1838,15 @@ async def add_room(channel_id: int, owner_id: int, room_type: str, expire_at: da
 
     async with p.acquire() as conn:
 
-        await conn.execute('INSERT INTO rooms (channel_id, owner_id, room_type, expire_at, trigger_channel_id) VALUES ($1, $2, $3, $4, $5)',
-                         channel_id, owner_id, room_type, expire_at, trigger_channel_id)
+        try:
+
+            await conn.execute('INSERT INTO rooms (channel_id, owner_id, room_type, expire_at, trigger_channel_id, guild_id) VALUES ($1, $2, $3, $4, $5, $6)',
+                             channel_id, owner_id, room_type, expire_at, trigger_channel_id, guild_id)
+
+        except asyncpg.UndefinedColumnError:
+
+            await conn.execute('INSERT INTO rooms (channel_id, owner_id, room_type, expire_at, trigger_channel_id) VALUES ($1, $2, $3, $4, $5)',
+                             channel_id, owner_id, room_type, expire_at, trigger_channel_id)
 
 
 
@@ -1855,9 +1878,91 @@ async def has_room_type(owner_id: int, room_types: list[str], guild_id: int = No
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT 1 FROM rooms WHERE owner_id = $1 AND room_type = ANY($2) LIMIT 1', owner_id, room_types)
+        if guild_id is None:
+
+            row = await conn.fetchrow('SELECT 1 FROM rooms WHERE owner_id = $1 AND room_type = ANY($2) LIMIT 1', owner_id, room_types)
+
+        else:
+
+            # guild_id が NULL の古いレコードは、どのギルドのものか判別できないため
+            # 互換のために対象に含める(呼び出し側で実チャンネルを確認して補正する)
+            try:
+
+                row = await conn.fetchrow(
+                    'SELECT 1 FROM rooms WHERE owner_id = $1 AND room_type = ANY($2) AND (guild_id = $3 OR guild_id IS NULL) LIMIT 1',
+                    owner_id, room_types, guild_id
+                )
+
+            except asyncpg.UndefinedColumnError:
+
+                row = await conn.fetchrow('SELECT 1 FROM rooms WHERE owner_id = $1 AND room_type = ANY($2) LIMIT 1', owner_id, room_types)
 
         return row is not None
+
+
+
+async def get_owned_rooms(owner_id: int, room_types: list[str], guild_id: int = None) -> list[dict]:
+    """指定オーナーの部屋レコードを取得する。
+
+    guild_id を指定した場合は、そのギルドのレコードと
+    guild_id 未設定(古いレコード)のみを返す。"""
+
+    p = await get_pool(guild_id)
+
+    async with p.acquire() as conn:
+
+        try:
+
+            if guild_id is None:
+
+                rows = await conn.fetch(
+                    'SELECT channel_id, owner_id, room_type, expire_at, guild_id FROM rooms WHERE owner_id = $1 AND room_type = ANY($2)',
+                    owner_id, room_types
+                )
+
+            else:
+
+                rows = await conn.fetch(
+                    'SELECT channel_id, owner_id, room_type, expire_at, guild_id FROM rooms WHERE owner_id = $1 AND room_type = ANY($2) AND (guild_id = $3 OR guild_id IS NULL)',
+                    owner_id, room_types, guild_id
+                )
+
+        except asyncpg.UndefinedColumnError:
+
+            # guild_id カラムのマイグレーションが未適用のDBでも動作するようにする
+            rows = await conn.fetch(
+                'SELECT channel_id, owner_id, room_type, expire_at FROM rooms WHERE owner_id = $1 AND room_type = ANY($2)',
+                owner_id, room_types
+            )
+
+        result = []
+
+        for r in rows:
+
+            d = dict(r)
+
+            d.setdefault("guild_id", None)
+
+            result.append(d)
+
+        return result
+
+
+
+async def set_room_guild(channel_id: int, guild_id: int):
+    """guild_id が未設定の古いレコードに、実チャンネルから判明したギルドIDを補完する。"""
+
+    p = await get_pool(guild_id)
+
+    async with p.acquire() as conn:
+
+        try:
+
+            await conn.execute('UPDATE rooms SET guild_id = $1 WHERE channel_id = $2 AND guild_id IS NULL', guild_id, channel_id)
+
+        except asyncpg.UndefinedColumnError:
+
+            pass
 
 
 
