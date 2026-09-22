@@ -257,6 +257,153 @@ async def build_db_diagnosis_embed(guild_id: int, refresh: bool = False) -> disc
     return embed
 
 
+def _fmt_totals(t: dict) -> str:
+    if not t:
+        return "なし"
+    return (
+        f"人数 {t.get('users', 0)}\n"
+        f"所持金 合計 {t.get('balance', 0):,}\n"
+        f"チャットXP 合計 {t.get('tc_xp', 0):,}\n"
+        f"VC XP 合計 {t.get('vc_xp', 0):,}"
+    )
+
+
+async def build_db_compare_embed(guild_id: int) -> discord.Embed:
+    """マスターDBと専用DBの中身を突き合わせた結果を Embed にまとめる。"""
+    info = await database.compare_guild_databases(guild_id)
+
+    if not info["ok"]:
+        return discord.Embed(
+            title="🔍 データベース比較",
+            description=f"❌ 比較できませんでした: {info.get('error')}",
+            color=discord.Color.red()
+        )
+
+    embed = discord.Embed(
+        title="🔍 データベース比較",
+        description=f"サーバーID: `{guild_id}`\n読み取りのみで、データは変更していません。",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="マスターDB", value=_fmt_totals(info["totals"]["master"]), inline=True)
+    embed.add_field(name="専用DB（現在使用中）", value=_fmt_totals(info["totals"]["dedicated"]), inline=True)
+    embed.add_field(
+        name="在籍の内訳",
+        value=(
+            f"両方にいる {info['both']} 人\n"
+            f"マスターだけ {info['master_only']} 人\n"
+            f"専用DBだけ {info['dedicated_only']} 人"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="両方にいる人の中身",
+        value=(
+            f"完全に同じ {info['same']} 人\n"
+            f"マスターの方が多い {info['master_ahead']} 人\n"
+            f"専用DBの方が多い {info['dedicated_ahead']} 人\n"
+            f"項目ごとに入り混じり {info['mixed']} 人"
+        ),
+        inline=False
+    )
+
+    if info["samples"]:
+        lines = []
+        for s in info["samples"][:3]:
+            m, d = s["master"], s["dedicated"]
+            lines.append(
+                f"<@{s['user_id']}>\n"
+                f"　マスター: Lv{m['tc_level']}/{m['vc_level']} 所持金{m['balance']:,}\n"
+                f"　専用DB: Lv{d['tc_level']}/{d['vc_level']} 所持金{d['balance']:,}"
+            )
+        embed.add_field(name="差が大きい人（上位3件）", value="\n".join(lines)[:1024], inline=False)
+
+    if info["master_ahead"] > info["dedicated_ahead"]:
+        advice = (
+            "マスターDBの方が進んでいる人が多いです。"
+            "マスター側が新しいデータの可能性が高いため、統合を検討してください。"
+        )
+    elif info["dedicated_ahead"] > info["master_ahead"]:
+        advice = (
+            "専用DBの方が進んでいる人が多いです。"
+            "現在使っている専用DBが新しいので、取り込み漏れの人だけ補えば十分かもしれません。"
+        )
+    else:
+        advice = "どちらが新しいか判断が難しい状態です。差が大きい人の中身を確認してください。"
+
+    embed.add_field(
+        name="次の手順",
+        value=(
+            f"{advice}\n\n"
+            "統合の下見（書き込みなし）:\n`!db統合 max`\n"
+            "実際に統合する:\n`!db統合 max 実行`"
+        ),
+        inline=False
+    )
+    return embed
+
+
+async def build_db_merge_embed(guild_id: int, strategy: str, dry_run: bool) -> discord.Embed:
+    """統合の下見、または実行結果を Embed にまとめる。"""
+    info = await database.merge_guild_databases(guild_id, strategy=strategy, dry_run=dry_run)
+
+    if not info["ok"]:
+        return discord.Embed(
+            title="🧩 データ統合",
+            description=f"❌ 失敗しました: {info.get('error')}",
+            color=discord.Color.red()
+        )
+
+    strategy_label = {
+        "max": "項目ごとに大きい方を採用（誰のランクも下がらない）",
+        "master": "マスターDBの値を優先",
+        "dedicated": "専用DBの値を優先し、欠けている人だけ取り込む",
+    }[strategy]
+
+    embed = discord.Embed(
+        title="🧩 データ統合" + ("（下見）" if dry_run else "（実行済み）"),
+        description=(
+            f"統合方法: {strategy_label}\n"
+            + ("**まだ何も書き込んでいません。**" if dry_run
+               else "専用DBへ書き込みました。変更前の内容は `merge_backup_users` に退避済みです。")
+        ),
+        color=discord.Color.orange() if dry_run else discord.Color.green()
+    )
+    embed.add_field(
+        name="対象",
+        value=(
+            f"新しく取り込む {info['inserted']} 人\n"
+            f"値を更新する {info['updated']} 人\n"
+            f"変更なし {info['unchanged']} 人"
+        ),
+        inline=False
+    )
+    if not dry_run:
+        embed.add_field(name="退避した件数", value=f"{info['backed_up']} 件", inline=False)
+
+    if info["changes"]:
+        lines = []
+        for c in info["changes"][:3]:
+            after = c["after"]
+            before = c["before"]
+            if before is None:
+                lines.append(f"<@{c['user_id']}> 新規取り込み: Lv{after['tc_level']}/{after['vc_level']} 所持金{after['balance']:,}")
+            else:
+                lines.append(
+                    f"<@{c['user_id']}>\n"
+                    f"　変更前: Lv{before['tc_level']}/{before['vc_level']} 所持金{before['balance']:,}\n"
+                    f"　変更後: Lv{after['tc_level']}/{after['vc_level']} 所持金{after['balance']:,}"
+                )
+        embed.add_field(name="変更例（上位3件）", value="\n".join(lines)[:1024], inline=False)
+
+    if dry_run and (info["inserted"] or info["updated"]):
+        embed.add_field(
+            name="実行するには",
+            value=f"`!db統合 {strategy} 実行`",
+            inline=False
+        )
+    return embed
+
+
 # --- コマンドグループ ---
 class AdminGroup(app_commands.Group):
     def __init__(self, bot):
@@ -876,6 +1023,42 @@ class Admin(commands.Cog):
             embed = await build_db_diagnosis_embed(ctx.guild.id, refresh=do_refresh)
         except Exception as e:
             return await ctx.send(f"❌ 診断に失敗しました: {e}")
+        await ctx.send(embed=embed)
+
+    @commands.command(name="db比較", aliases=["dbcompare", "db_compare"])
+    @commands.has_permissions(administrator=True)
+    async def db_compare_prefix(self, ctx):
+        """マスターDBと専用DBの中身を突き合わせる（読み取りのみ）。"""
+        if ctx.guild is None:
+            return await ctx.send("サーバー内で実行してください。")
+        async with ctx.typing():
+            try:
+                embed = await build_db_compare_embed(ctx.guild.id)
+            except Exception as e:
+                return await ctx.send(f"❌ 比較に失敗しました: {e}")
+        await ctx.send(embed=embed)
+
+    @commands.command(name="db統合", aliases=["dbmerge", "db_merge"])
+    @commands.has_permissions(administrator=True)
+    async def db_merge_prefix(self, ctx, strategy: str = "max", confirm: str = None):
+        """分裂したデータを専用DBに統合する。
+
+        使い方:
+          !db統合 max          下見のみ（書き込まない）
+          !db統合 max 実行      実際に統合する
+        統合方法: max / master / dedicated
+        """
+        if ctx.guild is None:
+            return await ctx.send("サーバー内で実行してください。")
+        strategy = (strategy or "max").lower()
+        if strategy not in ("max", "master", "dedicated"):
+            return await ctx.send("統合方法は max / master / dedicated のいずれかを指定してください。")
+        dry_run = str(confirm or "").lower() not in ("実行", "run", "yes", "confirm", "true")
+        async with ctx.typing():
+            try:
+                embed = await build_db_merge_embed(ctx.guild.id, strategy, dry_run)
+            except Exception as e:
+                return await ctx.send(f"❌ 統合に失敗しました: {e}")
         await ctx.send(embed=embed)
 
     @commands.command(name="sync")
