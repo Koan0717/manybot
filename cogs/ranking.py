@@ -444,10 +444,36 @@ class Ranking(commands.Cog):
             self.bot.tc_xp_cooldowns.pop(user_id, None)
 
         # データベースから通貨・XP・インベントリ等のユーザーデータを削除
+        # DELETE_DATA_ON_LEAVE を False にすると削除せずそのまま残す
+        delete_on_leave = config.get_setting(self.bot, "DELETE_DATA_ON_LEAVE", guild_id)
+        if delete_on_leave is None:
+            delete_on_leave = True
+        elif isinstance(delete_on_leave, str):
+            delete_on_leave = delete_on_leave.lower() == "true"
+
+        if not delete_on_leave:
+            print(f"[Ranking Cog] Kept data for user {user_id} in guild {guild_id} (DELETE_DATA_ON_LEAVE=False).")
+            return
+
         try:
             await database.delete_user_data(guild_id, user_id)
         except Exception as e:
             print(f"[Ranking Cog] Error in on_member_remove cleanup for user {user_id}: {e}")
+
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member):
+        """再参加したメンバーのランク・通貨を、退出時の退避データから復元する"""
+        if member.bot:
+            return
+        try:
+            restored = await database.restore_user_data(member.guild.id, member.id)
+            if restored:
+                print(
+                    f"[Ranking Cog] Restored rank data for rejoining member "
+                    f"{member.id} in guild {member.guild.id}."
+                )
+        except Exception as e:
+            print(f"[Ranking Cog] Error restoring data for user {member.id}: {e}")
 
 async def setup(bot):
     cog = Ranking(bot)

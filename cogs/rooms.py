@@ -676,6 +676,10 @@ async def find_existing_room(bot, guild: discord.Guild, owner_id: int, room_type
     """
     try:
         rows = await database.get_owned_rooms(owner_id, room_types, guild.id)
+    except database.GuildDatabaseUnavailable:
+        # DBが見えない状態で作成を許可すると、記録できない部屋が増えてしまう。
+        # 呼び出し元でエラーとして扱わせる
+        raise
     except Exception as e:
         print(f"[Rooms] get_owned_rooms error: {e}")
         return False, None
@@ -773,7 +777,12 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
     }
     if room_type in duplicate_checks:
         check_types, dup_message = duplicate_checks[room_type]
-        exists, existing_channel = await find_existing_room(bot, interaction.guild, owner_id, check_types)
+        try:
+            exists, existing_channel = await find_existing_room(bot, interaction.guild, owner_id, check_types)
+        except database.GuildDatabaseUnavailable:
+            return await interaction.edit_original_response(
+                content="❌ データベースに接続できないため、現在部屋を作成できません。運営にご連絡ください。"
+            )
         if exists:
             if existing_channel is not None:
                 dup_message = f"{dup_message}\n{existing_channel.mention}"

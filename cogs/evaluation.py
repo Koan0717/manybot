@@ -103,7 +103,7 @@ class EvaluationGroup(app_commands.Group):
         if not period:
             return await interaction.followup.send(f"{user.mention} の評価期間が設定されていません。", ephemeral=True)
             
-        evals = await database.get_user_evaluations(user.id)
+        evals = await database.get_user_evaluations(user.id, guild_id=interaction.guild.id)
         
         embed = discord.Embed(
             title=f"📋 {user.display_name} の評価状況",
@@ -190,7 +190,8 @@ class EvaluatorSheetGroup(app_commands.Group):
             evaluator_name=interaction.user.display_name,
             score=score,
             stamp_count=stamp_count,
-            comment=comment
+            comment=comment,
+            guild_id=interaction.guild.id
         )
         
         await interaction.followup.send(f"✅ {user.mention} への評価を登録しました。", ephemeral=True)

@@ -331,7 +331,7 @@ class InterviewerGroup(app_commands.Group):
 
             # 面接実績の記録と累計取得
             await database.add_interviewer_log(interaction.user.id, user.id, guild.id)
-            interviewer_count = await database.get_interviewer_count(interaction.user.id)
+            interviewer_count = await database.get_interviewer_count(interaction.user.id, guild_id=guild.id)
             
             # 接続VC名の取得
             vc_name = "❌ VC未接続"

@@ -39,14 +39,21 @@ export default function DatabaseSettings({ params }: { params: { guild_id: strin
   const [hasDedicated, setHasDedicated] = useState<boolean | null>(null);
   const [guildName, setGuildName] = useState<string>('');
   const [showUrl, setShowUrl] = useState(false);
+  // 設定の読み込みに失敗したまま保存すると、空のURLで既存の設定を
+  // 上書きしてしまう（ボットがマスターDBに切り替わり、データが消えたように見える）。
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/guilds/${guildId}/database`).then(res => res.json()).catch(() => ({})),
+      fetch(`/api/guilds/${guildId}/database`).then(res => res.json()).catch(() => ({ error: 'fetch failed' })),
       fetch(`/api/guilds/${guildId}/status`).then(res => res.json()).catch(() => ({})),
     ])
       .then(([dbData, statusData]) => {
-        if (!dbData?.error) setDatabaseUrl(dbData.database_url || '');
+        if (!dbData?.error) {
+          setDatabaseUrl(dbData.database_url || '');
+        } else {
+          setLoadFailed(true);
+        }
         if (!statusData?.error) {
           setHasDedicated(!!statusData.has_dedicated_db);
           setGuildName(statusData.guild_name || '');
@@ -56,19 +63,22 @@ export default function DatabaseSettings({ params }: { params: { guild_id: strin
       .finally(() => setLoading(false));
   }, [guildId]);
 
-  const handleSave = async () => {
+  const submit = async (url: string, confirmRemove: boolean) => {
     setSaving(true);
-
     try {
       const res = await fetch(`/api/guilds/${guildId}/database`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ database_url: databaseUrl.trim() })
+        body: JSON.stringify({ database_url: url, confirm_remove: confirmRemove })
       });
       const data = await res.json();
       if (data.success) {
-        setHasDedicated(!!databaseUrl.trim());
-        toast.success('データベース設定を保存しました！新しいデータベースを使用するため、次回のBot操作時から適用されます。');
+        setHasDedicated(!!url);
+        if (data.removed) {
+          toast.success('専用データベースの設定を解除しました。');
+        } else {
+          toast.success('データベース設定を保存しました！新しいデータベースを使用するため、次回のBot操作時から適用されます。');
+        }
       } else {
         toast.error('エラーが発生しました: ' + data.error);
       }
@@ -77,6 +87,31 @@ export default function DatabaseSettings({ params }: { params: { guild_id: strin
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSave = async () => {
+    if (loadFailed) {
+      toast.error('現在の設定を読み込めていないため保存できません。ページを再読み込みしてからやり直してください。');
+      return;
+    }
+    const trimmed = databaseUrl.trim();
+    if (!trimmed) {
+      toast.error('接続URLが空です。設定を解除する場合は「専用DBの設定を解除」を使用してください。');
+      return;
+    }
+    await submit(trimmed, false);
+  };
+
+  const handleRemove = async () => {
+    if (!window.confirm(
+      '専用データベースの設定を解除しますか？\n\n' +
+      'ボットはマスターデータベースを使用するようになり、専用DB内のランクや所持金は表示されなくなります。' +
+      '（専用DB内のデータ自体は削除されません）'
+    )) {
+      return;
+    }
+    setDatabaseUrl('');
+    await submit('', true);
   };
 
   return (
@@ -190,7 +225,12 @@ export default function DatabaseSettings({ params }: { params: { guild_id: strin
         </div>
 
         {/* Action bar */}
-        <div className="border-t border-red-900/40 bg-black/30 px-5 md:px-6 py-5 relative z-10">
+        <div className="border-t border-red-900/40 bg-black/30 px-5 md:px-6 py-5 relative z-10 flex flex-col md:flex-row gap-3">
+          {loadFailed && (
+            <p className="text-amber-400 text-sm font-tech w-full">
+              ⚠ 現在の設定を読み込めませんでした。空のまま保存すると設定が消えるため、保存は無効になっています。ページを再読み込みしてください。
+            </p>
+          )}
           <button
             onClick={handleSave}
             className="mecha-btn-sheen mecha-clip-sm bg-gradient-to-r from-red-700 via-red-600 to-red-800 hover:from-red-600 hover:via-red-500 hover:to-red-700 text-white transition-all shadow-lg shadow-red-900/30 px-8 py-3 font-mecha font-bold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed w-full md:w-auto flex items-center justify-center gap-3 border border-red-400/30"
@@ -213,6 +253,15 @@ export default function DatabaseSettings({ params }: { params: { guild_id: strin
               </>
             )}
           </button>
+          {hasDedicated && (
+            <button
+              onClick={handleRemove}
+              className="mecha-clip-sm border border-red-900/60 bg-black/40 hover:bg-red-950/40 text-red-300 transition-all px-6 py-3 font-mecha font-bold tracking-wide disabled:opacity-40 disabled:cursor-not-allowed w-full md:w-auto"
+              disabled={loading || saving}
+            >
+              専用DBの設定を解除
+            </button>
+          )}
         </div>
       </div>
     </div>

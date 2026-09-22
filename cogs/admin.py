@@ -208,6 +208,84 @@ class AdminGroup(app_commands.Group):
         except Exception as e:
             await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
+    @app_commands.command(name="db診断", description="【運営専用】このサーバーのデータがどのデータベースに入っているかを確認します")
+    @app_commands.describe(refresh="接続先のキャッシュを破棄してから確認します")
+    @is_admin()
+    async def db_diagnose(self, interaction: discord.Interaction, refresh: bool = False):
+        await interaction.response.defer(ephemeral=True)
+        guild_id = interaction.guild.id
+        try:
+            info = await database.diagnose_guild_database(guild_id, refresh=refresh)
+        except Exception as e:
+            return await interaction.followup.send(f"❌ 診断に失敗しました: {e}", ephemeral=True)
+
+        def fmt(counts: dict) -> str:
+            if not counts:
+                return "未確認"
+            if counts.get("error"):
+                return f"取得失敗 ({counts['error'][:100]})"
+            return f"登録 {counts.get('users', 0)} 人 / ランク・所持金あり {counts.get('active', 0)} 人"
+
+        using_dedicated = info["using"] == "dedicated"
+        embed = discord.Embed(
+            title="🗄️ データベース診断",
+            description=f"サーバーID: `{guild_id}`",
+            color=discord.Color.green() if using_dedicated or not info["has_row"] else discord.Color.red()
+        )
+        embed.add_field(
+            name="専用DBの設定",
+            value=(
+                "未設定（マスターDBを使用）" if not info["has_row"]
+                else "⚠️ **空の値が保存されています**（設定が消えた状態）" if info["url_is_blank"]
+                else f"`{database.mask_db_url(info['raw_url'])}`"
+            ),
+            inline=False
+        )
+        if info["dedicated_ok"] is False:
+            embed.add_field(
+                name="専用DBへの接続",
+                value=f"❌ 失敗\n```{str(info['dedicated_error'])[:300]}```",
+                inline=False
+            )
+        elif info["dedicated_ok"] is True:
+            embed.add_field(name="専用DBへの接続", value="✅ 成功", inline=False)
+
+        embed.add_field(name="現在読み書きしているDB", value="専用DB" if using_dedicated else "マスターDB", inline=False)
+        embed.add_field(name="マスターDBのデータ", value=fmt(info["master"]), inline=False)
+        if info["dedicated"]:
+            embed.add_field(name="専用DBのデータ", value=fmt(info["dedicated"]), inline=False)
+
+        # 判定
+        master_active = (info["master"] or {}).get("active") or 0
+        dedicated_active = (info["dedicated"] or {}).get("active") or 0
+        if info["url_is_blank"]:
+            verdict = (
+                "専用DBの接続先が空になっています。データは元の専用DBに残っている可能性が高いです。"
+                "正しい接続URLを再設定してから、このコマンドを `再読込: True` で実行してください。"
+            )
+        elif info["dedicated_ok"] is False:
+            verdict = (
+                "専用DBに接続できていません。データは専用DB側に残っています。"
+                "DBが停止していないか、URLとパスワードを確認してください。"
+            )
+        elif not using_dedicated and master_active > 0:
+            verdict = "専用DBは未設定で、マスターDBにデータがあります。正常な状態です。"
+        elif using_dedicated and dedicated_active == 0 and master_active > 0:
+            verdict = (
+                "専用DB側が空で、マスターDB側にデータが残っています。"
+                "以前はマスターDBを使っていた可能性があります。データの移行が必要です。"
+            )
+        elif using_dedicated and dedicated_active > 0 and master_active > 0:
+            verdict = (
+                "両方のDBにデータがあります。一時的に接続先が切り替わり、"
+                "データが分裂している可能性があります。統合が必要か確認してください。"
+            )
+        else:
+            verdict = "接続先とデータの場所は一致しています。"
+        embed.add_field(name="判定", value=verdict, inline=False)
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     @app_commands.command(name="任意ロールパネル設置", description="【運営専用】ユーザーがリアクションを押すことで自由に付与・剥奪できるロールパネルを設置します")
     @is_admin()
     async def reaction_role_setup(self, interaction: discord.Interaction):
