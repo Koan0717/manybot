@@ -83,7 +83,14 @@ export async function getGuildDbUrl(guildId: string | number): Promise<string | 
       [parsedId]
     );
     if (res.rows.length > 0) {
-      return res.rows[0].database_url;
+      // 空文字が保存されていると専用DBが未設定として扱われ、
+      // マスターDBのデータが表示されてしまうため警告を出す
+      const url = (res.rows[0].database_url || '').trim();
+      if (!url) {
+        console.warn(`[db] guild ${parsedId} has a blank database_url; falling back to the master database.`);
+        return null;
+      }
+      return url;
     }
   } catch (error: any) {
     if (error.code !== '42P01') {

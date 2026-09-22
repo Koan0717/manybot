@@ -42,6 +42,9 @@ EVALUATOR_ROLE_NAMES = ["【仮】評価員ロール名A", "【仮】評価員�
 
 # --- 動的設定管理 (DB保存) ---
 DEFAULT_SETTINGS = {
+    # 退出したメンバーのランク・通貨をDBから削除するか。
+    # False にすると削除せずそのまま残す。
+    "DELETE_DATA_ON_LEAVE": True,
     "LEVEL_UP_CHANNEL_ID": 123456789012345678,
     "CREATE_VC_CHANNEL_ID": 123456789012345678,
     "EVAL_TIME_CATEGORY_ID": 123456789012345678,

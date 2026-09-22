@@ -33,11 +33,41 @@ def get_now_naive() -> datetime.datetime:
 
 pools = {}
 
+# guild_id -> (database_url or None, 取得時刻)
+# ダッシュボードで接続先を変更した場合に再起動なしで反映されるよう、
+# 一定時間で自動的に再取得する
 guild_to_db = {}
+
+GUILD_DB_CACHE_TTL_SECONDS = 300
 
 master_pool = None
 
 import inspect
+
+
+
+class GuildDatabaseUnavailable(Exception):
+    """専用DBが設定されているのに接続できない場合に送出する。
+
+    ここでマスターDBにフォールバックしてしまうと、別のDBに対して
+    読み書きを行い「データが全部リセットされた」ように見えてしまうため、
+    黙って代替せずエラーとして扱う。"""
+
+    def __init__(self, guild_id, original):
+        self.guild_id = guild_id
+        self.original = original
+        super().__init__(
+            f"ギルド {guild_id} の専用データベースに接続できません: {original}"
+        )
+
+
+
+def invalidate_guild_db_cache(guild_id: int = None):
+    """接続先のキャッシュを破棄する。guild_id 未指定で全件破棄。"""
+    if guild_id is None:
+        guild_to_db.clear()
+    else:
+        guild_to_db.pop(guild_id, None)
 
 
 
@@ -93,11 +123,29 @@ async def get_all_configured_pools():
 
 
 
+def _normalize_db_url(val):
+    """空文字や空白だけのURLは「専用DB未設定」として扱う。
+
+    ダッシュボードから空文字が保存されてしまうと、専用DBを指していたはずの
+    ギルドが黙ってマスターDBに切り替わるため、ここで None に正規化する。"""
+    if val is None:
+        return None
+    val = str(val).strip()
+    return val or None
+
+
+
 async def get_guild_db_url(guild_id: int):
 
-    if guild_id in guild_to_db:
+    cached = guild_to_db.get(guild_id)
 
-        return guild_to_db[guild_id]
+    if cached is not None:
+
+        url, fetched_at = cached
+
+        if (datetime.datetime.now() - fetched_at).total_seconds() < GUILD_DB_CACHE_TTL_SECONDS:
+
+            return url
 
     p = await get_master_pool()
 
@@ -105,7 +153,9 @@ async def get_guild_db_url(guild_id: int):
 
         val = await p.fetchval("SELECT database_url FROM guild_databases WHERE guild_id = $1", guild_id)
 
-        guild_to_db[guild_id] = val
+        val = _normalize_db_url(val)
+
+        guild_to_db[guild_id] = (val, datetime.datetime.now())
 
         return val
 
@@ -129,7 +179,7 @@ async def set_guild_db_url(guild_id: int, url: str):
 
         """, guild_id, url)
 
-        guild_to_db[guild_id] = url
+        guild_to_db[guild_id] = (_normalize_db_url(url), datetime.datetime.now())
 
         new_pool = await get_pool(guild_id)
 
@@ -139,7 +189,7 @@ async def set_guild_db_url(guild_id: int, url: str):
 
         await p.execute("DELETE FROM guild_databases WHERE guild_id = $1", guild_id)
 
-        guild_to_db[guild_id] = None
+        guild_to_db[guild_id] = (None, datetime.datetime.now())
 
 
 
@@ -233,7 +283,12 @@ async def get_pool(guild_id: int = None):
 
             except Exception as e:
 
-                print(f"❁E[DB Error] Supabase (専用DB) への接続に失敗しました (ギルドID: {guild_id}): {e}")
+                print(f"[DB Error] Supabase (専用DB) への接続に失敗しました (ギルドID: {guild_id}): {e}")
+
+                # マスターDBで代替すると、そのギルドのデータが空に見えたうえで
+                # 新しいデータが別のDBに書き込まれてしまう。データを分裂させない
+                # ため、フォールバックせずエラーにする
+                raise GuildDatabaseUnavailable(guild_id, e) from e
 
     return await get_master_pool()
 
@@ -320,7 +375,9 @@ async def setup_db_schema(p):
 
                 room_type TEXT,
 
-                expire_at TIMESTAMP
+                expire_at TIMESTAMP,
+
+                guild_id BIGINT
 
             )
 
@@ -464,6 +521,60 @@ async def setup_db_schema(p):
         except Exception as e:
 
             print(f"[Migration] rooms migration warning: {e}")
+
+
+
+        try:
+
+            await conn.execute('''
+
+                CREATE TABLE IF NOT EXISTS deleted_user_data (
+
+                    guild_id BIGINT,
+
+                    user_id BIGINT,
+
+                    balance BIGINT DEFAULT 0,
+
+                    tc_xp INTEGER DEFAULT 0,
+
+                    tc_level INTEGER DEFAULT 1,
+
+                    vc_xp INTEGER DEFAULT 0,
+
+                    vc_level INTEGER DEFAULT 1,
+
+                    evaluation_vc_time INTEGER DEFAULT 0,
+
+                    event_points INTEGER DEFAULT 0,
+
+                    initial_issued BOOLEAN DEFAULT FALSE,
+
+                    deleted_at TIMESTAMP,
+
+                    PRIMARY KEY (guild_id, user_id)
+
+                )
+
+            ''')
+
+        except Exception as e:
+
+            print(f"[Migration] deleted_user_data migration warning: {e}")
+
+
+
+        try:
+
+            # 複数ギルドが同一DBを共有する構成では guild_id が無いと
+            # 「他サーバーで作った部屋」まで重複判定に引っかかってしまうため追加
+            await conn.execute('ALTER TABLE rooms ADD COLUMN IF NOT EXISTS guild_id BIGINT')
+
+            await conn.execute('CREATE INDEX IF NOT EXISTS rooms_owner_guild_idx ON rooms (owner_id, guild_id)')
+
+        except Exception as e:
+
+            print(f"[Migration] rooms guild_id migration warning: {e}")
 
 
 
@@ -1408,6 +1519,99 @@ async def setup_db_schema(p):
 
 
 
+def mask_db_url(url: str) -> str:
+    """パスワードを伏せた接続先の表示用文字列を返す。"""
+    if not url:
+        return "(未設定)"
+    try:
+        head, _, tail = str(url).partition("@")
+        if not tail:
+            return "(設定あり)"
+        scheme, _, creds = head.partition("://")
+        user = creds.split(":")[0] if creds else "?"
+        return f"{scheme}://{user}:****@{tail}"
+    except Exception:
+        return "(設定あり)"
+
+
+async def _count_guild_data(conn, guild_id: int) -> dict:
+    """1つの接続について、そのギルドのユーザーデータ件数を数える。"""
+    out = {"users": None, "active": None, "error": None}
+    try:
+        out["users"] = await conn.fetchval(
+            'SELECT COUNT(*) FROM users WHERE guild_id = $1', guild_id
+        )
+        out["active"] = await conn.fetchval(
+            """SELECT COUNT(*) FROM users
+               WHERE guild_id = $1
+                 AND (COALESCE(tc_xp,0) > 0 OR COALESCE(vc_xp,0) > 0
+                      OR COALESCE(tc_level,1) > 1 OR COALESCE(vc_level,1) > 1
+                      OR COALESCE(balance,0) > 0)""",
+            guild_id
+        )
+    except Exception as e:
+        out["error"] = str(e)
+    return out
+
+
+async def diagnose_guild_database(guild_id: int, refresh: bool = False) -> dict:
+    """このギルドのデータがどのDBに入っているかを診断する。
+
+    「ランクが全部リセットされた」という症状の大半は、データが消えたのではなく
+    参照先のDBが切り替わっていることが原因なので、両方のDBの件数を突き合わせる。
+    """
+    if refresh:
+        invalidate_guild_db_cache(guild_id)
+
+    result = {
+        "guild_id": guild_id,
+        "raw_url": None,          # guild_databases に保存されている生の値
+        "url_is_blank": False,    # 空文字が保存されている(設定が消えた状態)
+        "has_row": False,         # guild_databases に行があるか
+        "dedicated_ok": None,     # 専用DBに接続できたか (None = 専用DB未設定)
+        "dedicated_error": None,
+        "using": "master",        # 実際に読み書きしているDB
+        "master": {},
+        "dedicated": {},
+    }
+
+    master = await get_master_pool()
+
+    try:
+        row = await master.fetchrow(
+            "SELECT database_url FROM guild_databases WHERE guild_id = $1", guild_id
+        )
+        if row is not None:
+            result["has_row"] = True
+            result["raw_url"] = row["database_url"]
+            result["url_is_blank"] = _normalize_db_url(row["database_url"]) is None
+    except Exception as e:
+        result["dedicated_error"] = f"guild_databases の読み取りに失敗: {e}"
+
+    async with master.acquire() as conn:
+        result["master"] = await _count_guild_data(conn, guild_id)
+
+    url = _normalize_db_url(result["raw_url"])
+    if url:
+        conn = None
+        try:
+            conn = await asyncpg.connect(url, statement_cache_size=0, timeout=10)
+            result["dedicated_ok"] = True
+            result["using"] = "dedicated"
+            result["dedicated"] = await _count_guild_data(conn, guild_id)
+        except Exception as e:
+            result["dedicated_ok"] = False
+            result["dedicated_error"] = str(e)
+        finally:
+            if conn is not None:
+                try:
+                    await conn.close()
+                except Exception:
+                    pass
+
+    return result
+
+
 async def setup_db():
 
     p = await get_master_pool()
@@ -1822,8 +2026,15 @@ async def add_room(channel_id: int, owner_id: int, room_type: str, expire_at: da
 
     async with p.acquire() as conn:
 
-        await conn.execute('INSERT INTO rooms (channel_id, owner_id, room_type, expire_at, trigger_channel_id) VALUES ($1, $2, $3, $4, $5)',
-                         channel_id, owner_id, room_type, expire_at, trigger_channel_id)
+        try:
+
+            await conn.execute('INSERT INTO rooms (channel_id, owner_id, room_type, expire_at, trigger_channel_id, guild_id) VALUES ($1, $2, $3, $4, $5, $6)',
+                             channel_id, owner_id, room_type, expire_at, trigger_channel_id, guild_id)
+
+        except asyncpg.UndefinedColumnError:
+
+            await conn.execute('INSERT INTO rooms (channel_id, owner_id, room_type, expire_at, trigger_channel_id) VALUES ($1, $2, $3, $4, $5)',
+                             channel_id, owner_id, room_type, expire_at, trigger_channel_id)
 
 
 
@@ -1855,9 +2066,91 @@ async def has_room_type(owner_id: int, room_types: list[str], guild_id: int = No
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT 1 FROM rooms WHERE owner_id = $1 AND room_type = ANY($2) LIMIT 1', owner_id, room_types)
+        if guild_id is None:
+
+            row = await conn.fetchrow('SELECT 1 FROM rooms WHERE owner_id = $1 AND room_type = ANY($2) LIMIT 1', owner_id, room_types)
+
+        else:
+
+            # guild_id が NULL の古いレコードは、どのギルドのものか判別できないため
+            # 互換のために対象に含める(呼び出し側で実チャンネルを確認して補正する)
+            try:
+
+                row = await conn.fetchrow(
+                    'SELECT 1 FROM rooms WHERE owner_id = $1 AND room_type = ANY($2) AND (guild_id = $3 OR guild_id IS NULL) LIMIT 1',
+                    owner_id, room_types, guild_id
+                )
+
+            except asyncpg.UndefinedColumnError:
+
+                row = await conn.fetchrow('SELECT 1 FROM rooms WHERE owner_id = $1 AND room_type = ANY($2) LIMIT 1', owner_id, room_types)
 
         return row is not None
+
+
+
+async def get_owned_rooms(owner_id: int, room_types: list[str], guild_id: int = None) -> list[dict]:
+    """指定オーナーの部屋レコードを取得する。
+
+    guild_id を指定した場合は、そのギルドのレコードと
+    guild_id 未設定(古いレコード)のみを返す。"""
+
+    p = await get_pool(guild_id)
+
+    async with p.acquire() as conn:
+
+        try:
+
+            if guild_id is None:
+
+                rows = await conn.fetch(
+                    'SELECT channel_id, owner_id, room_type, expire_at, guild_id FROM rooms WHERE owner_id = $1 AND room_type = ANY($2)',
+                    owner_id, room_types
+                )
+
+            else:
+
+                rows = await conn.fetch(
+                    'SELECT channel_id, owner_id, room_type, expire_at, guild_id FROM rooms WHERE owner_id = $1 AND room_type = ANY($2) AND (guild_id = $3 OR guild_id IS NULL)',
+                    owner_id, room_types, guild_id
+                )
+
+        except asyncpg.UndefinedColumnError:
+
+            # guild_id カラムのマイグレーションが未適用のDBでも動作するようにする
+            rows = await conn.fetch(
+                'SELECT channel_id, owner_id, room_type, expire_at FROM rooms WHERE owner_id = $1 AND room_type = ANY($2)',
+                owner_id, room_types
+            )
+
+        result = []
+
+        for r in rows:
+
+            d = dict(r)
+
+            d.setdefault("guild_id", None)
+
+            result.append(d)
+
+        return result
+
+
+
+async def set_room_guild(channel_id: int, guild_id: int):
+    """guild_id が未設定の古いレコードに、実チャンネルから判明したギルドIDを補完する。"""
+
+    p = await get_pool(guild_id)
+
+    async with p.acquire() as conn:
+
+        try:
+
+            await conn.execute('UPDATE rooms SET guild_id = $1 WHERE channel_id = $2 AND guild_id IS NULL', guild_id, channel_id)
+
+        except asyncpg.UndefinedColumnError:
+
+            pass
 
 
 
@@ -3500,9 +3793,9 @@ async def add_reaction_role(message_id: int, emoji: str, role_id: int, guild_id:
 
         ''', message_id, emoji, role_id)
 
-async def get_user_evaluation_counts(target_user_id: int) -> dict:
+async def get_user_evaluation_counts(target_user_id: int, guild_id: int = None) -> dict:
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
@@ -3522,9 +3815,9 @@ async def get_user_evaluation_counts(target_user_id: int) -> dict:
 
 
 
-async def add_user_evaluation(user_id: int, evaluator_id: int, evaluator_name: str, score: int, stamp_count: int, comment: str):
+async def add_user_evaluation(user_id: int, evaluator_id: int, evaluator_name: str, score: int, stamp_count: int, comment: str, guild_id: int = None):
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
@@ -3538,9 +3831,9 @@ async def add_user_evaluation(user_id: int, evaluator_id: int, evaluator_name: s
 
 
 
-async def get_user_evaluations(target_user_id: int) -> list[dict]:
+async def get_user_evaluations(target_user_id: int, guild_id: int = None) -> list[dict]:
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
@@ -3596,9 +3889,9 @@ async def add_interviewer_log(interviewer_id: int, target_user_id: int, guild_id
 
 
 
-async def get_interviewer_count(interviewer_id: int) -> int:
+async def get_interviewer_count(interviewer_id: int, guild_id: int = None) -> int:
 
-    p = await get_pool()
+    p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
@@ -4697,7 +4990,96 @@ async def get_invite_issuer(guild_id: int, code: str) -> int | None:
         )
 
 
+async def archive_user_data(guild_id: int, user_id: int) -> bool:
+    """削除する前にランク・通貨を退避しておく。
+
+    退出時にデータを消す運用でも、再参加したときにランクを戻せるようにする。
+    アイテムやガチャロールは対象外。"""
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        try:
+            row = await conn.fetchrow(
+                '''SELECT balance, tc_xp, tc_level, vc_xp, vc_level,
+                          evaluation_vc_time, event_points, initial_issued
+                   FROM users WHERE guild_id = $1 AND user_id = $2''',
+                guild_id, user_id
+            )
+            if row is None:
+                return False
+            await conn.execute(
+                '''INSERT INTO deleted_user_data
+                       (guild_id, user_id, balance, tc_xp, tc_level, vc_xp, vc_level,
+                        evaluation_vc_time, event_points, initial_issued, deleted_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                   ON CONFLICT (guild_id, user_id) DO UPDATE SET
+                       balance = EXCLUDED.balance,
+                       tc_xp = EXCLUDED.tc_xp,
+                       tc_level = EXCLUDED.tc_level,
+                       vc_xp = EXCLUDED.vc_xp,
+                       vc_level = EXCLUDED.vc_level,
+                       evaluation_vc_time = EXCLUDED.evaluation_vc_time,
+                       event_points = EXCLUDED.event_points,
+                       initial_issued = EXCLUDED.initial_issued,
+                       deleted_at = EXCLUDED.deleted_at''',
+                guild_id, user_id,
+                row["balance"] or 0, row["tc_xp"] or 0, row["tc_level"] or 1,
+                row["vc_xp"] or 0, row["vc_level"] or 1,
+                row["evaluation_vc_time"] or 0, row["event_points"] or 0,
+                bool(row["initial_issued"]), get_now_naive()
+            )
+            return True
+        except Exception as e:
+            print(f"[UserData Archive] Failed to archive user {user_id} in guild {guild_id}: {e}")
+            return False
+
+
+async def restore_user_data(guild_id: int, user_id: int) -> dict | None:
+    """退避しておいたランク・通貨を復元する。復元した内容を返す。"""
+    pool = await get_pool(guild_id)
+    async with pool.acquire() as conn:
+        try:
+            row = await conn.fetchrow(
+                '''SELECT balance, tc_xp, tc_level, vc_xp, vc_level,
+                          evaluation_vc_time, event_points, initial_issued
+                   FROM deleted_user_data WHERE guild_id = $1 AND user_id = $2''',
+                guild_id, user_id
+            )
+            if row is None:
+                return None
+            await conn.execute(
+                '''INSERT INTO users
+                       (guild_id, user_id, balance, tc_xp, tc_level, vc_xp, vc_level,
+                        evaluation_vc_time, event_points, initial_issued)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                   ON CONFLICT (guild_id, user_id) DO UPDATE SET
+                       balance = EXCLUDED.balance,
+                       tc_xp = EXCLUDED.tc_xp,
+                       tc_level = EXCLUDED.tc_level,
+                       vc_xp = EXCLUDED.vc_xp,
+                       vc_level = EXCLUDED.vc_level,
+                       evaluation_vc_time = EXCLUDED.evaluation_vc_time,
+                       event_points = EXCLUDED.event_points,
+                       initial_issued = EXCLUDED.initial_issued''',
+                guild_id, user_id,
+                row["balance"] or 0, row["tc_xp"] or 0, row["tc_level"] or 1,
+                row["vc_xp"] or 0, row["vc_level"] or 1,
+                row["evaluation_vc_time"] or 0, row["event_points"] or 0,
+                bool(row["initial_issued"])
+            )
+            await conn.execute(
+                'DELETE FROM deleted_user_data WHERE guild_id = $1 AND user_id = $2',
+                guild_id, user_id
+            )
+            print(f"[UserData Restore] Restored data for user {user_id} in guild {guild_id}.")
+            return dict(row)
+        except Exception as e:
+            print(f"[UserData Restore] Failed to restore user {user_id} in guild {guild_id}: {e}")
+            return None
+
+
 async def delete_user_data(guild_id: int, user_id: int):
+    # 退出者のランク・通貨は消す前に退避しておき、再参加時に戻せるようにする
+    await archive_user_data(guild_id, user_id)
     pool = await get_pool(guild_id)
     async with pool.acquire() as conn:
         try:

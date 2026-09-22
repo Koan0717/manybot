@@ -252,6 +252,9 @@ DEFAULT_SETTINGS = {
     "GAMBLE_VIOLATOR_ROLE_IDS": [],
     "MINUS_PUNISHMENT_TYPE": "evaluation_failure",
     "ENABLE_ANTIGRIEF": True,
+    # 退出したメンバーのランク・通貨をDBから削除するか。
+    # False にすると削除せずそのまま残す。
+    "DELETE_DATA_ON_LEAVE": True,
     # --- ギャンブル・ゲーム戦績ボタン表示設定 ---
     "GAMBLE_SHOW_STATS": True,
     "GAMBLE_CHINCHIRO_SHOW_STATS": True,
