@@ -1612,6 +1612,256 @@ async def diagnose_guild_database(guild_id: int, refresh: bool = False) -> dict:
     return result
 
 
+# 分裂したデータを突き合わせるときに比較するカラム
+_MERGE_FIELDS = [
+    "balance", "tc_xp", "tc_level", "vc_xp", "vc_level",
+    "evaluation_vc_time", "event_points",
+]
+
+
+async def _fetch_guild_users(conn, guild_id: int) -> dict:
+    """1つの接続から、そのギルドのユーザーデータを user_id 辞書で取得する。"""
+    cols = ", ".join(_MERGE_FIELDS)
+    rows = await conn.fetch(
+        f'SELECT user_id, {cols}, initial_issued FROM users WHERE guild_id = $1',
+        guild_id
+    )
+    out = {}
+    for r in rows:
+        d = {f: (r[f] or 0) for f in _MERGE_FIELDS}
+        d["initial_issued"] = bool(r["initial_issued"])
+        out[r["user_id"]] = d
+    return out
+
+
+async def _open_dedicated_conn(guild_id: int):
+    """診断・統合用に、専用DBへの一時接続を開く。専用DB未設定なら None。"""
+    master = await get_master_pool()
+    raw = await master.fetchval(
+        "SELECT database_url FROM guild_databases WHERE guild_id = $1", guild_id
+    )
+    url = _normalize_db_url(raw)
+    if not url:
+        return None
+    return await asyncpg.connect(url, statement_cache_size=0, timeout=15)
+
+
+async def compare_guild_databases(guild_id: int) -> dict:
+    """マスターDBと専用DBのユーザーデータを突き合わせる（読み取りのみ）。
+
+    どちらのDBが新しいかを判断するための材料を返す。
+    """
+    result = {
+        "ok": False, "error": None,
+        "master_only": 0, "dedicated_only": 0, "both": 0,
+        "master_ahead": 0, "dedicated_ahead": 0, "mixed": 0, "same": 0,
+        "totals": {"master": {}, "dedicated": {}},
+        "samples": [],
+    }
+
+    dedicated = None
+    try:
+        dedicated = await _open_dedicated_conn(guild_id)
+        if dedicated is None:
+            result["error"] = "専用DBが設定されていないため比較できません。"
+            return result
+
+        master_pool = await get_master_pool()
+        async with master_pool.acquire() as mconn:
+            m = await _fetch_guild_users(mconn, guild_id)
+        d = await _fetch_guild_users(dedicated, guild_id)
+    except Exception as e:
+        result["error"] = str(e)
+        return result
+    finally:
+        if dedicated is not None:
+            try:
+                await dedicated.close()
+            except Exception:
+                pass
+
+    for label, data in (("master", m), ("dedicated", d)):
+        result["totals"][label] = {f: sum(u[f] for u in data.values()) for f in _MERGE_FIELDS}
+        result["totals"][label]["users"] = len(data)
+
+    result["master_only"] = len(set(m) - set(d))
+    result["dedicated_only"] = len(set(d) - set(m))
+    common = set(m) & set(d)
+    result["both"] = len(common)
+
+    diffs = []
+    for uid in common:
+        mu, du = m[uid], d[uid]
+        m_bigger = [f for f in _MERGE_FIELDS if mu[f] > du[f]]
+        d_bigger = [f for f in _MERGE_FIELDS if du[f] > mu[f]]
+        if not m_bigger and not d_bigger:
+            result["same"] += 1
+            continue
+        if m_bigger and not d_bigger:
+            result["master_ahead"] += 1
+        elif d_bigger and not m_bigger:
+            result["dedicated_ahead"] += 1
+        else:
+            result["mixed"] += 1
+        gap = sum(abs(mu[f] - du[f]) for f in _MERGE_FIELDS)
+        diffs.append((gap, uid, mu, du))
+
+    diffs.sort(reverse=True, key=lambda x: x[0])
+    for gap, uid, mu, du in diffs[:5]:
+        result["samples"].append({
+            "user_id": uid,
+            "master": {f: mu[f] for f in _MERGE_FIELDS},
+            "dedicated": {f: du[f] for f in _MERGE_FIELDS},
+        })
+
+    result["ok"] = True
+    return result
+
+
+_MERGE_BACKUP_DDL = """
+    CREATE TABLE IF NOT EXISTS merge_backup_users (
+        backup_at TIMESTAMP,
+        guild_id BIGINT,
+        user_id BIGINT,
+        balance BIGINT,
+        tc_xp INTEGER,
+        tc_level INTEGER,
+        vc_xp INTEGER,
+        vc_level INTEGER,
+        evaluation_vc_time INTEGER,
+        event_points INTEGER,
+        initial_issued BOOLEAN
+    )
+"""
+
+_MERGE_BACKUP_INSERT = """
+    INSERT INTO merge_backup_users
+        (backup_at, guild_id, user_id, balance, tc_xp, tc_level, vc_xp,
+         vc_level, evaluation_vc_time, event_points, initial_issued)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+"""
+
+_MERGE_UPSERT = """
+    INSERT INTO users
+        (guild_id, user_id, balance, tc_xp, tc_level, vc_xp, vc_level,
+         evaluation_vc_time, event_points, initial_issued)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    ON CONFLICT (guild_id, user_id) DO UPDATE SET
+        balance = EXCLUDED.balance,
+        tc_xp = EXCLUDED.tc_xp,
+        tc_level = EXCLUDED.tc_level,
+        vc_xp = EXCLUDED.vc_xp,
+        vc_level = EXCLUDED.vc_level,
+        evaluation_vc_time = EXCLUDED.evaluation_vc_time,
+        event_points = EXCLUDED.event_points,
+        initial_issued = EXCLUDED.initial_issued
+"""
+
+
+async def merge_guild_databases(guild_id: int, strategy: str = "max", dry_run: bool = True) -> dict:
+    """分裂したデータを、現在使っているDB（専用DB）に統合する。
+
+    strategy:
+      max       ... 項目ごとに大きい方を採用する（誰のランクも下がらない）
+      master    ... マスターDBの値を優先する
+      dedicated ... 専用DBの値を優先し、欠けている人だけ取り込む
+
+    dry_run=True のときは書き込まず、変更内容の集計だけを返す。
+    書き込む場合は、変更前の専用DBの内容を merge_backup_users に退避する。
+    """
+    if strategy not in ("max", "master", "dedicated"):
+        return {"ok": False, "error": f"不明な統合方法です: {strategy}"}
+
+    out = {
+        "ok": False, "error": None, "strategy": strategy, "dry_run": dry_run,
+        "inserted": 0, "updated": 0, "unchanged": 0, "backed_up": 0,
+        "changes": [],
+    }
+
+    dedicated = None
+    try:
+        dedicated = await _open_dedicated_conn(guild_id)
+        if dedicated is None:
+            out["error"] = "専用DBが設定されていないため統合できません。"
+            return out
+
+        master_pool = await get_master_pool()
+        async with master_pool.acquire() as mconn:
+            m = await _fetch_guild_users(mconn, guild_id)
+        d = await _fetch_guild_users(dedicated, guild_id)
+
+        plan = {}
+        for uid, mu in m.items():
+            du = d.get(uid)
+            if du is None:
+                merged = {f: mu[f] for f in _MERGE_FIELDS}
+                merged["initial_issued"] = bool(mu["initial_issued"])
+                plan[uid] = ("insert", merged)
+                continue
+            if strategy == "max":
+                merged = {f: max(mu[f], du[f]) for f in _MERGE_FIELDS}
+            elif strategy == "master":
+                merged = {f: mu[f] for f in _MERGE_FIELDS}
+            else:
+                merged = {f: du[f] for f in _MERGE_FIELDS}
+            merged["initial_issued"] = bool(mu["initial_issued"] or du["initial_issued"])
+            same_values = all(merged[f] == du[f] for f in _MERGE_FIELDS)
+            if same_values and merged["initial_issued"] == du["initial_issued"]:
+                out["unchanged"] += 1
+                continue
+            plan[uid] = ("update", merged)
+
+        for uid, (kind, vals) in plan.items():
+            if kind == "insert":
+                out["inserted"] += 1
+            else:
+                out["updated"] += 1
+            if len(out["changes"]) < 5:
+                out["changes"].append({
+                    "user_id": uid, "kind": kind,
+                    "before": d.get(uid), "after": {f: vals[f] for f in _MERGE_FIELDS},
+                })
+
+        if dry_run or not plan:
+            out["ok"] = True
+            return out
+
+        # 変更前の状態を退避してから書き込む
+        await dedicated.execute(_MERGE_BACKUP_DDL)
+        backup_at = get_now_naive()
+        for uid in plan:
+            du = d.get(uid)
+            if du is None:
+                continue
+            await dedicated.execute(
+                _MERGE_BACKUP_INSERT,
+                backup_at, guild_id, uid, du["balance"], du["tc_xp"], du["tc_level"],
+                du["vc_xp"], du["vc_level"], du["evaluation_vc_time"],
+                du["event_points"], du["initial_issued"]
+            )
+            out["backed_up"] += 1
+
+        for uid, (kind, vals) in plan.items():
+            await dedicated.execute(
+                _MERGE_UPSERT,
+                guild_id, uid, vals["balance"], vals["tc_xp"], vals["tc_level"],
+                vals["vc_xp"], vals["vc_level"], vals["evaluation_vc_time"],
+                vals["event_points"], bool(vals.get("initial_issued"))
+            )
+
+        out["ok"] = True
+        return out
+    except Exception as e:
+        out["error"] = str(e)
+        return out
+    finally:
+        if dedicated is not None:
+            try:
+                await dedicated.close()
+            except Exception:
+                pass
+
+
 async def setup_db():
 
     p = await get_master_pool()
