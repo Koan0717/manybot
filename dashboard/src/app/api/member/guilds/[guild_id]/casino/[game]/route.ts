@@ -4,6 +4,7 @@ import { requireGuildMember } from '@/lib/memberAuth';
 import { CasinoError, ensureCasinoTables } from '@/lib/casino/db';
 import { PlayContext, blackjack, chinchiro, coinflip, horse, roulette, slot } from '@/lib/casino/games';
 import { WebGame, isWebGame, loadCasinoSettings } from '@/lib/casino/settings';
+import { canUseFeature, getMemberFlags } from '@/lib/webAccess';
 
 const HANDLERS: Record<WebGame, (ctx: PlayContext, body: any) => Promise<unknown>> = {
   coinflip,
@@ -22,7 +23,7 @@ const HANDLERS: Record<WebGame, (ctx: PlayContext, body: any) => Promise<unknown
 export async function POST(request: Request, { params }: { params: { guild_id: string; game: string } }) {
   const access = await requireGuildMember(request, params.guild_id);
   if (!access.ok) return access.response;
-  const { guildId, session } = access;
+  const { guildId, session, member } = access;
   if (!isWebGame(params.game)) return NextResponse.json({ error: 'ゲームが見つかりません' }, { status: 404 });
   const game = params.game;
   const body = await request.json().catch(() => null);
@@ -34,6 +35,9 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     const continuing = game === 'blackjack' && body?.action !== 'start';
     if (!s.enabled[game] && !continuing) {
       return NextResponse.json({ error: 'このゲームは現在Webでは遊べません' }, { status: 403 });
+    }
+    if (!continuing && !canUseFeature(await getMemberFlags(pool, guildId, member), 'casino')) {
+      return NextResponse.json({ error: 'カジノは現在利用できません' }, { status: 403 });
     }
     await ensureCasinoTables(pool);
     const result = await HANDLERS[game]({ pool, s, guildId, userId: session.discord_id }, body);

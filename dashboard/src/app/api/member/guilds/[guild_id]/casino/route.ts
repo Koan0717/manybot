@@ -4,6 +4,7 @@ import { requireGuildMember } from '@/lib/memberAuth';
 import { ensureCasinoTables, getPlayerStatus } from '@/lib/casino/db';
 import { HORSE_LIST, activeBlackjack, settleStaleBlackjack } from '@/lib/casino/games';
 import { WEB_GAMES, WEB_GAME_LABEL, loadCasinoSettings } from '@/lib/casino/settings';
+import { canUseFeature, getMemberFlags } from '@/lib/webAccess';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,19 +16,21 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request, { params }: { params: { guild_id: string } }) {
   const access = await requireGuildMember(request, params.guild_id);
   if (!access.ok) return access.response;
-  const { guildId, session } = access;
+  const { guildId, session, member } = access;
 
   try {
     const pool = await getPool(guildId);
     const s = await loadCasinoSettings(pool, guildId);
     await ensureCasinoTables(pool);
+    // 評価落ち・違反者で使えない設定なら、ゲームを1つも返さない（カジノタブ自体が出ない）
+    const allowed = canUseFeature(await getMemberFlags(pool, guildId, member), 'casino');
     const ctx = { pool, s, guildId, userId: session.discord_id };
     await settleStaleBlackjack(ctx);
     const [status, blackjack] = await Promise.all([getPlayerStatus(pool, guildId, session.discord_id), activeBlackjack(ctx)]);
 
     return NextResponse.json({
       currency_name: s.currencyName,
-      games: WEB_GAMES.filter((g) => s.enabled[g]).map((g) => ({ key: g, label: WEB_GAME_LABEL[g] })),
+      games: WEB_GAMES.filter((g) => allowed && s.enabled[g]).map((g) => ({ key: g, label: WEB_GAME_LABEL[g] })),
       limits: { max_bet: s.maxBet, max_plays: s.maxPlays, daily_limit: s.dailyLimit, tax_rate: s.taxEnabled ? s.taxRate : 0 },
       status: { balance: status.balance, plays_today: status.playsToday, bet_today: status.betToday },
       multipliers: {

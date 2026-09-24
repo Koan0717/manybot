@@ -4,6 +4,7 @@ import { requireGuildMember } from '@/lib/memberAuth';
 import { CasinoError } from '@/lib/casino/db';
 import { loadCasinoSettings } from '@/lib/casino/settings';
 import { buyShopItem, fetchRoleNames, getEvaluationPeriod, isWebShopEnabled, loadShopItems } from '@/lib/shop';
+import { canUseFeature, getMemberFlags } from '@/lib/webAccess';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,8 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
   try {
     const pool = await getPool(guildId);
     if (!(await isWebShopEnabled(pool, guildId))) return NextResponse.json({ enabled: false });
+    // 評価落ち・違反者で使えない設定なら、ショップタブ自体を出さない
+    if (!canUseFeature(await getMemberFlags(pool, guildId, member), 'shop')) return NextResponse.json({ enabled: false });
     const [items, s, period, balanceRes] = await Promise.all([
       loadShopItems(pool, guildId),
       loadCasinoSettings(pool, guildId),
@@ -72,6 +75,9 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     const pool = await getPool(guildId);
     if (!(await isWebShopEnabled(pool, guildId))) {
       return NextResponse.json({ error: 'ショップは現在Webでは利用できません' }, { status: 403 });
+    }
+    if (!canUseFeature(await getMemberFlags(pool, guildId, member), 'shop')) {
+      return NextResponse.json({ error: 'ショップは現在利用できません' }, { status: 403 });
     }
     const s = await loadCasinoSettings(pool, guildId);
     const result = await buyShopItem(pool, guildId, member, body?.item_id, s.currencyName);
