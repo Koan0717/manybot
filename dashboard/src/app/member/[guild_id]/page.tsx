@@ -625,14 +625,36 @@ export default function MemberGuildPage() {
           />
         ) : (
           <div className="space-y-3">
-            <div className="text-sm text-zinc-500">このサーバーでの役職（{profile.roles.length}）</div>
-            {profile.roles.length === 0 ? (
-              <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 text-sm text-zinc-500">役職はありません</div>
-            ) : (
-              // 新しく付いた順（付与日不明は最後）
-              [...profile.roles]
-                .sort((a, b) => (b.granted_at ?? '').localeCompare(a.granted_at ?? ''))
-                .map((r) => <RoleCard key={r.id} role={r} settings={profile.role_settings ?? { new: [], sub: [], main: [] }} />)
+            {/* 今持っている役職（前と同じ一覧） */}
+            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
+              <div className="text-sm text-zinc-500 mb-3">このサーバーでの役職（{profile.roles.length}）</div>
+              {profile.roles.length === 0 ? (
+                <p className="text-sm text-zinc-500">役職はありません</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {profile.roles.map((r) => (
+                    <span
+                      key={r.id}
+                      className="inline-flex items-center gap-2 bg-zinc-800/70 border border-zinc-700/60 rounded-full px-3 py-1.5 text-sm"
+                    >
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: r.color ?? '#71717a' }} />
+                      {r.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* その下に、付与日つきのメッセージ（新しく付いた順、付与日不明は最後） */}
+            {profile.roles.length > 0 && (
+              <>
+                <div className="text-sm text-zinc-500 pt-2">付与された日</div>
+                {[...profile.roles]
+                  .sort((a, b) => (b.granted_at ?? '').localeCompare(a.granted_at ?? ''))
+                  .map((r) => (
+                    <RoleCard key={r.id} role={r} settings={profile.role_settings ?? { new: [], sub: [], main: [] }} />
+                  ))}
+              </>
             )}
           </div>
         )}
