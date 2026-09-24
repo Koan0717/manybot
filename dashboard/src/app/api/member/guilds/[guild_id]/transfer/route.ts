@@ -124,7 +124,7 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     const [cur, log] = await Promise.all([
       pool.query("SELECT setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key = 'CURRENCY_NAME'", [guildId]),
       pool.query(
-        "SELECT log_type, channel_id::text AS channel_id, is_enabled FROM log_settings WHERE guild_id = $1 AND log_type IN ('member_transfer', 'currency')",
+        "SELECT log_type, channel_id::text AS channel_id, is_enabled FROM log_settings WHERE guild_id = $1 AND log_type IN ('member_transfer', 'member_transfer_public', 'currency')",
         [guildId]
       ),
     ]);
@@ -132,8 +132,8 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     const enabled = (type: string) =>
       log.rows.find((r) => r.log_type === type && r.channel_id && (r.is_enabled === null || r.is_enabled));
     const logRow = enabled('member_transfer') ?? enabled('currency');
+    const via = source === 'activity' ? 'Discordアクティビティ' : 'Webダッシュボード';
     if (logRow) {
-      const via = source === 'activity' ? 'Discordアクティビティ' : 'Webダッシュボード';
       await botRequest(`/channels/${logRow.channel_id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,7 +155,22 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
           ],
           allowed_mentions: { parse: [] },
         }),
-      });
+      }).catch((e) => console.error('transfer log message failed:', e));
+    }
+
+    // メンバー向けのお知らせ（/pay の「💵 @相手 に ○○ を送金しました。」と同じ形）。
+    // ログ設定「アクティビティ・Webからの送金（お知らせ）」のチャンネルに送る。未設定・OFFなら送らない
+    const publicRow = enabled('member_transfer_public');
+    if (publicRow) {
+      await botRequest(`/channels/${publicRow.channel_id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: `💵 <@${session.discord_id}> さんが <@${to}> に **${amount.toLocaleString()} ${currencyName}** を送金しました。（${via}）`,
+          // /pay と同じく受け取った人にだけ通知する
+          allowed_mentions: { users: [to] },
+        }),
+      }).catch((e) => console.error('transfer public message failed:', e));
     }
   } catch (e) {
     console.error('transfer log failed:', e);
