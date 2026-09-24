@@ -365,6 +365,34 @@ async def setup_db_schema(p):
 
         ''')
 
+        # 送金履歴（/pay・アクティビティ・Webの送金）。ダッシュボードのメンバー画面で直近の送金を表示する
+
+        await conn.execute('''
+
+            CREATE TABLE IF NOT EXISTS transfer_logs (
+
+                id BIGSERIAL PRIMARY KEY,
+
+                guild_id BIGINT NOT NULL,
+
+                sender_id BIGINT NOT NULL,
+
+                receiver_id BIGINT NOT NULL,
+
+                amount BIGINT NOT NULL,
+
+                source TEXT NOT NULL DEFAULT 'pay',
+
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+            )
+
+        ''')
+
+        await conn.execute('CREATE INDEX IF NOT EXISTS idx_transfer_logs_sender ON transfer_logs (guild_id, sender_id, created_at DESC)')
+
+        await conn.execute('CREATE INDEX IF NOT EXISTS idx_transfer_logs_receiver ON transfer_logs (guild_id, receiver_id, created_at DESC)')
+
         await conn.execute('''
 
             CREATE TABLE IF NOT EXISTS rooms (
@@ -1997,7 +2025,7 @@ async def remove_balance(guild_id: int, user_id: int, amount: int, force: bool =
 
 
 
-async def transfer_balance(guild_id: int, sender_id: int, receiver_id: int, amount: int) -> bool:
+async def transfer_balance(guild_id: int, sender_id: int, receiver_id: int, amount: int, source: str = 'pay') -> bool:
 
     if amount <= 0:
 
@@ -2028,6 +2056,18 @@ async def transfer_balance(guild_id: int, sender_id: int, receiver_id: int, amou
                 return False
 
             await conn.execute('UPDATE users SET balance = balance + $1 WHERE guild_id = $2 AND user_id = $3', amount, guild_id, receiver_id)
+
+            # 送金履歴。記録に失敗しても送金自体は成立させる（セーブポイントで巻き戻すのは記録だけ）
+
+            try:
+
+                async with conn.transaction():
+
+                    await conn.execute('INSERT INTO transfer_logs (guild_id, sender_id, receiver_id, amount, source) VALUES ($1, $2, $3, $4, $5)', guild_id, sender_id, receiver_id, amount, source)
+
+            except Exception as e:
+
+                print(f"[transfer_logs] failed to record transfer: {e}")
 
             return True
 
