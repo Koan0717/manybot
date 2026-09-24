@@ -43,7 +43,7 @@ async function request<T>(path: string, authorization: string, init: RequestInit
     cache: 'no-store',
   });
   if (!res.ok) {
-    throw new DiscordApiError(res.status, `Discord API error: ${res.status} ${path}`);
+    throw new DiscordApiError(res.status, `Discord API error: ${res.status} ${path.split('?')[0]}`);
   }
   return res.json() as Promise<T>;
 }
@@ -126,7 +126,10 @@ export async function exchangeCodeForToken(code: string, redirectUri?: string): 
     cache: 'no-store',
   });
   if (!res.ok) {
-    throw new DiscordApiError(401, `Discord token exchange failed: ${res.status}`);
+    // 原因の切り分け用に、Discordが返したエラー名（invalid_grant / invalid_client など）を残す。秘密情報は含まれない
+    const body = await res.json().catch(() => null);
+    const reason = [body?.error, body?.error_description].filter(Boolean).join(': ');
+    throw new DiscordApiError(401, `トークン交換に失敗 (${res.status}${reason ? ` ${reason}` : ''})`);
   }
   const data = await res.json();
   if (typeof data.access_token !== 'string') {

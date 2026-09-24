@@ -82,7 +82,7 @@ export async function POST(request: Request) {
           error:
             status === 500
               ? 'サーバー側のDiscord設定が不足しています（管理者に連絡してください）'
-              : 'Discord認証に失敗しました。もう一度お試しください',
+              : `Discord認証に失敗しました。もう一度お試しください（詳細: ${error.message}）`,
         },
         { status }
       );
