@@ -1494,6 +1494,10 @@ async def setup_db_schema(p):
 
         ''')
 
+        # 自己紹介チャンネルを複数設定できるようにする（channel_id は1つ目。以前の設定との互換用）
+
+        await conn.execute("ALTER TABLE self_intro_role_settings ADD COLUMN IF NOT EXISTS channel_ids BIGINT[] DEFAULT '{}'")
+
 
 
         await conn.execute('''
@@ -5200,12 +5204,15 @@ async def get_self_intro_role_settings(guild_id: int) -> dict:
     pool = await get_pool(guild_id)
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            'SELECT channel_id, welcome_channel_id, role_id, template, is_enabled FROM self_intro_role_settings WHERE guild_id = $1',
+            'SELECT channel_id, channel_ids, welcome_channel_id, role_id, template, is_enabled FROM self_intro_role_settings WHERE guild_id = $1',
             guild_id
         )
         if row:
+            # 複数の自己紹介チャンネル。未設定（以前の設定）なら channel_id の1つだけ
+            channel_ids = [int(c) for c in (row['channel_ids'] or []) if c] or ([row['channel_id']] if row['channel_id'] else [])
             return {
                 "channel_id": row['channel_id'],
+                "channel_ids": channel_ids,
                 "welcome_channel_id": row['welcome_channel_id'],
                 "role_id": row['role_id'],
                 "template": row['template'],

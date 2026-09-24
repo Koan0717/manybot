@@ -38,6 +38,14 @@ def check_intro_completeness(message_content: str, keywords: list) -> bool:
     return True
 
 
+def get_intro_channel_ids(settings: dict) -> list:
+    """自己紹介チャンネルのID一覧（複数設定。無ければ以前の1つだけの channel_id）。"""
+    ids = [int(c) for c in (settings.get("channel_ids") or []) if c]
+    if not ids and settings.get("channel_id"):
+        ids = [int(settings["channel_id"])]
+    return ids
+
+
 class SelfIntroRoles(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -57,21 +65,21 @@ class SelfIntroRoles(commands.Cog):
         if not settings.get("is_enabled"):
             return
 
-        intro_channel_id = settings.get("channel_id")
+        intro_channel_ids = get_intro_channel_ids(settings)
         welcome_channel_id = settings.get("welcome_channel_id")
         template = settings.get("template") or ""
 
-        if not intro_channel_id or not settings.get("role_id"):
+        if not intro_channel_ids or not settings.get("role_id"):
             return
 
-        # 案内メッセージの送信先チャンネルを決定
-        target_channel_id = welcome_channel_id if welcome_channel_id else intro_channel_id
+        # 案内メッセージの送信先チャンネルを決定（未設定なら1つ目の自己紹介チャンネル）
+        target_channel_id = welcome_channel_id if welcome_channel_id else intro_channel_ids[0]
         channel = guild.get_channel(int(target_channel_id))
         if not channel:
             return
 
-        intro_channel = guild.get_channel(int(intro_channel_id))
-        intro_mention = intro_channel.mention if intro_channel else f"<#{intro_channel_id}>"
+        # 案内には自己紹介チャンネルをすべて並べる（どれか1つで自己紹介すればよい）
+        intro_mention = " / ".join(f"<#{cid}>" for cid in intro_channel_ids)
 
         # 案内メッセージ作成
         if template:
@@ -114,15 +122,15 @@ class SelfIntroRoles(commands.Cog):
         if not settings.get("is_enabled"):
             return
 
-        intro_channel_id = settings.get("channel_id")
+        intro_channel_ids = get_intro_channel_ids(settings)
         role_id = settings.get("role_id")
         template = settings.get("template") or ""
 
-        if not intro_channel_id or not role_id:
+        if not intro_channel_ids or not role_id:
             return
 
-        # 自己紹介チャンネルのメッセージのみ対象
-        if message.channel.id != int(intro_channel_id):
+        # 自己紹介チャンネル（どれか）のメッセージのみ対象
+        if message.channel.id not in intro_channel_ids:
             return
 
         # 既にロールを持っていればスキップ

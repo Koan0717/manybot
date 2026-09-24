@@ -28,7 +28,7 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEnabled, setIsEnabled] = useState(false);
-  const [channelId, setChannelId] = useState('');
+  const [channelIds, setChannelIds] = useState<string[]>([]);
   const [welcomeChannelId, setWelcomeChannelId] = useState('');
   const [roleId, setRoleId] = useState('');
   const [template, setTemplate] = useState('');
@@ -47,7 +47,7 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
     ]).then(([settings, ch, ro]) => {
       if (settings && !settings.error) {
         setIsEnabled(settings.is_enabled ?? false);
-        setChannelId(settings.channel_id ?? '');
+        setChannelIds(Array.isArray(settings.channel_ids) ? settings.channel_ids.map(String) : settings.channel_id ? [String(settings.channel_id)] : []);
         setWelcomeChannelId(settings.welcome_channel_id ?? '');
         setRoleId(settings.role_id ?? '');
         setTemplate(settings.template ?? '');
@@ -62,7 +62,7 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
   }, [guildId]);
 
   const handleSave = async () => {
-    if (isEnabled && (!channelId || !roleId)) {
+    if (isEnabled && (!channelIds.length || !roleId)) {
       toast.error('有効にする場合は「自己紹介チャンネル」と「付与するロール」を両方選択してください。');
       return;
     }
@@ -73,7 +73,7 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          channel_id: channelId || null,
+          channel_ids: channelIds,
           welcome_channel_id: welcomeChannelId || null,
           role_id: roleId || null,
           template: template || '',
@@ -119,21 +119,24 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
         <h2 className="text-lg font-bold flex items-center gap-2"><Hash size={18} className="text-red-500" />チャンネル・ロール設定</h2>
 
         <div>
-          <label className="block text-sm font-medium text-zinc-300 mb-2">自己紹介チャンネル <span className="text-red-400">*</span></label>
-          <p className="text-xs text-zinc-500 mb-2">テンプレートの記入を監視するチャンネルです。</p>
+          <label className="block text-sm font-medium text-zinc-300 mb-2">
+            自己紹介チャンネル <span className="text-red-400">*</span>
+            <span className="ml-2 text-xs text-zinc-500 font-normal">(複数選択可)</span>
+          </label>
+          <p className="text-xs text-zinc-500 mb-2">テンプレートの記入を監視するチャンネルです。どれか1つのチャンネルでテンプレートを埋めて投稿するとロールが付与されます。</p>
           <ChannelSelect
             label="自己紹介チャンネル"
             placeholder="チャンネルを選択..."
             channels={textChannels}
-            value={channelId}
-            onChange={(id: any) => setChannelId(id || '')}
-            multiple={false}
+            value={channelIds}
+            onChange={(ids: any) => setChannelIds(Array.isArray(ids) ? ids.map(String) : ids ? [String(ids)] : [])}
+            multiple
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-zinc-300 mb-2"><Bell size={14} className="inline mr-1 text-zinc-400" />入室案内の送信先チャンネル（任意）</label>
-          <p className="text-xs text-zinc-500 mb-2">入室時のメンション案内を送るチャンネルです。未選択の場合は自己紹介チャンネルに直接送ります。</p>
+          <p className="text-xs text-zinc-500 mb-2">入室時のメンション案内を送るチャンネルです。未選択の場合は自己紹介チャンネル（複数あるときは1つ目）に直接送ります。</p>
           <ChannelSelect
             label="入室案内の送信先チャンネル"
             placeholder="未設定（自己紹介チャンネルに送る）"
