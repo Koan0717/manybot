@@ -53,7 +53,11 @@ export default function ChannelSelect({
 
   useEffect(() => {
     if (isOpen && searchInputRef.current) {
-      setTimeout(() => searchInputRef.current?.focus(), 50);
+      // iPad などのタッチ端末では自動でフォーカスしない。キーボード表示と自動ズームで画面がずれ、
+      // タップした位置より少し下の項目が選ばれてしまう（固定表示のモーダルで起きる iOS Safari の不具合）
+      if (window.matchMedia?.('(pointer: fine)').matches) {
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      }
     }
   }, [isOpen]);
 
@@ -126,7 +130,7 @@ export default function ChannelSelect({
               placeholder="🔍 チャンネル名でリアルタイム検索..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg pl-9 pr-12 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 transition-colors placeholder:text-zinc-500 font-tech"
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg pl-9 pr-12 py-2.5 text-[16px] text-white focus:outline-none focus:border-red-500 transition-colors placeholder:text-zinc-500 font-tech"
             />
             {searchTerm && (
               <button
