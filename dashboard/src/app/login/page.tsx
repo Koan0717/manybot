@@ -10,6 +10,7 @@ import {
   consumeLoggedOut,
   discordActivityLogin,
   isDiscordActivity,
+  loadMemberState,
   startDiscordWebLogin,
 } from '@/lib/memberClient';
 
@@ -52,12 +53,18 @@ function LoginForm() {
 
   // Activity の起動パラメータ(frame_id 等)がURLに残っているうちに退避し（Discord SDK がURLから読むため）、
   // Activity から開かれた場合は、開いた人にすぐDiscordの許可を求めてログインする。
-  // ログアウト直後だけは自動で始めない（専用ログインも選べるように）。
+  // ログアウト直後だけは自動で始めない（専用ログインも選べるように）。Discordでログイン済みならそのまま /member へ。
   useEffect(() => {
     if (autoStarted.current) return;
     autoStarted.current = true;
     const loggedOut = consumeLoggedOut();
-    if (isDiscordActivity() && !loggedOut) {
+    const inActivity = isDiscordActivity();
+    // Discordでログイン済みなら、ログアウトするまでそのまま使えるようにする
+    if (!loggedOut && loadMemberState()) {
+      router.replace('/member');
+      return;
+    }
+    if (inActivity && !loggedOut) {
       handleDiscordLogin();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

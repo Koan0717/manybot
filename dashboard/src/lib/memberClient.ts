@@ -60,6 +60,40 @@ export function clearMemberState() {
   } catch {}
 }
 
+// 期限の延長は1日に1回で十分
+const REFRESH_AFTER_MS = 24 * 60 * 60 * 1000;
+let refreshing = false;
+
+function tokenIssuedAt(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.iat === 'number' ? payload.iat * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ログアウトするまでログインしたままにするため、メンバー画面を開いたときにセッションの期限を延ばす。
+ * 通信に失敗しても今のトークンはそのまま使う（無効と分かったときだけ memberFetch がログイン画面に戻す）。
+ */
+export async function keepMemberSessionAlive(): Promise<void> {
+  const state = loadMemberState();
+  if (!state || refreshing) return;
+  const issuedAt = tokenIssuedAt(state.token);
+  if (issuedAt !== null && Date.now() - issuedAt < REFRESH_AFTER_MS) return;
+  refreshing = true;
+  try {
+    const res = await memberFetch('/api/member/session', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    const current = loadMemberState();
+    if (res.ok && data.token && current) saveMemberState({ ...current, token: data.token });
+  } catch {
+  } finally {
+    refreshing = false;
+  }
+}
+
 /** /api/member/* 用の fetch。トークンが無効（401）ならセッションを捨てて /login に戻す */
 export async function memberFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const state = loadMemberState();

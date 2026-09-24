@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Coins, Crown, Loader2, Search, Send, User, X } from 'lucide-react';
-import { guildIconUrl, loadMemberState, memberFetch } from '@/lib/memberClient';
+import { guildIconUrl, keepMemberSessionAlive, loadMemberState, memberFetch } from '@/lib/memberClient';
 
 interface LevelStat { level: number; xp: number; next_xp: number }
 interface Profile {
@@ -256,6 +256,7 @@ export default function MemberGuildPage() {
       router.replace(`/login${window.location.search}`);
       return;
     }
+    keepMemberSessionAlive();
     let cancelled = false;
     setProfile(null);
     setError('');
