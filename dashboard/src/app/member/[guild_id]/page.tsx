@@ -50,15 +50,14 @@ function RoleMention({ role }: { role: RoleTag }) {
   );
 }
 
-/** 「@研修生（仮メン）」。基本・評価設定で未設定なら「仮メン（未設定）」 */
-function RoleGroup({ tags, label }: { tags: RoleTag[]; label: string }) {
-  if (!tags.length) return <span>{label}（未設定）</span>;
+/** 「@研修生」。基本・評価設定で未設定なら「未設定」 */
+function RoleGroup({ tags }: { tags: RoleTag[] }) {
+  if (!tags.length) return <span>未設定</span>;
   return (
     <span>
       {tags.map((t) => (
         <RoleMention key={t.id} role={t} />
       ))}
-      （{label}）
     </span>
   );
 }
@@ -87,34 +86,39 @@ function RoleCard({ role: r, settings }: { role: MemberRole; settings: RoleSetti
     return frame(
       'border-amber-400/90', 'bg-amber-950/30 text-amber-100',
       <span>
-        {main ? <RoleGroup tags={settings.sub} label="準メン" /> : <RoleGroup tags={settings.new} label="仮メン" />}
+        <RoleGroup tags={main ? settings.sub : settings.new} />
         {' → '}
-        <RoleGroup tags={[r]} label={main ? '本メン' : '準メン'} />
+        <RoleGroup tags={[r]} />
       </span>,
       'text-amber-300/90',
       <>🍾 {me} に昇格！おめでとう🍾‼️</>, 'text-amber-200',
-      main
-        ? 'ついに本メンバーの仲間入りです🎉 これまでの頑張りが実を結びました。これからもよろしくお願いします！'
-        : '仮メンからの昇格、本当におめでとうございます🎉 この調子で本メンを目指していきましょう！'
+      main ? (
+        <>ついに {me} の仲間入りです🎉 これまでの頑張りが実を結びました。これからもよろしくお願いします！</>
+      ) : (
+        <>
+          {settings.new.length ? <><RoleGroup tags={settings.new} /> からの</> : ''}昇格、本当におめでとうございます🎉
+          {settings.main.length ? <> この調子で <RoleGroup tags={settings.main} /> を目指していきましょう！</> : ' この調子で頑張っていきましょう！'}
+        </>
+      )
     );
   }
   if (r.kind === 'downgrade') {
     return frame(
-      'border-red-600/80', 'bg-red-950/30 text-red-100', <span>評価落ちロール</span>, 'text-red-300/80',
+      'border-red-600/80', 'bg-red-950/30 text-red-100', null, 'text-red-300/80',
       <>{me} のロールが付与されました…</>, 'text-red-200',
       <>でも、ここで終わりじゃありません。次がある！💪<br />今回の経験は必ず次につながります。焦らず、またここから一緒に頑張っていきましょう！</>
     );
   }
   if (r.kind === 'violator') {
     return frame(
-      'border-red-600/80', 'bg-red-950/30 text-red-100', <span>違反者ロール</span>, 'text-red-300/80',
+      'border-red-600/80', 'bg-red-950/30 text-red-100', null, 'text-red-300/80',
       <>{me} のロールが付与されました</>, 'text-red-200',
       <>ルール違反があったため、このロールが付与されています。ちゃんと反省してね🙏<br />サーバーのルールをもう一度確認して、次から気をつけましょう。</>
     );
   }
   if (r.shop_item) {
     return frame(
-      'border-orange-500/80', 'bg-orange-950/30 text-orange-100', <span>ショップ</span>, 'text-orange-300/80',
+      'border-orange-500/80', 'bg-orange-950/30 text-orange-100', null, 'text-orange-300/80',
       <>🛒 ショップで「{r.shop_item}」を購入したため {me} のロールを付与しました！</>, 'text-orange-200'
     );
   }
