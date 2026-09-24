@@ -67,7 +67,8 @@ export default function Home() {
   useEffect(() => {
     fetch('/api/system/status')
       .then(res => res.json())
-      .then(data => setStatus(data))
+      // 認証エラーなどで { error } が返ってきたときは「取得できなかった」扱いにする（そのまま入れると表示で落ちる）
+      .then(data => setStatus(data?.supabase && data?.render ? data : null))
       .catch(() => setStatus(null))
       .finally(() => setStatusLoading(false));
   }, []);
