@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Coins, Crown, Dices, History, Loader2, Search, Send, User, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Coins, Crown, Dices, History, Loader2, Search, Send, ShoppingBag, User, X } from 'lucide-react';
 import Casino, { CasinoInfo } from './Casino';
+import Shop, { ShopInfo } from './Shop';
 import { guildIconUrl, isDiscordActivity, keepMemberSessionAlive, loadMemberState, memberFetch } from '@/lib/memberClient';
 
 interface LevelStat { level: number; xp: number; next_xp: number }
@@ -30,11 +31,12 @@ const BotBadge = () => (
   <span className="text-[10px] font-bold bg-[#5865F2] text-white rounded px-1.5 py-0.5 flex-shrink-0">BOT</span>
 );
 
-type Tab = 'profile' | 'transfer' | 'casino' | 'roles';
+type Tab = 'profile' | 'transfer' | 'casino' | 'shop' | 'roles';
 const TABS: { key: Tab; label: string; icon: typeof User }[] = [
   { key: 'profile', label: 'プロフィール', icon: User },
   { key: 'transfer', label: '送金', icon: Send },
   { key: 'casino', label: 'カジノ', icon: Dices },
+  { key: 'shop', label: 'ショップ', icon: ShoppingBag },
   { key: 'roles', label: '役職', icon: Crown },
 ];
 
@@ -340,6 +342,8 @@ export default function MemberGuildPage() {
   const [error, setError] = useState('');
   // Webアクティビティ設定でONのゲームが1つも無ければ「カジノ」タブは出さない
   const [casino, setCasino] = useState<CasinoInfo | null>(null);
+  // Webアクティビティ設定でショップがOFFなら「ショップ」タブは出さない
+  const [shop, setShop] = useState<ShopInfo | null>(null);
 
   // サーバーを切り替えたときに前のサーバーの表示が残らないよう、guildId ごとに取り直す
   useEffect(() => {
@@ -351,7 +355,15 @@ export default function MemberGuildPage() {
     let cancelled = false;
     setProfile(null);
     setCasino(null);
+    setShop(null);
     setError('');
+    (async () => {
+      try {
+        const res = await memberFetch(`/api/member/guilds/${guildId}/shop`);
+        const data = await res.json().catch(() => null);
+        if (!cancelled && res.ok && data?.enabled) setShop(data);
+      } catch {}
+    })();
     setTab('profile');
     (async () => {
       try {
@@ -382,6 +394,8 @@ export default function MemberGuildPage() {
   const guildName = profile?.guild.name ?? cachedGuild?.name ?? '';
   const icon = profile ? guildIconUrl(profile.guild) : cachedGuild ? guildIconUrl(cachedGuild) : null;
 
+  const visibleTabs = TABS.filter((t) => (t.key !== 'casino' || casino) && (t.key !== 'shop' || shop));
+
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-4 md:p-8">
       <div className="max-w-2xl mx-auto">
@@ -403,12 +417,15 @@ export default function MemberGuildPage() {
           <h1 className="text-xl font-bold truncate">{guildName || '読み込み中...'}</h1>
         </header>
 
-        <nav className={`grid ${casino ? 'grid-cols-4' : 'grid-cols-3'} gap-2 mb-6`}>
-          {TABS.filter((t) => t.key !== 'casino' || casino).map(({ key, label, icon: Icon }) => (
+        <nav
+          className="grid gap-2 mb-6"
+          style={{ gridTemplateColumns: `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}
+        >
+          {visibleTabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold border transition-all ${
+              className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-sm font-semibold border transition-all whitespace-nowrap ${
                 tab === key
                   ? 'bg-red-600/20 border-red-700/60 text-white'
                   : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white'
@@ -463,6 +480,17 @@ export default function MemberGuildPage() {
             onBalanceChange={(balance) => {
               setProfile((p) => (p ? { ...p, stats: { ...p.stats, balance } } : p));
               setCasino((c) => (c ? { ...c, status: { ...c.status, balance } } : c));
+            }}
+          />
+        ) : tab === 'shop' && shop ? (
+          <Shop
+            guildId={guildId}
+            info={shop}
+            balance={profile.stats.balance}
+            onBought={(balance, evaluationPeriod) => {
+              setProfile((p) => (p ? { ...p, stats: { ...p.stats, balance } } : p));
+              setCasino((c) => (c ? { ...c, status: { ...c.status, balance } } : c));
+              if (evaluationPeriod) setShop((sh) => (sh ? { ...sh, evaluation_period: evaluationPeriod } : sh));
             }}
           />
         ) : tab === 'casino' && casino ? (

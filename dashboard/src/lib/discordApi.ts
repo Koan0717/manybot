@@ -45,6 +45,8 @@ async function request<T>(path: string, authorization: string, init: RequestInit
   if (!res.ok) {
     throw new DiscordApiError(res.status, `Discord API error: ${res.status} ${path.split('?')[0]}`);
   }
+  // ロール付与などは成功しても中身が無い（204）
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 

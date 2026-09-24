@@ -3,6 +3,7 @@ import { getPool } from '@/lib/db';
 import { requireGuildMember } from '@/lib/memberAuth';
 import { ensureCasinoTables } from '@/lib/casino/db';
 import { WEB_GAMES, loadCasinoSettings } from '@/lib/casino/settings';
+import { canUseFeature, getMemberFlags } from '@/lib/webAccess';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,12 +15,13 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request, { params }: { params: { guild_id: string } }) {
   const access = await requireGuildMember(request, params.guild_id);
   if (!access.ok) return access.response;
-  const { guildId, session } = access;
+  const { guildId, session, member } = access;
 
   try {
     const pool = await getPool(guildId);
     const s = await loadCasinoSettings(pool, guildId);
-    const games = WEB_GAMES.filter((g) => s.enabled[g] && s.showStats[g]);
+    const allowed = canUseFeature(await getMemberFlags(pool, guildId, member), 'casino');
+    const games = WEB_GAMES.filter((g) => allowed && s.enabled[g] && s.showStats[g]);
     await ensureCasinoTables(pool);
     const res = games.length
       ? await pool.query(

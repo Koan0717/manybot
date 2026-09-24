@@ -1372,6 +1372,12 @@ async def setup_db_schema(p):
 
         ''')
 
+        # 購入品の有効期限（add_user_item / get_expired_user_items が使う列）
+
+        await conn.execute('ALTER TABLE user_items ADD COLUMN IF NOT EXISTS expire_at TIMESTAMP')
+
+        await conn.execute('ALTER TABLE user_items ADD COLUMN IF NOT EXISTS role_removed BOOLEAN DEFAULT FALSE')
+
 
 
         await conn.execute('''
@@ -4717,7 +4723,9 @@ async def get_expired_user_items():
 
         try:
 
-            rows = await p.fetch("SELECT id, user_id, item_id FROM user_items WHERE expire_at < $1 AND role_removed = FALSE", get_now_naive())
+            # 期限切れロールの剥奪（cogs/shop.py の check_expired_roles）には guild_id と reward_role_ids が要るので商品と結合する
+
+            rows = await p.fetch("SELECT ui.id, ui.user_id, ui.item_id, si.guild_id, si.reward_role_ids FROM user_items ui JOIN shop_items si ON si.item_id = ui.item_id WHERE ui.expire_at < $1 AND COALESCE(ui.role_removed, FALSE) = FALSE", get_now_naive())
 
             all_expired.extend([dict(row) for row in rows])
 
@@ -4921,7 +4929,9 @@ async def get_expired_user_items():
 
         try:
 
-            rows = await p.fetch("SELECT id, user_id, item_id FROM user_items WHERE expire_at < $1 AND role_removed = FALSE", get_now_naive())
+            # 期限切れロールの剥奪（cogs/shop.py の check_expired_roles）には guild_id と reward_role_ids が要るので商品と結合する
+
+            rows = await p.fetch("SELECT ui.id, ui.user_id, ui.item_id, si.guild_id, si.reward_role_ids FROM user_items ui JOIN shop_items si ON si.item_id = ui.item_id WHERE ui.expire_at < $1 AND COALESCE(ui.role_removed, FALSE) = FALSE", get_now_naive())
 
             all_expired.extend([dict(row) for row in rows])
 

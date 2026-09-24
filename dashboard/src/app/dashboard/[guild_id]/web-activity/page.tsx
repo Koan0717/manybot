@@ -21,11 +21,25 @@ type Enabled = Record<GameKey, boolean>;
 
 const allOff = (): Enabled => Object.fromEntries(GAMES.map((g) => [g.key, false])) as Enabled;
 
+// lib/webAccess.ts の WEB_ROLE_ACCESS と同じ形。未設定は「使える」
+type RoleAccess = Record<'downgrade' | 'violator', Record<'casino' | 'shop', boolean>>;
+const allAllowed = (): RoleAccess => ({ downgrade: { casino: true, shop: true }, violator: { casino: true, shop: true } });
+const ROLE_GROUPS = [
+  { key: 'downgrade', label: '評価落ち', desc: '「基本・評価設定」の評価落ちロール（未設定なら「評価落ち」という名前のロール）を持つメンバー' },
+  { key: 'violator', label: '違反者', desc: '「基本・評価設定」の違反者ロールを持つメンバー' },
+] as const;
+const FEATURES = [
+  { key: 'casino', label: '🎰 ギャンブル（カジノ）' },
+  { key: 'shop', label: '🛒 ショップ' },
+] as const;
+
 export default function WebActivitySettingsPage() {
   const params = useParams();
   const guildId = params.guild_id as string;
 
   const [enabled, setEnabled] = useState<Enabled>(allOff);
+  const [shopEnabled, setShopEnabled] = useState(false);
+  const [roleAccess, setRoleAccess] = useState<RoleAccess>(allAllowed);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +50,12 @@ export default function WebActivitySettingsPage() {
       .then((data: any) => {
         const saved = data?.WEB_GAMES_ENABLED && typeof data.WEB_GAMES_ENABLED === 'object' ? data.WEB_GAMES_ENABLED : {};
         setEnabled(Object.fromEntries(GAMES.map((g) => [g.key, saved[g.key] === true])) as Enabled);
+        setShopEnabled(data?.WEB_SHOP_ENABLED === true);
+        const ra = data?.WEB_ROLE_ACCESS && typeof data.WEB_ROLE_ACCESS === 'object' ? data.WEB_ROLE_ACCESS : {};
+        setRoleAccess({
+          downgrade: { casino: ra.downgrade?.casino !== false, shop: ra.downgrade?.shop !== false },
+          violator: { casino: ra.violator?.casino !== false, shop: ra.violator?.shop !== false },
+        });
       })
       .catch(() => setError('設定の取得に失敗しました'))
       .finally(() => setLoading(false));
@@ -48,7 +68,7 @@ export default function WebActivitySettingsPage() {
       const res = await fetch(`/api/guilds/${guildId}/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ WEB_GAMES_ENABLED: enabled }),
+        body: JSON.stringify({ WEB_GAMES_ENABLED: enabled, WEB_SHOP_ENABLED: shopEnabled, WEB_ROLE_ACCESS: roleAccess }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) {
@@ -82,7 +102,7 @@ export default function WebActivitySettingsPage() {
             Webアクティビティ設定
           </h1>
           <p className="text-gray-400 mt-2 text-sm">
-            Discordアクティビティ・Webのメンバー画面で遊べるギャンブルを選びます。ONにしたものだけが「カジノ」タブに表示されます。
+            Discordアクティビティ・Webのメンバー画面で使える機能を選びます。ONにしたものだけがメンバー画面に表示されます。
           </p>
         </div>
         <button
@@ -131,8 +151,76 @@ export default function WebActivitySettingsPage() {
         ))}
       </motion.div>
 
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        className="bg-gray-800/50 border border-cyan-500/20 p-6 rounded-xl"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-cyan-300">🛒 ショップ</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              ONにすると、メンバー画面の「ショップ」タブから商品を購入できます。商品・価格・用途・対象ロール・効果は
+              <Link href={`/dashboard/${guildId}/shop`} className="text-cyan-400 hover:underline mx-1">ショップ設定</Link>
+              の内容がそのまま使われます。購入ログは「ショップアイテムの購入・使用」のチャンネルに送られます。
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={shopEnabled}
+                onChange={(e) => setShopEnabled(e.target.checked)}
+              />
+              <div className="w-14 h-7 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-cyan-600"></div>
+            </label>
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="bg-gray-800/50 border border-cyan-500/20 p-6 rounded-xl space-y-4"
+      >
+        <div className="border-b border-cyan-500/20 pb-4">
+          <h2 className="text-xl font-semibold text-cyan-300">評価落ち・違反者の利用</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            OFFにすると、そのメンバーの画面ではカジノ・ショップのタブが表示されず、使うこともできません。
+            評価落ちと違反者の両方に当てはまるメンバーは、どちらか一方でもOFFなら使えません。
+          </p>
+        </div>
+        {ROLE_GROUPS.map((group) => (
+          <div key={group.key} className="space-y-2">
+            <div>
+              <div className="font-medium text-white">{group.label}</div>
+              <div className="text-xs text-gray-500">{group.desc}</div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {FEATURES.map((f) => (
+                <div key={f.key} className="flex items-center justify-between gap-3 bg-gray-900/60 border border-gray-700/60 rounded-lg px-4 py-3">
+                  <span className="text-sm text-gray-200">{f.label}</span>
+                  <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={roleAccess[group.key][f.key]}
+                      onChange={(e) =>
+                        setRoleAccess((prev) => ({ ...prev, [group.key]: { ...prev[group.key], [f.key]: e.target.checked } }))
+                      }
+                    />
+                    <div className="w-14 h-7 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-cyan-600"></div>
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </motion.div>
+
       <div className="text-sm text-gray-400 bg-gray-800/30 border border-gray-700/60 rounded-xl p-4 leading-relaxed">
-        確率・配当倍率・賭け金の上限・1日のプレイ回数・手数料は、Discordのパネルと同じく
+        ギャンブルの確率・配当倍率・賭け金の上限・1日のプレイ回数・手数料は、Discordのパネルと同じく
         <Link href={`/dashboard/${guildId}/gambling`} className="text-cyan-400 hover:underline mx-1">ギャンブル設定</Link>
         の値を使います。1日の回数と賭け金の上限は、パネルで遊んだ分と合算されます。
         結果は「ログ出力設定」の「賭博・カジノ機能の利用」のチャンネルに送られます。
