@@ -61,6 +61,9 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
         return new Map<string, { item_name: string; purchased_at: Date | null }>();
       }),
     ]);
+    const colorOf = (r: DiscordRole) => (r.color ? `#${r.color.toString(16).padStart(6, '0')}` : null);
+    const tagsOf = (ids: Set<string> | undefined) =>
+      roles.filter((r) => ids?.has(r.id)).map((r) => ({ id: r.id, name: r.name, color: colorOf(r) }));
     const memberRoles = held
       .sort((a, b) => b.position - a.position)
       .map((r) => ({
@@ -90,6 +93,8 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
         vc: { level: vcLevel, xp: Number(row.vc_xp ?? 0), next_xp: nextLevelXp(vcLevel) },
       },
       roles: memberRoles,
+      // 昇格の表示（「@仮メンのロール → @準メンのロール」）に使う、基本・評価設定のロール
+      role_settings: { new: tagsOf(kinds?.newIds), sub: tagsOf(kinds?.subIds), main: tagsOf(kinds?.mainIds) },
     });
   } catch (error) {
     console.error('member profile error:', error);
