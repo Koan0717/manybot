@@ -374,7 +374,11 @@ export default function MemberGuildPage() {
     return () => { cancelled = true; };
   }, [guildId, router]);
 
-  const cachedGuild = loadMemberState()?.guilds.find((g) => g.id === guildId);
+  // ブラウザの保存データはサーバーの描画では読めないので、表示後に読む（描画中に読むと表示が食い違う）
+  const [cachedGuild, setCachedGuild] = useState<{ id: string; name: string; icon: string | null } | undefined>();
+  useEffect(() => {
+    setCachedGuild(loadMemberState()?.guilds.find((g) => g.id === guildId));
+  }, [guildId]);
   const guildName = profile?.guild.name ?? cachedGuild?.name ?? '';
   const icon = profile ? guildIconUrl(profile.guild) : cachedGuild ? guildIconUrl(cachedGuild) : null;
 

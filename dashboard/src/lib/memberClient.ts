@@ -299,7 +299,9 @@ export async function discordActivityLogin(onStep?: (step: LoginStep) => void): 
       pinDiscordReferrer();
       const closed = waitForDiscordClose();
       try {
-        const instance = new DiscordSDK(clientId);
+        // SDK は既定で console.log 等を差し替えて Discord に転送するが、文字列にできない値が渡ると例外になり
+        // 画面ごと落ちる（Application error）ことがある。転送は使わないので止める
+        const instance = new DiscordSDK(clientId, { disableConsoleLogOverride: true });
         await Promise.race([instance.ready(), closed.promise]);
         return instance;
       } finally {
