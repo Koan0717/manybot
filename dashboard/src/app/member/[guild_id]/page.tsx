@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Coins, Crown, History, Loader2, Search, Send, User, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Coins, Crown, Dices, History, Loader2, Search, Send, User, X } from 'lucide-react';
+import Casino, { CasinoInfo } from './Casino';
 import { guildIconUrl, isDiscordActivity, keepMemberSessionAlive, loadMemberState, memberFetch } from '@/lib/memberClient';
 
 interface LevelStat { level: number; xp: number; next_xp: number }
@@ -29,10 +30,11 @@ const BotBadge = () => (
   <span className="text-[10px] font-bold bg-[#5865F2] text-white rounded px-1.5 py-0.5 flex-shrink-0">BOT</span>
 );
 
-type Tab = 'profile' | 'transfer' | 'roles';
+type Tab = 'profile' | 'transfer' | 'casino' | 'roles';
 const TABS: { key: Tab; label: string; icon: typeof User }[] = [
   { key: 'profile', label: 'プロフィール', icon: User },
   { key: 'transfer', label: '送金', icon: Send },
+  { key: 'casino', label: 'カジノ', icon: Dices },
   { key: 'roles', label: '役職', icon: Crown },
 ];
 
@@ -336,6 +338,8 @@ export default function MemberGuildPage() {
   const [tab, setTab] = useState<Tab>('profile');
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState('');
+  // Webアクティビティ設定でONのゲームが1つも無ければ「カジノ」タブは出さない
+  const [casino, setCasino] = useState<CasinoInfo | null>(null);
 
   // サーバーを切り替えたときに前のサーバーの表示が残らないよう、guildId ごとに取り直す
   useEffect(() => {
@@ -346,8 +350,16 @@ export default function MemberGuildPage() {
     keepMemberSessionAlive();
     let cancelled = false;
     setProfile(null);
+    setCasino(null);
     setError('');
     setTab('profile');
+    (async () => {
+      try {
+        const res = await memberFetch(`/api/member/guilds/${guildId}/casino`);
+        const data = await res.json().catch(() => null);
+        if (!cancelled && res.ok && data?.games?.length) setCasino(data);
+      } catch {}
+    })();
     (async () => {
       try {
         const res = await memberFetch(`/api/member/guilds/${guildId}/profile`);
@@ -387,12 +399,12 @@ export default function MemberGuildPage() {
           <h1 className="text-xl font-bold truncate">{guildName || '読み込み中...'}</h1>
         </header>
 
-        <nav className="grid grid-cols-3 gap-2 mb-6">
-          {TABS.map(({ key, label, icon: Icon }) => (
+        <nav className={`grid ${casino ? 'grid-cols-4' : 'grid-cols-3'} gap-2 mb-6`}>
+          {TABS.filter((t) => t.key !== 'casino' || casino).map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold border transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold border transition-all ${
                 tab === key
                   ? 'bg-red-600/20 border-red-700/60 text-white'
                   : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white'
@@ -444,9 +456,31 @@ export default function MemberGuildPage() {
           <TransferPanel
             guildId={guildId}
             profile={profile}
-            onBalanceChange={(balance) =>
-              setProfile((p) => (p ? { ...p, stats: { ...p.stats, balance } } : p))
-            }
+            onBalanceChange={(balance) => {
+              setProfile((p) => (p ? { ...p, stats: { ...p.stats, balance } } : p));
+              setCasino((c) => (c ? { ...c, status: { ...c.status, balance } } : c));
+            }}
+          />
+        ) : tab === 'casino' && casino ? (
+          <Casino
+            key={guildId}
+            guildId={guildId}
+            info={casino}
+            onPlayed={({ balance, plays_today, bet_delta }) => {
+              setCasino((c) =>
+                c
+                  ? {
+                      ...c,
+                      status: {
+                        balance,
+                        plays_today: plays_today ?? c.status.plays_today,
+                        bet_today: c.status.bet_today + (bet_delta ?? 0),
+                      },
+                    }
+                  : c
+              );
+              setProfile((p) => (p ? { ...p, stats: { ...p.stats, balance } } : p));
+            }}
           />
         ) : (
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">

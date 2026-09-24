@@ -36,6 +36,7 @@ import {
   Banknote,
   Link2,
   type LucideIcon,
+  MonitorSmartphone,
 } from 'lucide-react';
 
 
@@ -130,6 +131,7 @@ export default function DashboardLayout({
       section: 'ゲーム',
       items: [
         { label: 'ゲーム設定', path: `/dashboard/${guildId}/games`, roles: ['admin', 'subadmin'], icon: Gamepad2, group: '雑談鯖' },
+        { label: 'Webアクティビティ設定', path: `/dashboard/${guildId}/web-activity`, roles: ['admin', 'subadmin'], icon: MonitorSmartphone, group: 'その他' },
       ],
     },
     {
