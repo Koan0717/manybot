@@ -12,6 +12,10 @@ export const WINDOW_NAME_PREFIX = '__discord_activity_query=';
 // 上の2つが使えない環境の最後の予備。古い frame_id を後日使い回さないよう、短時間だけ有効にする
 export const BACKUP_KEY = 'discord_activity_query_backup';
 export const BACKUP_TTL_MS = 5 * 60 * 1000;
+// Activity を最初に開いたときの document.referrer（＝Discord本体のオリジン）。
+// SDK はこれを postMessage の宛先オリジンに使うが、アプリ内で1回でも画面遷移すると referrer が自分のURLに変わり、
+// Discord に届かなくなって ready() が終わらない。そのため最初の値を覚えておく（lib/memberClient.ts の pinDiscordReferrer）
+export const REFERRER_KEY = 'discord_activity_referrer';
 // ログイン画面へのリダイレクトで付くものは退避しない
 export const TRANSIENT_PARAMS = ['redirect', 'session_token'];
 
@@ -28,5 +32,9 @@ export const ACTIVITY_STASH_SCRIPT = `(function () {
     try { sessionStorage.setItem(${JSON.stringify(ACTIVITY_QUERY_KEY)}, value); } catch (e) {}
     try { window.name = ${JSON.stringify(WINDOW_NAME_PREFIX)} + value; } catch (e) {}
     try { localStorage.setItem(${JSON.stringify(BACKUP_KEY)}, JSON.stringify({ q: value, t: Date.now() })); } catch (e) {}
+    try {
+      var ref = document.referrer ? new URL(document.referrer).origin : '';
+      if (ref && ref !== window.location.origin) sessionStorage.setItem(${JSON.stringify(REFERRER_KEY)}, ref);
+    } catch (e) {}
   } catch (e) {}
 })();`;

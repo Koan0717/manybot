@@ -3,6 +3,7 @@ import {
   ACTIVITY_QUERY_KEY,
   BACKUP_KEY,
   BACKUP_TTL_MS,
+  REFERRER_KEY,
   TRANSIENT_PARAMS,
   WINDOW_NAME_PREFIX,
 } from '@/lib/activityStash';
@@ -192,8 +193,46 @@ function activityDiagnostics(): string {
     `退避(ss/name/ls)=${has(() => sessionStorage.getItem(ACTIVITY_QUERY_KEY))}/${has(() => window.name.startsWith(WINDOW_NAME_PREFIX))}/${has(() => localStorage.getItem(BACKUP_KEY))}`,
     `リダイレクト数=${redirects}`,
     `referrer=${document.referrer || 'なし'}`,
+    `最初のreferrer=${(() => { try { return sessionStorage.getItem(REFERRER_KEY) || 'なし'; } catch { return '使用不可'; } })()}`,
   ];
-  return `診断r3: ${parts.join(' / ')}`;
+  return `診断r4: ${parts.join(' / ')}`;
+}
+
+/**
+ * Discord SDK は document.referrer を postMessage の宛先オリジンにする（無ければ '*'）。
+ * Activity 内で /  → /login のように画面遷移していると referrer が自分のURLになり、
+ * 親（Discord本体）に届かずハンドシェイクが終わらない。最初に記録した Discord のオリジンに差し替える。
+ */
+function pinDiscordReferrer() {
+  let current = '';
+  try {
+    current = document.referrer ? new URL(document.referrer).origin : '';
+  } catch {}
+  if (current && current !== window.location.origin) return; // 最初のページのまま（Discord本体が referrer）
+  let saved = '';
+  try {
+    saved = sessionStorage.getItem(REFERRER_KEY) || '';
+  } catch {}
+  try {
+    // 記録が無ければ空にして、SDK に '*'（宛先を限定しない）を使わせる
+    Object.defineProperty(document, 'referrer', { configurable: true, get: () => saved });
+  } catch {}
+}
+
+/** Discord が接続を拒否したとき（CLOSE）SDK は何も返さないので、自分で受け取って理由を出す */
+function waitForDiscordClose(): { promise: Promise<never>; dispose: () => void } {
+  let listener: (event: MessageEvent) => void = () => {};
+  const promise = new Promise<never>((_, reject) => {
+    listener = (event: MessageEvent) => {
+      const data = event.data;
+      if (!Array.isArray(data) || data[0] !== 2) return; // Opcodes.CLOSE
+      const payload = (data[1] ?? {}) as { code?: number; message?: string };
+      reject(new Error(`Discordが接続を拒否しました（code ${payload.code ?? '?'}${payload.message ? `: ${payload.message}` : ''}）`));
+    };
+    window.addEventListener('message', listener);
+  });
+  promise.catch(() => {});
+  return { promise, dispose: () => window.removeEventListener('message', listener) };
 }
 
 const withTimeout = <T,>(promise: Promise<T>, ms: number, message: string) => {
@@ -257,12 +296,18 @@ export async function discordActivityLogin(onStep?: (step: LoginStep) => void): 
       if (!restoreActivityParams()) {
         throw new Error(`Discordの起動パラメータ(frame_id)が失われました [${activityDiagnostics()}]`);
       }
-      const instance = new DiscordSDK(clientId);
-      await instance.ready();
-      return instance;
+      pinDiscordReferrer();
+      const closed = waitForDiscordClose();
+      try {
+        const instance = new DiscordSDK(clientId);
+        await Promise.race([instance.ready(), closed.promise]);
+        return instance;
+      } finally {
+        closed.dispose();
+      }
     })(),
     15000,
-    `Discordに接続できませんでした（時間切れ）。アクティビティを開き直してください [使用したクライアントID: ${clientId}]`
+    `Discordに接続できませんでした（時間切れ）。アクティビティを開き直してください [使用したクライアントID: ${clientId}] [${activityDiagnostics()}]`
   );
 
   // 3) Discordの許可（認可）。初回は許可画面が出る
