@@ -5,6 +5,7 @@ import { CasinoError } from '@/lib/casino/db';
 import { loadCasinoSettings } from '@/lib/casino/settings';
 import { buyShopItem, fetchRoleNames, getEvaluationPeriod, isWebShopEnabled, loadShopItems } from '@/lib/shop';
 import { canUseFeature, getMemberFlags } from '@/lib/webAccess';
+import { loadRoleKinds } from '@/lib/memberRoles';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,10 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
       getEvaluationPeriod(pool, guildId, session.discord_id),
       pool.query('SELECT balance FROM users WHERE guild_id = $1 AND user_id = $2', [guildId, session.discord_id]),
     ]);
-    const roles = items.length ? await fetchRoleNames(guildId) : new Map();
+    const roles = await fetchRoleNames(guildId);
+    // 評価期間の終了予定は仮メンにだけ見せる（購入できるかの判定は has_evaluation_period で別に行う）
+    const kinds = await loadRoleKinds(pool, guildId, Array.from(roles.values())).catch(() => null);
+    const isNewMember = !!kinds && member.roles.some((r) => kinds.newIds.has(r));
     const roleInfo = (ids: string[]) =>
       ids
         .map((id) => roles.get(id))
@@ -40,7 +44,8 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
       enabled: true,
       currency_name: s.currencyName,
       balance: Number(balanceRes.rows[0]?.balance) || 0,
-      evaluation_period: period,
+      evaluation_period: isNewMember ? period : null,
+      has_evaluation_period: !!period,
       items: items.map((item) => {
         const targets = roleInfo(item.target_role_ids);
         return {

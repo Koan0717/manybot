@@ -3,6 +3,7 @@ import { getPool } from '@/lib/db';
 import { DiscordGuildSummary, DiscordRole, botRequest, memberAvatarUrl, memberDisplayName } from '@/lib/discordApi';
 import { requireGuildMember } from '@/lib/memberAuth';
 import { isBotTransferAllowed } from '@/lib/memberSettings';
+import { getRoleGrantDates, loadRoleKinds, roleKind } from '@/lib/memberRoles';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,13 +45,26 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     const vcLevel = Number(row.vc_level ?? 1);
 
     const memberRoleIds = new Set(member.roles);
-    const memberRoles = roles
-      .filter((r) => memberRoleIds.has(r.id))
+    const held = roles.filter((r) => memberRoleIds.has(r.id));
+    // 付与日・種類（仮メン・準メン・本メン・評価落ち）。取れなくてもプロフィール自体は返す
+    const [kinds, dates] = await Promise.all([
+      loadRoleKinds(pool, guildId, roles).catch((e) => {
+        console.error('loadRoleKinds failed:', e);
+        return null;
+      }),
+      getRoleGrantDates(pool, guildId, session.discord_id, held.map((r) => r.id)).catch((e) => {
+        console.error('getRoleGrantDates failed:', e);
+        return new Map<string, Date>();
+      }),
+    ]);
+    const memberRoles = held
       .sort((a, b) => b.position - a.position)
       .map((r) => ({
         id: r.id,
         name: r.name,
         color: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : null,
+        granted_at: dates.get(r.id)?.toISOString() ?? null,
+        kind: kinds ? roleKind(kinds, r.id) : null,
       }));
 
     return NextResponse.json({

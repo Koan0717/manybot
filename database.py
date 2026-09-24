@@ -393,6 +393,34 @@ async def setup_db_schema(p):
 
         await conn.execute('CREATE INDEX IF NOT EXISTS idx_transfer_logs_receiver ON transfer_logs (guild_id, receiver_id, created_at DESC)')
 
+        # ロールの付け外しの履歴（cogs/role_history.py）。ダッシュボードの「役職」タブで付与日を表示する
+
+        await conn.execute('''
+
+            CREATE TABLE IF NOT EXISTS role_history (
+
+                id BIGSERIAL PRIMARY KEY,
+
+                guild_id BIGINT NOT NULL,
+
+                user_id BIGINT NOT NULL,
+
+                role_id BIGINT NOT NULL,
+
+                role_name TEXT,
+
+                action TEXT NOT NULL,
+
+                source TEXT NOT NULL DEFAULT 'bot',
+
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+            )
+
+        ''')
+
+        await conn.execute('CREATE INDEX IF NOT EXISTS idx_role_history_user ON role_history (guild_id, user_id, created_at DESC)')
+
         await conn.execute('''
 
             CREATE TABLE IF NOT EXISTS rooms (
@@ -2028,6 +2056,24 @@ async def remove_balance(guild_id: int, user_id: int, amount: int, force: bool =
             status = await conn.execute('UPDATE users SET balance = balance - $1 WHERE guild_id = $2 AND user_id = $3 AND balance >= $1', amount, guild_id, user_id)
 
             return status == "UPDATE 1"
+
+
+
+async def add_role_history(guild_id: int, user_id: int, role_id: int, role_name: str, action: str):
+
+    p = await get_pool(guild_id)
+
+    async with p.acquire() as conn:
+
+        await conn.execute(
+
+            'INSERT INTO role_history (guild_id, user_id, role_id, role_name, action) VALUES ($1, $2, $3, $4, $5)',
+
+            guild_id, user_id, role_id, role_name, action
+
+        )
+
+
 
 
 

@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { AlertCircle, MonitorSmartphone, Save } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
+import RoleSelect, { RoleOption } from '@/components/RoleSelect';
 
 // lib/casino/settings.ts の WEB_GAMES と同じ並び・同じキー
 const GAMES = [
@@ -40,17 +41,28 @@ export default function WebActivitySettingsPage() {
   const [enabled, setEnabled] = useState<Enabled>(allOff);
   const [shopEnabled, setShopEnabled] = useState(false);
   const [roleAccess, setRoleAccess] = useState<RoleAccess>(allAllowed);
+  // 昇格のお祝いに使う準メン・本メンのロール（lib/memberRoles.ts）
+  const [subRoleIds, setSubRoleIds] = useState<string[]>([]);
+  const [mainRoleIds, setMainRoleIds] = useState<string[]>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    fetch(`/api/guilds/${guildId}/roles`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setRoles(Array.isArray(data) ? data.filter((r: any) => r.id !== guildId) : []))
+      .catch(() => setRoles([]));
     fetch(`/api/guilds/${guildId}/settings`)
       .then((res) => (res.ok ? res.json() : {}))
       .then((data: any) => {
         const saved = data?.WEB_GAMES_ENABLED && typeof data.WEB_GAMES_ENABLED === 'object' ? data.WEB_GAMES_ENABLED : {};
         setEnabled(Object.fromEntries(GAMES.map((g) => [g.key, saved[g.key] === true])) as Enabled);
         setShopEnabled(data?.WEB_SHOP_ENABLED === true);
+        const toIds = (v: unknown) => (Array.isArray(v) ? v.map(String) : v ? [String(v)] : []);
+        setSubRoleIds(toIds(data?.WEB_SUB_MEMBER_ROLE_IDS));
+        setMainRoleIds(toIds(data?.WEB_MAIN_MEMBER_ROLE_IDS));
         const ra = data?.WEB_ROLE_ACCESS && typeof data.WEB_ROLE_ACCESS === 'object' ? data.WEB_ROLE_ACCESS : {};
         setRoleAccess({
           downgrade: { casino: ra.downgrade?.casino !== false, shop: ra.downgrade?.shop !== false },
@@ -68,7 +80,10 @@ export default function WebActivitySettingsPage() {
       const res = await fetch(`/api/guilds/${guildId}/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ WEB_GAMES_ENABLED: enabled, WEB_SHOP_ENABLED: shopEnabled, WEB_ROLE_ACCESS: roleAccess }),
+        body: JSON.stringify({ WEB_GAMES_ENABLED: enabled, WEB_SHOP_ENABLED: shopEnabled, WEB_ROLE_ACCESS: roleAccess,
+          WEB_SUB_MEMBER_ROLE_IDS: subRoleIds,
+          WEB_MAIN_MEMBER_ROLE_IDS: mainRoleIds,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) {
@@ -102,7 +117,7 @@ export default function WebActivitySettingsPage() {
             Webアクティビティ設定
           </h1>
           <p className="text-gray-400 mt-2 text-sm">
-            Discordアクティビティ・Webのメンバー画面で使える機能を選びます。ONにしたものだけがメンバー画面に表示されます。
+            Discordアクティビティ・Webのメンバー画面で使える機能と表示を設定します。
           </p>
         </div>
         <button
@@ -217,6 +232,32 @@ export default function WebActivitySettingsPage() {
             </div>
           </div>
         ))}
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="bg-gray-800/50 border border-cyan-500/20 p-6 rounded-xl space-y-4"
+      >
+        <div className="border-b border-cyan-500/20 pb-4">
+          <h2 className="text-xl font-semibold text-cyan-300">🍾 昇格のお祝い</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            メンバー画面の「役職」タブで、ここで選んだロールを持つ人にお祝いのメッセージ（黄色の枠）を表示します。
+            評価落ちロールを持つ人には励ましのメッセージ（赤の枠）を表示します。
+            どちらも未設定なら、「基本・評価設定」の本・準メンバーロールのうち、名前に「準」を含むものを準メン、それ以外を本メンとして扱います。
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm text-gray-300 font-bold">準メンバーロール（仮メン → 準メン）</label>
+            <RoleSelect label="準メンバーロール" multiple value={subRoleIds} onChange={(v) => setSubRoleIds(v)} roles={roles} />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm text-gray-300 font-bold">本メンバーロール（準メン → 本メン）</label>
+            <RoleSelect label="本メンバーロール" multiple value={mainRoleIds} onChange={(v) => setMainRoleIds(v)} roles={roles} />
+          </div>
+        </div>
       </motion.div>
 
       <div className="text-sm text-gray-400 bg-gray-800/30 border border-gray-700/60 rounded-xl p-4 leading-relaxed">

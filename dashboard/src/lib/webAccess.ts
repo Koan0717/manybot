@@ -30,7 +30,7 @@ export function parseRoleAccess(raw: unknown): RoleAccess {
 }
 
 /** 設定値からロールIDを取り出す。16桁以上の数字は JSON の数値だと精度が落ちるので文字列として読む */
-function idsFrom(raw: unknown): string[] {
+export function idsFrom(raw: unknown): string[] {
   if (raw === null || raw === undefined || raw === '') return [];
   const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
   return Array.from(new Set(text.match(/\d{15,25}/g) ?? []));
