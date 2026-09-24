@@ -47,6 +47,8 @@ const orFalsy = (value: unknown, d: number) => toNumber(value) || d;
 export interface CasinoSettings {
   currencyName: string;
   enabled: Record<WebGame, boolean>;
+  /** 戦績を見せるか（Bot と同じく、共通 GAMBLE_SHOW_STATS とゲーム別の両方がOFFでないとき） */
+  showStats: Record<WebGame, boolean>;
   maxBet: number;
   maxPlays: number; // 0 = 無制限
   dailyLimit: number; // 0 = 無制限
@@ -88,10 +90,15 @@ export async function loadCasinoSettings(pool: Pool, guildId: string): Promise<C
     return x === true || x === 'true';
   };
   const currency = v('CURRENCY_NAME');
+  // Bot（show_user_game_stats）は False のときだけ隠す
+  const isOff = (x: unknown) => x === false || x === 'false';
 
   return {
     currencyName: typeof currency === 'string' || typeof currency === 'number' ? String(currency) || 'コイン' : 'コイン',
     enabled: parseEnabledGames(s[WEB_GAMES_SETTING_KEY]),
+    showStats: Object.fromEntries(
+      WEB_GAMES.map((g) => [g, !isOff(v('GAMBLE_SHOW_STATS')) && !isOff(v(`GAMBLE_${g.toUpperCase()}_SHOW_STATS`))])
+    ) as Record<WebGame, boolean>,
     maxBet: Math.floor(orFalsy(v('GAMBLE_MAX_BET'), 100000)),
     maxPlays: Math.floor(orNull(v('GAMBLE_MAX_PLAYS'), 10)),
     dailyLimit: Math.floor(orNull(v('GAMBLE_DAILY_LIMIT'), 0)),

@@ -87,6 +87,67 @@ function CardView({ card }: { card: Card | null }) {
   );
 }
 
+interface GameStat {
+  plays: number; wins: number; losses: number; draws: number;
+  total_bet: number; total_payout: number; net_profit: number; max_win: number;
+  extra: Record<string, number>;
+}
+
+// helpers.create_game_stats_embed と同じ内訳
+const STAT_DETAILS: Partial<Record<GameKey, { title: string; rows: [string, string][] }>> = {
+  chinchiro: { title: '🎲 役の履歴', rows: [['pinzoro', 'ピンゾロ'], ['arashi', 'アラシ'], ['shigoro', 'シゴロ'], ['normal', '通常出目'], ['hifumi', 'ヒフミ']] },
+  slot: { title: '🎰 当選履歴', rows: [['slot_7', '7️⃣7️⃣7️⃣'], ['slot_star', '⭐⭐⭐'], ['slot_three', '絵柄3つ揃い'], ['slot_two', '絵柄2つ揃い']] },
+  blackjack: { title: '🃏 詳細履歴', rows: [['bj_win', 'ブラックジャック勝利'], ['normal_win', '通常勝利'], ['bust', 'バスト']] },
+  roulette: { title: '🎡 当選履歴', rows: [['win_36x', '数字1点的中'], ['win_3x', 'ダズン的中'], ['win_2x', '赤黒/偶奇等的中']] },
+  horse: { title: '🏇 的中履歴', rows: [['tan_win', '単勝的中 (1着)'], ['fuku_win', '複勝的中 (1〜3着)']] },
+};
+
+function StatsCard({ game, label, stat, cur }: { game: GameKey; label: string; stat: GameStat; cur: string }) {
+  const decisive = stat.wins + stat.losses;
+  const rate = decisive > 0 ? ((stat.wins / decisive) * 100).toFixed(1) : '0.0';
+  const profitColor = stat.net_profit > 0 ? 'text-amber-300' : stat.net_profit < 0 ? 'text-red-400' : 'text-zinc-200';
+  const detail = STAT_DETAILS[game];
+  const cell = (name: string, value: React.ReactNode, cls = '') => (
+    <div className="bg-zinc-800/50 rounded-lg px-3 py-2">
+      <div className="text-[11px] text-zinc-500">{name}</div>
+      <div className={`font-bold text-sm ${cls}`}>{value}</div>
+    </div>
+  );
+  return (
+    <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-3">
+      <div className="text-sm text-zinc-400">📊 {GAME_ICON[game]} {label} の戦績</div>
+      <div className="grid grid-cols-3 gap-2">
+        {cell('🎮 プレイ回数', `${fmt(stat.plays)} 回`)}
+        {cell('🏆 勝敗', `${fmt(stat.wins)}勝 ${fmt(stat.losses)}敗${stat.draws > 0 ? ` ${fmt(stat.draws)}分` : ''}`)}
+        {cell('📈 勝率', `${rate}%`)}
+        {cell('💰 総ベット額', fmt(stat.total_bet))}
+        {cell('🎁 総獲得額', fmt(stat.total_payout))}
+        {cell('🌟 最高獲得額', fmt(stat.max_win))}
+      </div>
+      <div className="bg-zinc-800/50 rounded-lg px-3 py-2 flex items-baseline justify-between">
+        <span className="text-xs text-zinc-500">純損益</span>
+        <span className={`font-bold ${profitColor}`}>
+          {stat.net_profit > 0 ? '+' : ''}{fmt(stat.net_profit)} <span className="text-xs font-normal text-zinc-500">{cur}</span>
+        </span>
+      </div>
+      {detail && (
+        <div>
+          <div className="text-xs text-zinc-500 mb-1">{detail.title}</div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm">
+            {detail.rows.map(([key, name]) => (
+              <div key={key} className="flex justify-between">
+                <span className="text-zinc-400">{name}</span>
+                <span>{fmt(Number(stat.extra?.[key]) || 0)} 回</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <p className="text-[11px] text-zinc-600">Discordのパネルで遊んだ分も含みます</p>
+    </div>
+  );
+}
+
 export default function Casino({
   guildId,
   info,
@@ -115,6 +176,21 @@ export default function Casino({
   const [race, setRace] = useState<{ frame: any; track: number } | null>(null);
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
+
+  // 戦績（遊ぶたびに取り直す）。ギャンブル設定で戦績表示がOFFのゲームは返ってこない
+  const [stats, setStats] = useState<Partial<Record<GameKey, GameStat>>>({});
+  const [statsKey, setStatsKey] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await memberFetch(`/api/member/guilds/${guildId}/casino/stats`);
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setStats(data.stats ?? {});
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [guildId, statsKey]);
 
   const cur = info.currency_name;
   const { balance, plays_today, bet_today } = info.status;
@@ -147,8 +223,10 @@ export default function Casino({
     return data;
   };
 
-  const played = (data: any, betAmount: number) =>
+  const played = (data: any, betAmount: number) => {
     onPlayed({ balance: data.balance, plays_today: data.playNumber, bet_delta: betAmount });
+    setStatsKey((k) => k + 1);
+  };
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -249,7 +327,10 @@ export default function Casino({
       if (action === 'start' && !data.resumed) played(data, data.bet);
       else onPlayed({ balance: data.balance });
       if (data.resumed) toast('進行中のゲームの続きです');
-      if (data.finished) bjResult(data);
+      if (data.finished) {
+        bjResult(data);
+        setStatsKey((k) => k + 1);
+      }
     });
 
   const playChinchiro = () =>
@@ -568,6 +649,10 @@ export default function Casino({
 
         <ResultBox outcome={outcome} />
       </div>
+
+      {stats[game] && (
+        <StatsCard game={game} label={info.games.find((g) => g.key === game)?.label ?? ''} stat={stats[game]!} cur={cur} />
+      )}
     </div>
   );
 }
