@@ -85,7 +85,7 @@ let cachedClientId: string | null = null;
  * （/api/system/status と同じ方式。NEXT_PUBLIC_ の値はビルド時に埋め込まれるため、実行時に取れる形にしてある）。
  */
 export async function getClientId(): Promise<string> {
-  const fromEnv = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || process.env.DISCORD_CLIENT_ID;
+  const fromEnv = (process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || process.env.DISCORD_CLIENT_ID)?.trim();
   if (fromEnv) return fromEnv;
   if (cachedClientId) return cachedClientId;
   const app = await botRequest<{ id: string }>('/oauth2/applications/@me');
@@ -102,7 +102,8 @@ export const WEB_OAUTH_CALLBACK_PATH = '/login/discord-callback';
  * Activity の SDK で得たコードは redirect_uri なしで交換する。
  */
 export async function exchangeCodeForToken(code: string, redirectUri?: string): Promise<string> {
-  const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+  // 貼り付け時に紛れ込みやすい前後の空白・改行を除く（残っていると invalid_client になる）
+  const clientSecret = process.env.DISCORD_CLIENT_SECRET?.trim();
   if (!clientSecret) {
     throw new DiscordApiError(500, 'DISCORD_CLIENT_SECRET が未設定です');
   }
