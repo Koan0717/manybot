@@ -3,6 +3,7 @@ import { getPool } from '@/lib/db';
 import { DiscordApiError, DiscordGuildMember, botRequest, memberDisplayName } from '@/lib/discordApi';
 import { isSnowflake, jsonError, requireGuildMember } from '@/lib/memberAuth';
 import { isBotTransferAllowed } from '@/lib/memberSettings';
+import { TransferSource, ensureTransferLogsTable, recordTransfer } from '@/lib/transferLogs';
 
 // users.balance は INTEGER なので、それを超えない範囲に収める
 const MAX_AMOUNT = 1_000_000_000;
@@ -20,7 +21,7 @@ function parseCurrencyName(raw: unknown): string {
 }
 
 /**
- * POST /api/member/guilds/[guild_id]/transfer  { to: "<discord id>", amount: number }
+ * POST /api/member/guilds/[guild_id]/transfer  { to: "<discord id>", amount: number, via?: "activity" | "web" }
  * /pay コマンド（cogs/economy.py → database.transfer_balance）と同じ仕様の送金。
  * 送金元は必ずセッションのDiscord ID。
  */
@@ -37,6 +38,8 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     return jsonError(`金額は1〜${MAX_AMOUNT.toLocaleString()}の整数で指定してください`, 400);
   }
   if (to === session.discord_id) return jsonError('自分自身には送金できません', 400);
+  // どこから送金したか（ログ・履歴の表示用。クライアントの申告だが、金額や相手には影響しない）
+  const source: TransferSource = body?.via === 'activity' ? 'activity' : 'web';
 
   let receiver: DiscordGuildMember;
   try {
@@ -76,6 +79,12 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     if (e?.code !== '42P01') console.error('command_settings check failed:', e);
   }
 
+  try {
+    await ensureTransferLogsTable(pool);
+  } catch (e) {
+    console.error('ensureTransferLogsTable failed:', e); // 履歴が残せないだけで送金はできる
+  }
+
   const client = await pool.connect();
   let newBalance: number;
   try {
@@ -95,6 +104,7 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
       [amount, guildId, session.discord_id]
     );
     await client.query('UPDATE users SET balance = balance + $1 WHERE guild_id = $2 AND user_id = $3', [amount, guildId, to]);
+    await recordTransfer(client, { guildId, senderId: session.discord_id, receiverId: to, amount, source });
     await client.query('COMMIT');
     newBalance = Number(sent.rows[0].balance);
   } catch (e: any) {
@@ -107,16 +117,23 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     client.release();
   }
 
-  // 通貨ログ（/pay と同じ "currency" ログ）。失敗しても送金自体は成功扱い
+  // ログ送信。ダッシュボードのログ設定「アクティビティ・Webからの送金」(member_transfer) のチャンネルに送る。
+  // 未設定・OFFなら従来どおり「経済システム・通貨変動」(currency) のチャンネルに送る。失敗しても送金自体は成功扱い
   let currencyName = 'コイン';
   try {
     const [cur, log] = await Promise.all([
       pool.query("SELECT setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key = 'CURRENCY_NAME'", [guildId]),
-      pool.query("SELECT channel_id::text AS channel_id, is_enabled FROM log_settings WHERE guild_id = $1 AND log_type = 'currency'", [guildId]),
+      pool.query(
+        "SELECT log_type, channel_id::text AS channel_id, is_enabled FROM log_settings WHERE guild_id = $1 AND log_type IN ('member_transfer', 'currency')",
+        [guildId]
+      ),
     ]);
     currencyName = parseCurrencyName(cur.rows[0]?.setting_value);
-    const logRow = log.rows[0];
-    if (logRow && (logRow.is_enabled === null || logRow.is_enabled)) {
+    const enabled = (type: string) =>
+      log.rows.find((r) => r.log_type === type && r.channel_id && (r.is_enabled === null || r.is_enabled));
+    const logRow = enabled('member_transfer') ?? enabled('currency');
+    if (logRow) {
+      const via = source === 'activity' ? 'Discordアクティビティ' : 'Webダッシュボード';
       await botRequest(`/channels/${logRow.channel_id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -124,14 +141,15 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
           embeds: [
             {
               title: '💸 送金',
-              description: 'ユーザー間で送金が行われました（Discordアクティビティ経由）。',
+              description: `ユーザー間で送金が行われました（${via}経由）。`,
               color: 0x3498db,
               timestamp: new Date().toISOString(),
               fields: [
                 { name: '送金元', value: `<@${session.discord_id}> (${session.discord_id})`, inline: false },
                 { name: '送金先 (1名)', value: `<@${to}> (${to})`, inline: false },
-                { name: '1人あたりの金額', value: `${amount.toLocaleString()} ${currencyName}`, inline: true },
-                { name: '合計金額', value: `${amount.toLocaleString()} ${currencyName}`, inline: true },
+                { name: '金額', value: `${amount.toLocaleString()} ${currencyName}`, inline: true },
+                { name: '送金後の送金元残高', value: `${newBalance.toLocaleString()} ${currencyName}`, inline: true },
+                { name: '経由', value: via, inline: true },
               ],
             },
           ],

@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Coins, Crown, Loader2, Search, Send, User, X } from 'lucide-react';
-import { guildIconUrl, loadMemberState, memberFetch } from '@/lib/memberClient';
+import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Coins, Crown, History, Loader2, Search, Send, User, X } from 'lucide-react';
+import { guildIconUrl, isDiscordActivity, keepMemberSessionAlive, loadMemberState, memberFetch } from '@/lib/memberClient';
 
 interface LevelStat { level: number; xp: number; next_xp: number }
 interface Profile {
@@ -14,6 +14,14 @@ interface Profile {
   allow_bot_transfer: boolean;
   stats: { balance: number; event_points: number; tc: LevelStat; vc: LevelStat };
   roles: { id: string; name: string; color: string | null }[];
+}
+interface TransferRecord {
+  id: string;
+  direction: 'sent' | 'received';
+  counterpart: { id: string; display_name: string };
+  amount: number;
+  source: string;
+  created_at: string;
 }
 interface Candidate { id: string; display_name: string; username: string; avatar_url: string; is_bot: boolean }
 
@@ -48,6 +56,81 @@ function LevelBar({ label, stat }: { label: string; stat: LevelStat }) {
   );
 }
 
+const SOURCE_LABEL: Record<string, string> = { pay: '/pay', activity: 'アクティビティ', web: 'Web' };
+
+/** 自分が関わった送金の直近20件。reloadKey が変わるたび（送金した直後など）に取り直す */
+function TransferHistory({ guildId, currency, reloadKey }: { guildId: string; currency: string; reloadKey: number }) {
+  const [items, setItems] = useState<TransferRecord[] | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await memberFetch(`/api/member/guilds/${guildId}/transfers`);
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!res.ok) setError(data.error || '送金履歴を取得できませんでした');
+        else {
+          setError('');
+          setItems(data.transfers ?? []);
+        }
+      } catch {
+        if (!cancelled) setError('サーバーに接続できませんでした');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [guildId, reloadKey]);
+
+  return (
+    <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
+      <div className="flex items-center gap-2 text-sm text-zinc-400 mb-3">
+        <History className="w-4 h-4" /> 直近の送金（20件）
+      </div>
+      {error ? (
+        <p className="text-sm text-red-400">{error}</p>
+      ) : items === null ? (
+        <div className="py-4 flex justify-center text-zinc-500">
+          <Loader2 className="w-5 h-5 animate-spin" />
+        </div>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-zinc-500">まだ送金の記録はありません</p>
+      ) : (
+        <ul className="divide-y divide-zinc-800">
+          {items.map((t) => {
+            const sent = t.direction === 'sent';
+            return (
+              <li key={t.id} className="flex items-center gap-3 py-2.5">
+                <span
+                  className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    sent ? 'bg-red-950/60 text-red-400' : 'bg-emerald-950/60 text-emerald-400'
+                  }`}
+                >
+                  {sent ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownLeft className="w-4 h-4" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm truncate">
+                    <span className="font-semibold">{t.counterpart.display_name}</span>
+                    <span className="text-zinc-500">{sent ? ' へ送金' : ' から受け取り'}</span>
+                  </div>
+                  <div className="text-xs text-zinc-500">
+                    {new Date(t.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {' ・ '}
+                    {SOURCE_LABEL[t.source] ?? t.source}
+                  </div>
+                </div>
+                <div className={`text-sm font-bold whitespace-nowrap ${sent ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {sent ? '−' : '+'}{fmt(t.amount)} <span className="text-xs font-normal text-zinc-500">{currency}</span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function TransferPanel({
   guildId,
   profile,
@@ -64,6 +147,7 @@ function TransferPanel({
   const [amountText, setAmountText] = useState('');
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
+  const [historyKey, setHistoryKey] = useState(0);
 
   const currency = profile.currency_name;
   const amount = Number(amountText);
@@ -99,7 +183,7 @@ function TransferPanel({
       const res = await memberFetch(`/api/member/guilds/${guildId}/transfer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: recipient.id, amount }),
+        body: JSON.stringify({ to: recipient.id, amount, via: isDiscordActivity() ? 'activity' : 'web' }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
@@ -108,6 +192,7 @@ function TransferPanel({
       }
       toast.success(`${data.to.display_name} に ${fmt(data.amount)} ${data.currency_name} を送金しました`);
       onBalanceChange(data.balance);
+      setHistoryKey((k) => k + 1);
       setRecipient(null);
       setAmountText('');
       setQuery('');
@@ -239,6 +324,8 @@ function TransferPanel({
           </button>
         )}
       </div>
+
+      <TransferHistory guildId={guildId} currency={currency} reloadKey={historyKey} />
     </div>
   );
 }
@@ -256,6 +343,7 @@ export default function MemberGuildPage() {
       router.replace(`/login${window.location.search}`);
       return;
     }
+    keepMemberSessionAlive();
     let cancelled = false;
     setProfile(null);
     setError('');

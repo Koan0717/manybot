@@ -7,12 +7,13 @@ import {
   listUserGuilds,
   userAvatarUrl,
   userRequest,
+  WEB_OAUTH_CALLBACK_PATH,
 } from '@/lib/discordApi';
 import { createMemberSession } from '@/lib/memberAuth';
 
 /**
  * POST /api/member/discord-login
- * Activity SDK の authorize() で得た認可コードを受け取り、
+ * Activity SDK の authorize()、またはブラウザでの通常のOAuth2（/login/discord-callback）で得た認可コードを受け取り、
  *   1. Discordでアクセストークンに交換（Client Secretはサーバーだけが持つ）
  *   2. ユーザー本人のIDと所属サーバーをDiscordから取得（クライアントの申告は信用しない）
  *   3. Manybotが参加しているサーバーだけに絞って返す
@@ -26,7 +27,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '認可コードがありません' }, { status: 400 });
     }
 
-    const accessToken = await exchangeCodeForToken(code);
+    // ブラウザからのログインは redirect_uri 付きで認可しているので、交換時も同じ値が必要。
+    // 受け付けるのはこのダッシュボードのコールバックURLの形だけ（Discord側でも登録済みURLと照合される）
+    const redirectUri = body?.redirect_uri;
+    if (redirectUri !== undefined) {
+      let valid = false;
+      try {
+        const url = new URL(redirectUri);
+        const fixed = process.env.DISCORD_REDIRECT_URI;
+        valid = fixed
+          ? redirectUri === fixed
+          : (url.protocol === 'https:' || url.hostname === 'localhost') &&
+            url.pathname === WEB_OAUTH_CALLBACK_PATH &&
+            !url.search &&
+            !url.hash;
+      } catch {}
+      if (!valid) {
+        return NextResponse.json({ error: 'redirect_uri が不正です' }, { status: 400 });
+      }
+    }
+
+    const accessToken = await exchangeCodeForToken(code, redirectUri);
 
     const [user, userGuilds, botGuilds] = await Promise.all([
       userRequest<DiscordUser>('/users/@me', accessToken),
@@ -61,7 +82,7 @@ export async function POST(request: Request) {
           error:
             status === 500
               ? 'サーバー側のDiscord設定が不足しています（管理者に連絡してください）'
-              : 'Discord認証に失敗しました。もう一度お試しください',
+              : `Discord認証に失敗しました。もう一度お試しください（詳細: ${error.message}）`,
         },
         { status }
       );

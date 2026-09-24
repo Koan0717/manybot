@@ -43,7 +43,7 @@ async function request<T>(path: string, authorization: string, init: RequestInit
     cache: 'no-store',
   });
   if (!res.ok) {
-    throw new DiscordApiError(res.status, `Discord API error: ${res.status} ${path}`);
+    throw new DiscordApiError(res.status, `Discord API error: ${res.status} ${path.split('?')[0]}`);
   }
   return res.json() as Promise<T>;
 }
@@ -85,7 +85,7 @@ let cachedClientId: string | null = null;
  * （/api/system/status と同じ方式。NEXT_PUBLIC_ の値はビルド時に埋め込まれるため、実行時に取れる形にしてある）。
  */
 export async function getClientId(): Promise<string> {
-  const fromEnv = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || process.env.DISCORD_CLIENT_ID;
+  const fromEnv = (process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || process.env.DISCORD_CLIENT_ID)?.trim();
   if (fromEnv) return fromEnv;
   if (cachedClientId) return cachedClientId;
   const app = await botRequest<{ id: string }>('/oauth2/applications/@me');
@@ -93,8 +93,17 @@ export async function getClientId(): Promise<string> {
   return app.id;
 }
 
-export async function exchangeCodeForToken(code: string): Promise<string> {
-  const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+/** ブラウザ（Activity外）からのDiscordログインで、Discordから戻ってくるページ */
+export const WEB_OAUTH_CALLBACK_PATH = '/login/discord-callback';
+
+/**
+ * 認可コードをアクセストークンに交換する。
+ * redirectUri は、ブラウザでの通常のOAuth2（認可時に redirect_uri を指定したもの）のときだけ渡す。
+ * Activity の SDK で得たコードは redirect_uri なしで交換する。
+ */
+export async function exchangeCodeForToken(code: string, redirectUri?: string): Promise<string> {
+  // 貼り付け時に紛れ込みやすい前後の空白・改行を除く（残っていると invalid_client になる）
+  const clientSecret = process.env.DISCORD_CLIENT_SECRET?.trim();
   if (!clientSecret) {
     throw new DiscordApiError(500, 'DISCORD_CLIENT_SECRET が未設定です');
   }
@@ -113,11 +122,15 @@ export async function exchangeCodeForToken(code: string): Promise<string> {
       client_secret: clientSecret,
       grant_type: 'authorization_code',
       code,
+      ...(redirectUri ? { redirect_uri: redirectUri } : {}),
     }),
     cache: 'no-store',
   });
   if (!res.ok) {
-    throw new DiscordApiError(401, `Discord token exchange failed: ${res.status}`);
+    // 原因の切り分け用に、Discordが返したエラー名（invalid_grant / invalid_client など）を残す。秘密情報は含まれない
+    const body = await res.json().catch(() => null);
+    const reason = [body?.error, body?.error_description].filter(Boolean).join(': ');
+    throw new DiscordApiError(401, `トークン交換に失敗 (${res.status}${reason ? ` ${reason}` : ''})`);
   }
   const data = await res.json();
   if (typeof data.access_token !== 'string') {

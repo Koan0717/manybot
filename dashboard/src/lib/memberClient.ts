@@ -60,6 +60,40 @@ export function clearMemberState() {
   } catch {}
 }
 
+// 期限の延長は1日に1回で十分
+const REFRESH_AFTER_MS = 24 * 60 * 60 * 1000;
+let refreshing = false;
+
+function tokenIssuedAt(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof payload.iat === 'number' ? payload.iat * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ログアウトするまでログインしたままにするため、メンバー画面を開いたときにセッションの期限を延ばす。
+ * 通信に失敗しても今のトークンはそのまま使う（無効と分かったときだけ memberFetch がログイン画面に戻す）。
+ */
+export async function keepMemberSessionAlive(): Promise<void> {
+  const state = loadMemberState();
+  if (!state || refreshing) return;
+  const issuedAt = tokenIssuedAt(state.token);
+  if (issuedAt !== null && Date.now() - issuedAt < REFRESH_AFTER_MS) return;
+  refreshing = true;
+  try {
+    const res = await memberFetch('/api/member/session', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    const current = loadMemberState();
+    if (res.ok && data.token && current) saveMemberState({ ...current, token: data.token });
+  } catch {
+  } finally {
+    refreshing = false;
+  }
+}
+
 /** /api/member/* 用の fetch。トークンが無効（401）ならセッションを捨てて /login に戻す */
 export async function memberFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const state = loadMemberState();
@@ -206,18 +240,13 @@ export async function discordActivityLogin(onStep?: (step: LoginStep) => void): 
 
   if (!restoreActivityParams()) {
     throw new Error(
-      `Discordアクティビティの中から開いてください（ブラウザからのDiscordログインには未対応です） [${activityDiagnostics()}]`
+      `Discordアクティビティの起動パラメータが見つかりません [${activityDiagnostics()}]`
     );
   }
 
   // 1) クライアントIDはビルド時の環境変数に頼らず、サーバーから実行時に取得する
   step('config');
-  const configRes = await fetchWithTimeout('/api/member/discord-config', {}, 15000, 'ダッシュボードから設定を取得できませんでした（時間切れ）');
-  const config = await configRes.json().catch(() => ({}));
-  const clientId: string | undefined = config.client_id;
-  if (!configRes.ok || !clientId) {
-    throw new Error(config.error || 'DiscordのクライアントIDを取得できませんでした');
-  }
+  const { clientId } = await fetchDiscordConfig();
 
   // 2) SDK の読み込みとDiscordクライアントとの接続（ハンドシェイク）
   step('connect');
@@ -263,12 +292,17 @@ export async function discordActivityLogin(onStep?: (step: LoginStep) => void): 
 
   // 4) サーバー側で認可コードを検証し、所属サーバーを取得
   step('verify');
+  return verifyCode({ code });
+}
+
+/** 認可コードをサーバーで検証し、メンバーのセッションを保存する（Activity・ブラウザ共通） */
+async function verifyCode(body: { code: string; redirect_uri?: string }): Promise<MemberState> {
   const res = await fetchWithTimeout(
     '/api/member/discord-login',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify(body),
     },
     30000,
     'サーバーの確認に時間がかかりすぎました（時間切れ）'
@@ -281,6 +315,89 @@ export async function discordActivityLogin(onStep?: (step: LoginStep) => void): 
   const state: MemberState = { token: data.token, user: data.user, guilds: data.guilds };
   saveMemberState(state);
   return state;
+}
+
+// ---- ブラウザ（Activity外）からのDiscordログイン：通常のOAuth2（認可コード方式） ----
+
+const WEB_OAUTH_KEY = 'discord_web_oauth';
+const WEB_OAUTH_CALLBACK_PATH = '/login/discord-callback';
+
+async function fetchDiscordConfig(): Promise<{ clientId: string; redirectUri: string | null }> {
+  const res = await fetchWithTimeout('/api/member/discord-config', {}, 15000, 'ダッシュボードから設定を取得できませんでした（時間切れ）');
+  const config = await res.json().catch(() => ({}));
+  if (!res.ok || !config.client_id) {
+    throw new Error(config.error || 'DiscordのクライアントIDを取得できませんでした');
+  }
+  return { clientId: config.client_id, redirectUri: config.redirect_uri || null };
+}
+
+/** Discordの認可画面へ移動する（戻り先は /login/discord-callback） */
+export async function startDiscordWebLogin(): Promise<void> {
+  const { clientId, redirectUri: fixedRedirectUri } = await fetchDiscordConfig();
+  const redirectUri = fixedRedirectUri || `${window.location.origin}${WEB_OAUTH_CALLBACK_PATH}`;
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const state = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  // CSRF対策の state と、交換時に同じ値が必要な redirect_uri を覚えておく
+  const saved = JSON.stringify({ state, redirectUri });
+  try {
+    sessionStorage.setItem(WEB_OAUTH_KEY, saved);
+  } catch {
+    throw new Error('ブラウザのストレージが使えないため、ログインできません');
+  }
+
+  const url = new URL('https://discord.com/oauth2/authorize');
+  url.searchParams.set('client_id', clientId);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('scope', 'identify guilds');
+  url.searchParams.set('state', state);
+  window.location.assign(url.toString());
+}
+
+/** /login/discord-callback で、Discordから戻ってきた認可コードを検証する */
+export async function finishDiscordWebLogin(params: URLSearchParams): Promise<MemberState> {
+  let saved: { state?: string; redirectUri?: string } | null = null;
+  try {
+    saved = JSON.parse(sessionStorage.getItem(WEB_OAUTH_KEY) || 'null');
+    sessionStorage.removeItem(WEB_OAUTH_KEY);
+  } catch {}
+
+  const error = params.get('error');
+  if (error) {
+    throw new Error(error === 'access_denied' ? 'Discordでの許可がキャンセルされました' : `Discordでの認可に失敗しました: ${error}`);
+  }
+  const code = params.get('code');
+  const state = params.get('state');
+  if (!code) throw new Error('Discordから認可コードが返ってきませんでした');
+  if (!saved?.state || !saved.redirectUri || saved.state !== state) {
+    throw new Error('ログインの確認に失敗しました（別のタブで開いたか、時間が経ちすぎています）。もう一度お試しください');
+  }
+  return verifyCode({ code, redirect_uri: saved.redirectUri });
+}
+
+/** Discordアクティビティとして開かれているか（起動パラメータ frame_id があるか） */
+export function isDiscordActivity(): boolean {
+  return restoreActivityParams();
+}
+
+// ログアウト直後は、Activity内でも自動でDiscordログインを始めない（専用ログインを選べるようにする）
+const LOGGED_OUT_KEY = 'member_logged_out';
+
+export function markLoggedOut() {
+  try {
+    sessionStorage.setItem(LOGGED_OUT_KEY, '1');
+  } catch {}
+}
+
+export function consumeLoggedOut(): boolean {
+  try {
+    const value = sessionStorage.getItem(LOGGED_OUT_KEY);
+    sessionStorage.removeItem(LOGGED_OUT_KEY);
+    return value === '1';
+  } catch {
+    return false;
+  }
 }
 
 export function guildIconUrl(guild: MemberGuild, size = 128): string | null {

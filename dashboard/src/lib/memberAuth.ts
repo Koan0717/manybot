@@ -13,7 +13,9 @@ export interface MemberSession {
 }
 
 const SNOWFLAKE = /^\d{15,25}$/;
-const MEMBER_SESSION_TTL = '12h';
+// ログアウトするまでログインしたままにする。使っている間は /api/member/session で期限を延ばし続けるので、
+// 切れるのは「この期間まったく開かなかった」ときだけ
+const MEMBER_SESSION_TTL = '30d';
 
 function jwtSecret() {
   return new TextEncoder().encode(process.env.JWT_SECRET || 'fallback_secret_key_change_me_later');
