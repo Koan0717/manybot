@@ -12,7 +12,11 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET() {
   try {
-    return NextResponse.json({ client_id: await getClientId() });
+    return NextResponse.json({
+      client_id: await getClientId(),
+      // 設定してあれば、ブラウザからのログインはこのURLに戻す（未設定なら今のオリジン + /login/discord-callback）
+      redirect_uri: process.env.DISCORD_REDIRECT_URI || null,
+    });
   } catch (error) {
     console.error('discord-config failed:', error);
     return NextResponse.json(

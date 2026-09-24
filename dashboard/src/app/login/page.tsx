@@ -1,10 +1,17 @@
 'use client';
 
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useRef, useState, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { KeyRound, Loader2, MessageCircle } from 'lucide-react';
-import { LOGIN_STEP_LABEL, LoginStep, discordActivityLogin, restoreActivityParams } from '@/lib/memberClient';
+import {
+  LOGIN_STEP_LABEL,
+  LoginStep,
+  consumeLoggedOut,
+  discordActivityLogin,
+  isDiscordActivity,
+  startDiscordWebLogin,
+} from '@/lib/memberClient';
 
 function LoginForm() {
   const router = useRouter();
@@ -20,24 +27,41 @@ function LoginForm() {
   const [discordLoading, setDiscordLoading] = useState(false);
   const [loginStep, setLoginStep] = useState<LoginStep | null>(null);
 
-  // Activity の起動パラメータ(frame_id 等)がURLに残っているうちに退避する（Discord SDK がURLから読むため）
-  useEffect(() => {
-    restoreActivityParams();
-  }, []);
+  const autoStarted = useRef(false);
 
   const handleDiscordLogin = async () => {
     setError('');
     setDiscordLoading(true);
     setLoginStep(null);
     try {
-      await discordActivityLogin(setLoginStep);
-      router.push('/member');
+      if (isDiscordActivity()) {
+        // Discordアクティビティ内: SDK で開いた本人に許可してもらい、そのままログイン
+        await discordActivityLogin(setLoginStep);
+        router.push('/member');
+      } else {
+        // ブラウザ: Discordの認可画面へ移動し、/login/discord-callback に戻ってくる
+        setLoginStep('authorize');
+        await startDiscordWebLogin();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Discordログインに失敗しました');
       setDiscordLoading(false);
       setLoginStep(null);
     }
   };
+
+  // Activity の起動パラメータ(frame_id 等)がURLに残っているうちに退避し（Discord SDK がURLから読むため）、
+  // Activity から開かれた場合は、開いた人にすぐDiscordの許可を求めてログインする。
+  // ログアウト直後だけは自動で始めない（専用ログインも選べるように）。
+  useEffect(() => {
+    if (autoStarted.current) return;
+    autoStarted.current = true;
+    const loggedOut = consumeLoggedOut();
+    if (isDiscordActivity() && !loggedOut) {
+      handleDiscordLogin();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -126,7 +150,7 @@ function LoginForm() {
             </button>
 
             <p className="text-center text-zinc-600 text-xs pt-2 leading-relaxed">
-              Discordでログイン: サーバーのメンバー向け（プロフィール・送金）<br />
+              Discordでログイン: サーバーのメンバー向け（プロフィール・送金）。ブラウザ・アクティビティのどちらからでも使えます<br />
               専用ログイン: 管理者・運営向け（ID／パスワード）
             </p>
           </div>

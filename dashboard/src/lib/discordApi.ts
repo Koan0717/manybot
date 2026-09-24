@@ -93,7 +93,15 @@ export async function getClientId(): Promise<string> {
   return app.id;
 }
 
-export async function exchangeCodeForToken(code: string): Promise<string> {
+/** ブラウザ（Activity外）からのDiscordログインで、Discordから戻ってくるページ */
+export const WEB_OAUTH_CALLBACK_PATH = '/login/discord-callback';
+
+/**
+ * 認可コードをアクセストークンに交換する。
+ * redirectUri は、ブラウザでの通常のOAuth2（認可時に redirect_uri を指定したもの）のときだけ渡す。
+ * Activity の SDK で得たコードは redirect_uri なしで交換する。
+ */
+export async function exchangeCodeForToken(code: string, redirectUri?: string): Promise<string> {
   const clientSecret = process.env.DISCORD_CLIENT_SECRET;
   if (!clientSecret) {
     throw new DiscordApiError(500, 'DISCORD_CLIENT_SECRET が未設定です');
@@ -113,6 +121,7 @@ export async function exchangeCodeForToken(code: string): Promise<string> {
       client_secret: clientSecret,
       grant_type: 'authorization_code',
       code,
+      ...(redirectUri ? { redirect_uri: redirectUri } : {}),
     }),
     cache: 'no-store',
   });

@@ -109,12 +109,19 @@ npm start
 | Discordでログイン | サーバーのメンバー | Discordで認証 → サーバーを選択 → プロフィール（通貨・レベル）／送金／役職 |
 | 専用ログイン | 管理者・運営 | 従来どおりの ID / パスワード（管理ダッシュボード） |
 
-「Discordでログイン」は **Discordアクティビティの中でのみ** 動作します。Discord Developer Portal で次を設定してください。
+「Discordでログイン」は **Discordアクティビティの中** と **通常のブラウザ** のどちらからでも使えます。
+
+- **アクティビティから開いた場合**: ログイン画面を開くと自動で Discord の許可画面が表示され、開いた本人のDiscordアカウントでログインします（ログアウト直後は自動では始まらないので、専用ログインも選べます）
+- **ブラウザから開いた場合**: ボタンを押すと Discord の認可ページへ移動し、許可すると `/login/discord-callback` に戻ってログインが完了します
+
+Discord Developer Portal で次を設定してください。
 
 1. アプリケーションの **Activities** を有効化する
 2. **Activities → URL Mappings** で `/` をダッシュボードの公開ホストに向ける
 3. **OAuth2** で Client Secret を取得し、`DISCORD_CLIENT_SECRET` に設定する（設定後は再デプロイ／再起動が必要）
-4. **OAuth2 → Redirects** に `https://127.0.0.1` を1つ追加して保存する（ダミーで構いません。実際のリダイレクトは SDK が処理しますが、未登録だと認可で `Missing "redirect_uri"` になります）
+4. **OAuth2 → Redirects** に `https://<ダッシュボードの公開ホスト>/login/discord-callback` を追加して保存する（ブラウザからのログインの戻り先。アクティビティ内の認可にも Redirect が1つ以上登録されている必要があります）
+
+ダッシュボードがプロキシの裏にあるなどで、ブラウザから見えるURLとずれる場合は、`DISCORD_REDIRECT_URI` に上で登録したURLをそのまま設定してください（未設定なら、開いているページのオリジン + `/login/discord-callback` を使います）。
 
 クライアントID は `DISCORD_BOT_TOKEN` から自動取得されるので、この機能のために `NEXT_PUBLIC_DISCORD_CLIENT_ID` を追加する必要はありません（設定してあればそちらを優先します）。
 

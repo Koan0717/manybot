@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, LogOut, Server } from 'lucide-react';
-import { MemberState, clearMemberState, guildIconUrl, loadMemberState } from '@/lib/memberClient';
+import { MemberState, clearMemberState, guildIconUrl, loadMemberState, markLoggedOut } from '@/lib/memberClient';
 
 export default function MemberHome() {
   const router = useRouter();
@@ -20,6 +20,7 @@ export default function MemberHome() {
 
   const logout = () => {
     clearMemberState();
+    markLoggedOut();
     router.replace(`/login${window.location.search}`);
   };
 
