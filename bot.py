@@ -271,6 +271,7 @@ class EconomyBot(commands.Bot):
             "cogs.gacha",
             "cogs.othello",
             "cogs.invite_link",
+            "cogs.role_history",
         ]
         for cog in cogs_to_load:
             try:

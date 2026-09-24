@@ -12,7 +12,10 @@ export interface ShopInfo {
   enabled: true;
   currency_name: string;
   balance: number;
+  /** 仮メンのときだけ入る（表示用） */
   evaluation_period: { end_text: string; end_unix: number } | null;
+  /** 評価期間中か（評価期間延長の商品を買えるかの判定用） */
+  has_evaluation_period: boolean;
   items: {
     item_id: number;
     name: string;
@@ -102,7 +105,7 @@ export default function Shop({
           {fmt(balance)} <span className="text-base font-normal text-zinc-400">{cur}</span>
         </div>
         {info.evaluation_period && (
-          <div className="text-xs text-zinc-500 mt-2">評価期間の終了予定: {info.evaluation_period.end_text}</div>
+          <div className="text-xs text-zinc-500 mt-2">評価期間の終了予定日（延長なしの場合）: {info.evaluation_period.end_text}</div>
         )}
       </div>
 
@@ -124,7 +127,7 @@ export default function Shop({
           // Bot と同じ順で買えない理由を出す（対象ロール → 評価期間中か → 残高）
           const reason = !item.is_target
             ? '対象のロールを持っていないため購入できません'
-            : item.is_eval_extend && !info.evaluation_period
+            : item.is_eval_extend && !info.has_evaluation_period
               ? '評価期間中ではないため購入できません'
               : balance < item.price
                 ? '所持金が足りません'

@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { AlertCircle, MonitorSmartphone, Save } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
+import type { RoleOption } from '@/components/RoleSelect';
 
 // lib/casino/settings.ts の WEB_GAMES と同じ並び・同じキー
 const GAMES = [
@@ -25,9 +26,17 @@ const allOff = (): Enabled => Object.fromEntries(GAMES.map((g) => [g.key, false]
 type RoleAccess = Record<'downgrade' | 'violator', Record<'casino' | 'shop', boolean>>;
 const allAllowed = (): RoleAccess => ({ downgrade: { casino: true, shop: true }, violator: { casino: true, shop: true } });
 const ROLE_GROUPS = [
-  { key: 'downgrade', label: '評価落ち', desc: '「基本・評価設定」の評価落ちロール（未設定なら「評価落ち」という名前のロール）を持つメンバー' },
+  { key: 'downgrade', label: '評価落ち', desc: '「基本・評価設定」の評価落ちロールを持つメンバー' },
   { key: 'violator', label: '違反者', desc: '「基本・評価設定」の違反者ロールを持つメンバー' },
 ] as const;
+// lib/memberRoles.ts の ROLE_SETTING_KEYS と同じ
+const BASE_ROLE_SETTINGS = [
+  { key: 'MAIN_MEMBER_ROLE_IDS', label: '本メンバーロール', use: '昇格のお祝い（黄色の枠）' },
+  { key: 'SUB_MEMBER_ROLE_IDS', label: '準メンバーロール', use: '昇格のお祝い（黄色の枠）' },
+  { key: 'DOWNGRADE_ROLE_ID', label: '評価落ちロール', use: '励まし（赤の枠）・利用制限' },
+  { key: 'GAMBLE_VIOLATOR_ROLE_IDS', label: '違反者ロール', use: '反省のメッセージ（赤の枠）・利用制限' },
+] as const;
+
 const FEATURES = [
   { key: 'casino', label: '🎰 ギャンブル（カジノ）' },
   { key: 'shop', label: '🛒 ショップ' },
@@ -40,17 +49,26 @@ export default function WebActivitySettingsPage() {
   const [enabled, setEnabled] = useState<Enabled>(allOff);
   const [shopEnabled, setShopEnabled] = useState(false);
   const [roleAccess, setRoleAccess] = useState<RoleAccess>(allAllowed);
+  // 「基本・評価設定」のロール（役職タブ・利用制限の判定に使う。ここでは表示だけ）
+  const [baseRoles, setBaseRoles] = useState<Record<string, string[]>>({});
+  const [roles, setRoles] = useState<RoleOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    fetch(`/api/guilds/${guildId}/roles`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setRoles(Array.isArray(data) ? data.filter((r: any) => r.id !== guildId) : []))
+      .catch(() => setRoles([]));
     fetch(`/api/guilds/${guildId}/settings`)
       .then((res) => (res.ok ? res.json() : {}))
       .then((data: any) => {
         const saved = data?.WEB_GAMES_ENABLED && typeof data.WEB_GAMES_ENABLED === 'object' ? data.WEB_GAMES_ENABLED : {};
         setEnabled(Object.fromEntries(GAMES.map((g) => [g.key, saved[g.key] === true])) as Enabled);
         setShopEnabled(data?.WEB_SHOP_ENABLED === true);
+        const toIds = (v: unknown) => (Array.isArray(v) ? v.map(String) : v ? [String(v)] : []);
+        setBaseRoles(Object.fromEntries(BASE_ROLE_SETTINGS.map((b) => [b.key, toIds(data?.[b.key])])));
         const ra = data?.WEB_ROLE_ACCESS && typeof data.WEB_ROLE_ACCESS === 'object' ? data.WEB_ROLE_ACCESS : {};
         setRoleAccess({
           downgrade: { casino: ra.downgrade?.casino !== false, shop: ra.downgrade?.shop !== false },
@@ -68,7 +86,8 @@ export default function WebActivitySettingsPage() {
       const res = await fetch(`/api/guilds/${guildId}/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ WEB_GAMES_ENABLED: enabled, WEB_SHOP_ENABLED: shopEnabled, WEB_ROLE_ACCESS: roleAccess }),
+        body: JSON.stringify({ WEB_GAMES_ENABLED: enabled, WEB_SHOP_ENABLED: shopEnabled, WEB_ROLE_ACCESS: roleAccess,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) {
@@ -102,7 +121,7 @@ export default function WebActivitySettingsPage() {
             Webアクティビティ設定
           </h1>
           <p className="text-gray-400 mt-2 text-sm">
-            Discordアクティビティ・Webのメンバー画面で使える機能を選びます。ONにしたものだけがメンバー画面に表示されます。
+            Discordアクティビティ・Webのメンバー画面で使える機能と表示を設定します。
           </p>
         </div>
         <button
@@ -217,6 +236,37 @@ export default function WebActivitySettingsPage() {
             </div>
           </div>
         ))}
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="bg-gray-800/50 border border-cyan-500/20 p-6 rounded-xl space-y-4"
+      >
+        <div className="border-b border-cyan-500/20 pb-4">
+          <h2 className="text-xl font-semibold text-cyan-300">判定に使うロール</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            メンバー画面の「役職」タブの表示と、上の評価落ち・違反者の利用制限は、
+            <Link href={`/dashboard/${guildId}`} className="text-cyan-400 hover:underline mx-1">基本・評価設定</Link>
+            で設定したロールで判定します。未設定のものは、当てはまるメンバーがいない扱いになります。
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {BASE_ROLE_SETTINGS.map((b) => {
+            const ids = baseRoles[b.key] ?? [];
+            const names = ids.map((id) => roles.find((r) => r.id === id)?.name ?? `不明なロール (${id})`);
+            return (
+              <div key={b.key} className="bg-gray-900/60 border border-gray-700/60 rounded-lg px-4 py-3">
+                <div className="text-sm text-gray-200 font-medium">{b.label}</div>
+                <div className={`text-sm mt-0.5 ${names.length ? 'text-cyan-300' : 'text-red-400 font-semibold'}`}>
+                  {names.length ? names.join('、') : '未設定'}
+                </div>
+                <div className="text-[11px] text-gray-500 mt-1">{b.use}</div>
+              </div>
+            );
+          })}
+        </div>
       </motion.div>
 
       <div className="text-sm text-gray-400 bg-gray-800/30 border border-gray-700/60 rounded-xl p-4 leading-relaxed">

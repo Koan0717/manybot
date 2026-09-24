@@ -15,8 +15,116 @@ interface Profile {
   currency_name: string;
   allow_bot_transfer: boolean;
   stats: { balance: number; event_points: number; tc: LevelStat; vc: LevelStat };
-  roles: { id: string; name: string; color: string | null }[];
+  roles: MemberRole[];
+  role_settings?: { new: RoleTag[]; sub: RoleTag[]; main: RoleTag[] };
 }
+type RoleKind = 'new' | 'sub' | 'main' | 'downgrade' | 'violator';
+interface MemberRole {
+  id: string;
+  name: string;
+  color: string | null;
+  /** 付与日（分からないときは null） */
+  granted_at: string | null;
+  kind: RoleKind | null;
+  /** ショップで購入して付いたロールなら、その商品名 */
+  shop_item: string | null;
+}
+
+/** YY/MM/DD（日本時間） */
+const fmtShortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', year: '2-digit', month: '2-digit', day: '2-digit' });
+
+interface RoleTag { id: string; name: string; color: string | null }
+type RoleSettings = { new: RoleTag[]; sub: RoleTag[]; main: RoleTag[] };
+
+/** Discord のロールメンションのような「@ロール名」 */
+function RoleMention({ role }: { role: RoleTag }) {
+  const color = role.color ?? '#a1a1aa';
+  return (
+    <span
+      className="inline-block rounded px-1.5 py-0.5 mx-0.5 font-semibold whitespace-nowrap align-baseline"
+      style={{ color, backgroundColor: `${color}26` }}
+    >
+      @{role.name}
+    </span>
+  );
+}
+
+/** 「@研修生」。基本・評価設定で未設定なら「未設定」 */
+function RoleGroup({ tags }: { tags: RoleTag[] }) {
+  if (!tags.length) return <span>未設定</span>;
+  return (
+    <span>
+      {tags.map((t) => (
+        <RoleMention key={t.id} role={t} />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * 持っているロールを1枚ずつ枠で出す。
+ * 準メン・本メン＝黄色（お祝い）／評価落ち＝赤（励まし）／違反者＝赤（反省）／
+ * ショップで購入＝オレンジ／それ以外＝青
+ */
+function RoleCard({ role: r, settings }: { role: MemberRole; settings: RoleSettings }) {
+  const date = r.granted_at ? fmtShortDate(r.granted_at) : '付与日不明';
+  const me = <RoleMention role={r} />;
+  const frame = (border: string, bg: string, sub: React.ReactNode, subColor: string, title: React.ReactNode, titleColor: string, body?: React.ReactNode) => (
+    <div className={`border-2 ${border} ${bg} rounded-2xl p-4`}>
+      <div className={`text-xs ${subColor} flex flex-wrap items-center gap-x-2 gap-y-1`}>
+        <span>{date}</span>
+        {sub}
+      </div>
+      <div className={`font-bold mt-1.5 leading-relaxed ${titleColor}`}>{title}</div>
+      {body && <p className="text-sm mt-1.5 leading-relaxed opacity-90">{body}</p>}
+    </div>
+  );
+
+  if (r.kind === 'main' || r.kind === 'sub') {
+    const main = r.kind === 'main';
+    return frame(
+      'border-amber-400/90', 'bg-amber-950/30 text-amber-100',
+      <span>
+        <RoleGroup tags={main ? settings.sub : settings.new} />
+        {' → '}
+        <RoleGroup tags={[r]} />
+      </span>,
+      'text-amber-300/90',
+      <>🍾 {me} に昇格！おめでとう🍾‼️</>, 'text-amber-200',
+      main ? (
+        <>ついに {me} の仲間入りです🎉 これまでの頑張りが実を結びました。これからもよろしくお願いします！</>
+      ) : (
+        <>
+          {settings.new.length ? <><RoleGroup tags={settings.new} /> からの</> : ''}昇格、本当におめでとうございます🎉
+          {settings.main.length ? <> この調子で <RoleGroup tags={settings.main} /> を目指していきましょう！</> : ' この調子で頑張っていきましょう！'}
+        </>
+      )
+    );
+  }
+  if (r.kind === 'downgrade') {
+    return frame(
+      'border-red-600/80', 'bg-red-950/30 text-red-100', null, 'text-red-300/80',
+      <>{me} のロールが付与されました…</>, 'text-red-200',
+      <>でも、ここで終わりじゃありません。次がある！💪<br />今回の経験は必ず次につながります。焦らず、またここから一緒に頑張っていきましょう！</>
+    );
+  }
+  if (r.kind === 'violator') {
+    return frame(
+      'border-red-600/80', 'bg-red-950/30 text-red-100', null, 'text-red-300/80',
+      <>{me} のロールが付与されました</>, 'text-red-200',
+      <>ルール違反があったため、このロールが付与されています。ちゃんと反省してね🙏<br />サーバーのルールをもう一度確認して、次から気をつけましょう。</>
+    );
+  }
+  if (r.shop_item) {
+    return frame(
+      'border-orange-500/80', 'bg-orange-950/30 text-orange-100', null, 'text-orange-300/80',
+      <>🛒 ショップで「{r.shop_item}」を購入したため {me} のロールを付与しました！</>, 'text-orange-200'
+    );
+  }
+  return frame('border-sky-500/70', 'bg-sky-950/30 text-sky-100', null, 'text-sky-300/80', <>{me} のロールが付与されました！</>, 'text-sky-200');
+}
+
 interface TransferRecord {
   id: string;
   direction: 'sent' | 'received';
@@ -490,7 +598,8 @@ export default function MemberGuildPage() {
             onBought={(balance, evaluationPeriod) => {
               setProfile((p) => (p ? { ...p, stats: { ...p.stats, balance } } : p));
               setCasino((c) => (c ? { ...c, status: { ...c.status, balance } } : c));
-              if (evaluationPeriod) setShop((sh) => (sh ? { ...sh, evaluation_period: evaluationPeriod } : sh));
+              // 延長したら表示中の終了予定日も更新する（仮メン以外には元々表示していない）
+              if (evaluationPeriod) setShop((sh) => (sh?.evaluation_period ? { ...sh, evaluation_period: evaluationPeriod } : sh));
             }}
           />
         ) : tab === 'casino' && casino ? (
@@ -515,22 +624,15 @@ export default function MemberGuildPage() {
             }}
           />
         ) : (
-          <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
-            <div className="text-sm text-zinc-500 mb-3">このサーバーでの役職（{profile.roles.length}）</div>
+          <div className="space-y-3">
+            <div className="text-sm text-zinc-500">このサーバーでの役職（{profile.roles.length}）</div>
             {profile.roles.length === 0 ? (
-              <p className="text-sm text-zinc-500">役職はありません</p>
+              <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 text-sm text-zinc-500">役職はありません</div>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {profile.roles.map((r) => (
-                  <span
-                    key={r.id}
-                    className="inline-flex items-center gap-2 bg-zinc-800/70 border border-zinc-700/60 rounded-full px-3 py-1.5 text-sm"
-                  >
-                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: r.color ?? '#71717a' }} />
-                    {r.name}
-                  </span>
-                ))}
-              </div>
+              // 新しく付いた順（付与日不明は最後）
+              [...profile.roles]
+                .sort((a, b) => (b.granted_at ?? '').localeCompare(a.granted_at ?? ''))
+                .map((r) => <RoleCard key={r.id} role={r} settings={profile.role_settings ?? { new: [], sub: [], main: [] }} />)
             )}
           </div>
         )}

@@ -3,6 +3,7 @@ import { getPool } from '@/lib/db';
 import { DiscordGuildSummary, DiscordRole, botRequest, memberAvatarUrl, memberDisplayName } from '@/lib/discordApi';
 import { requireGuildMember } from '@/lib/memberAuth';
 import { isBotTransferAllowed } from '@/lib/memberSettings';
+import { getRoleGrantDates, getShopRoleSources, loadRoleKinds, roleKind } from '@/lib/memberRoles';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,13 +45,35 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     const vcLevel = Number(row.vc_level ?? 1);
 
     const memberRoleIds = new Set(member.roles);
-    const memberRoles = roles
-      .filter((r) => memberRoleIds.has(r.id))
+    const held = roles.filter((r) => memberRoleIds.has(r.id));
+    // 付与日・種類（仮メン・準メン・本メン・評価落ち）。取れなくてもプロフィール自体は返す
+    const [kinds, dates, shopRoles] = await Promise.all([
+      loadRoleKinds(pool, guildId).catch((e) => {
+        console.error('loadRoleKinds failed:', e);
+        return null;
+      }),
+      getRoleGrantDates(pool, guildId, session.discord_id, held.map((r) => r.id)).catch((e) => {
+        console.error('getRoleGrantDates failed:', e);
+        return new Map<string, Date>();
+      }),
+      getShopRoleSources(pool, guildId, session.discord_id).catch((e) => {
+        console.error('getShopRoleSources failed:', e);
+        return new Map<string, { item_name: string; purchased_at: Date | null }>();
+      }),
+    ]);
+    const colorOf = (r: DiscordRole) => (r.color ? `#${r.color.toString(16).padStart(6, '0')}` : null);
+    const tagsOf = (ids: Set<string> | undefined) =>
+      roles.filter((r) => ids?.has(r.id)).map((r) => ({ id: r.id, name: r.name, color: colorOf(r) }));
+    const memberRoles = held
       .sort((a, b) => b.position - a.position)
       .map((r) => ({
         id: r.id,
         name: r.name,
         color: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : null,
+        granted_at: (dates.get(r.id) ?? shopRoles.get(r.id)?.purchased_at)?.toISOString() ?? null,
+        kind: kinds ? roleKind(kinds, r.id) : null,
+        // ショップで購入して付いたロールなら、その商品名
+        shop_item: shopRoles.get(r.id)?.item_name ?? null,
       }));
 
     return NextResponse.json({
@@ -70,6 +93,8 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
         vc: { level: vcLevel, xp: Number(row.vc_xp ?? 0), next_xp: nextLevelXp(vcLevel) },
       },
       roles: memberRoles,
+      // 昇格の表示（「@仮メンのロール → @準メンのロール」）に使う、基本・評価設定のロール
+      role_settings: { new: tagsOf(kinds?.newIds), sub: tagsOf(kinds?.subIds), main: tagsOf(kinds?.mainIds) },
     });
   } catch (error) {
     console.error('member profile error:', error);
