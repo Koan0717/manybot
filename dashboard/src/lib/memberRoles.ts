@@ -6,18 +6,20 @@ import { idsFrom } from '@/lib/webAccess';
  * メンバー画面の「役職」タブ・ショップで使う、ロールの種類（仮メン・準メン・本メン・評価落ち）と付与日。
  */
 
-export type RoleKind = 'new' | 'sub' | 'main' | 'downgrade';
+export type RoleKind = 'new' | 'sub' | 'main' | 'downgrade' | 'violator';
 
 /** 「Webアクティビティ設定」で選ぶ準メン・本メンのロール（未設定なら本・準メンバーロールから名前で判断） */
 export const WEB_SUB_MEMBER_KEY = 'WEB_SUB_MEMBER_ROLE_IDS';
 export const WEB_MAIN_MEMBER_KEY = 'WEB_MAIN_MEMBER_ROLE_IDS';
 const DOWNGRADE_ROLE_NAME = '評価落ち'; // config.EVALUATION_FAILED_ROLE_NAME
+const VIOLATOR_ROLE_NAME = 'ルール違反者'; // config.VIOLATOR_ROLE_NAME
 
 export interface RoleKinds {
   newIds: Set<string>;
   subIds: Set<string>;
   mainIds: Set<string>;
   downgradeIds: Set<string>;
+  violatorIds: Set<string>;
 }
 
 export async function loadRoleKinds(pool: Pool, guildId: string, roles: DiscordRole[]): Promise<RoleKinds> {
@@ -25,7 +27,8 @@ export async function loadRoleKinds(pool: Pool, guildId: string, roles: DiscordR
   try {
     const res = await pool.query(
       `SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN
-         ('NEW_MEMBER_ROLE_IDS', 'NEW_MEMBER_ROLE_ID', 'MAIN_SUB_MEMBER_ROLE_IDS', 'DOWNGRADE_ROLE_ID', 'EVALUATION_FAILED_ROLE_ID', $2, $3)`,
+         ('NEW_MEMBER_ROLE_IDS', 'NEW_MEMBER_ROLE_ID', 'MAIN_SUB_MEMBER_ROLE_IDS', 'DOWNGRADE_ROLE_ID', 'EVALUATION_FAILED_ROLE_ID',
+          'GAMBLE_VIOLATOR_ROLE_IDS', 'GAMBLE_VIOLATOR_ROLE_ID', 'VIOLATOR_ROLE_ID', $2, $3)`,
       [guildId, WEB_SUB_MEMBER_KEY, WEB_MAIN_MEMBER_KEY]
     );
     for (const row of res.rows) s[row.setting_key] = row.setting_value;
@@ -53,11 +56,18 @@ export async function loadRoleKinds(pool: Pool, guildId: string, roles: DiscordR
     ...roles.filter((r) => r.name === DOWNGRADE_ROLE_NAME).map((r) => r.id),
   ]);
 
-  return { newIds, subIds: new Set(subIds), mainIds: new Set(mainIds), downgradeIds };
+  // 違反者: ギャンブルの違反者ロール（新旧）・ルール違反者ロール（logging_cog）・「ルール違反者」という名前のロール
+  const violatorIds = new Set([
+    ...exists([...idsFrom(s.GAMBLE_VIOLATOR_ROLE_IDS), ...idsFrom(s.GAMBLE_VIOLATOR_ROLE_ID), ...idsFrom(s.VIOLATOR_ROLE_ID)]),
+    ...roles.filter((r) => r.name === VIOLATOR_ROLE_NAME).map((r) => r.id),
+  ]);
+
+  return { newIds, subIds: new Set(subIds), mainIds: new Set(mainIds), downgradeIds, violatorIds };
 }
 
 export function roleKind(kinds: RoleKinds, roleId: string): RoleKind | null {
   if (kinds.downgradeIds.has(roleId)) return 'downgrade';
+  if (kinds.violatorIds.has(roleId)) return 'violator';
   if (kinds.mainIds.has(roleId)) return 'main';
   if (kinds.subIds.has(roleId)) return 'sub';
   if (kinds.newIds.has(roleId)) return 'new';
@@ -173,4 +183,35 @@ export async function getRoleGrantDates(pool: Pool, guildId: string, userId: str
     dates = await load();
   }
   return dates;
+}
+
+/**
+ * ショップで購入して付いたロール（有効期限内・剥奪前のもの）と、その商品名・購入日時。
+ * Bot の add_user_item は guild_id を入れないので、商品（shop_items）のサーバーで絞り込む。
+ */
+export async function getShopRoleSources(pool: Pool, guildId: string, userId: string): Promise<Map<string, { item_name: string; purchased_at: Date | null }>> {
+  const result = new Map<string, { item_name: string; purchased_at: Date | null }>();
+  try {
+    const res = await pool.query(
+      `SELECT si.name, si.reward_role_ids, ui.purchased_at
+         FROM user_items ui JOIN shop_items si ON si.item_id = ui.item_id
+        WHERE si.guild_id = $1 AND ui.user_id = $2
+          AND COALESCE(ui.role_removed, FALSE) = FALSE
+          AND (ui.expire_at IS NULL OR ui.expire_at > (NOW() AT TIME ZONE 'Asia/Tokyo'))
+        ORDER BY ui.purchased_at DESC NULLS LAST, ui.id DESC`,
+      [guildId, userId]
+    );
+    for (const row of res.rows) {
+      for (const roleId of idsFrom(row.reward_role_ids)) {
+        // 新しい購入が先に来るので、最初のものを使う
+        if (!result.has(roleId)) {
+          result.set(roleId, { item_name: String(row.name ?? ''), purchased_at: row.purchased_at ? new Date(row.purchased_at) : null });
+        }
+      }
+    }
+  } catch (e: any) {
+    // ショップ未使用（表や列が無い）なら空
+    if (e?.code !== '42P01' && e?.code !== '42703') throw e;
+  }
+  return result;
 }

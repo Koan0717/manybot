@@ -3,7 +3,7 @@ import { getPool } from '@/lib/db';
 import { DiscordGuildSummary, DiscordRole, botRequest, memberAvatarUrl, memberDisplayName } from '@/lib/discordApi';
 import { requireGuildMember } from '@/lib/memberAuth';
 import { isBotTransferAllowed } from '@/lib/memberSettings';
-import { getRoleGrantDates, loadRoleKinds, roleKind } from '@/lib/memberRoles';
+import { getRoleGrantDates, getShopRoleSources, loadRoleKinds, roleKind } from '@/lib/memberRoles';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +47,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     const memberRoleIds = new Set(member.roles);
     const held = roles.filter((r) => memberRoleIds.has(r.id));
     // 付与日・種類（仮メン・準メン・本メン・評価落ち）。取れなくてもプロフィール自体は返す
-    const [kinds, dates] = await Promise.all([
+    const [kinds, dates, shopRoles] = await Promise.all([
       loadRoleKinds(pool, guildId, roles).catch((e) => {
         console.error('loadRoleKinds failed:', e);
         return null;
@@ -56,6 +56,10 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
         console.error('getRoleGrantDates failed:', e);
         return new Map<string, Date>();
       }),
+      getShopRoleSources(pool, guildId, session.discord_id).catch((e) => {
+        console.error('getShopRoleSources failed:', e);
+        return new Map<string, { item_name: string; purchased_at: Date | null }>();
+      }),
     ]);
     const memberRoles = held
       .sort((a, b) => b.position - a.position)
@@ -63,8 +67,10 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
         id: r.id,
         name: r.name,
         color: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : null,
-        granted_at: dates.get(r.id)?.toISOString() ?? null,
+        granted_at: (dates.get(r.id) ?? shopRoles.get(r.id)?.purchased_at)?.toISOString() ?? null,
         kind: kinds ? roleKind(kinds, r.id) : null,
+        // ショップで購入して付いたロールなら、その商品名
+        shop_item: shopRoles.get(r.id)?.item_name ?? null,
       }));
 
     return NextResponse.json({

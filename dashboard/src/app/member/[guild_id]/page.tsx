@@ -17,7 +17,7 @@ interface Profile {
   stats: { balance: number; event_points: number; tc: LevelStat; vc: LevelStat };
   roles: MemberRole[];
 }
-type RoleKind = 'new' | 'sub' | 'main' | 'downgrade';
+type RoleKind = 'new' | 'sub' | 'main' | 'downgrade' | 'violator';
 interface MemberRole {
   id: string;
   name: string;
@@ -25,51 +25,63 @@ interface MemberRole {
   /** 付与日（分からないときは null） */
   granted_at: string | null;
   kind: RoleKind | null;
+  /** ショップで購入して付いたロールなら、その商品名 */
+  shop_item: string | null;
 }
 
 /** YY/MM/DD（日本時間） */
 const fmtShortDate = (iso: string) =>
   new Date(iso).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', year: '2-digit', month: '2-digit', day: '2-digit' });
 
-/** 昇格（準メン・本メン）はお祝い、評価落ちは励ましを、それぞれ黄色・赤の枠で出す */
-function RoleMilestones({ roles }: { roles: MemberRole[] }) {
-  const cards = roles
-    .filter((r) => r.kind === 'sub' || r.kind === 'main' || r.kind === 'downgrade')
-    .sort((a, b) => (b.granted_at ?? '').localeCompare(a.granted_at ?? ''));
-  if (!cards.length) return null;
-  return (
-    <div className="space-y-3">
-      {cards.map((r) => {
-        const date = r.granted_at ? `${fmtShortDate(r.granted_at)} ` : '';
-        if (r.kind === 'downgrade') {
-          return (
-            <div key={r.id} className="border-2 border-red-600/80 bg-red-950/30 rounded-2xl p-5">
-              <div className="text-xs text-red-300/80">{date}「{r.name}」</div>
-              <div className="text-lg font-bold text-red-200 mt-1">今回は残念な結果になってしまいました…</div>
-              <p className="text-sm text-red-100/90 mt-2 leading-relaxed">
-                でも、ここで終わりじゃありません。次がある！💪
-                <br />
-                今回の経験は必ず次につながります。焦らず、またここから一緒に頑張っていきましょう！
-              </p>
-            </div>
-          );
-        }
-        const from = r.kind === 'main' ? '準メン' : '仮メン';
-        const to = r.kind === 'main' ? '本メン' : '準メン';
-        return (
-          <div key={r.id} className="border-2 border-amber-400/90 bg-amber-950/30 rounded-2xl p-5">
-            <div className="text-xs text-amber-300/80">{date}{from} → {to}</div>
-            <div className="text-lg font-bold text-amber-200 mt-1">🍾 「{r.name}」に昇格！おめでとう🍾‼️</div>
-            <p className="text-sm text-amber-100/90 mt-2 leading-relaxed">
-              {r.kind === 'main'
-                ? 'ついに本メンバーの仲間入りです🎉 これまでの頑張りが実を結びました。これからもよろしくお願いします！'
-                : '仮メンからの昇格、本当におめでとうございます🎉 この調子で本メンを目指していきましょう！'}
-            </p>
-          </div>
-        );
-      })}
+/**
+ * 持っているロールを1枚ずつ枠で出す。
+ * 準メン・本メン＝黄色（お祝い）／評価落ち＝赤（励まし）／違反者＝赤（反省）／
+ * ショップで購入＝オレンジ／それ以外＝青
+ */
+function RoleCard({ role: r }: { role: MemberRole }) {
+  const date = r.granted_at ? fmtShortDate(r.granted_at) : '付与日不明';
+  const frame = (border: string, bg: string, sub: string, title: string, titleColor: string, body?: React.ReactNode) => (
+    <div className={`border-2 ${border} ${bg} rounded-2xl p-4`}>
+      <div className={`text-xs ${sub} flex items-center gap-1.5`}>
+        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: r.color ?? '#71717a' }} />
+        {date}
+      </div>
+      <div className={`font-bold mt-1 ${titleColor}`}>{title}</div>
+      {body && <p className="text-sm mt-1.5 leading-relaxed opacity-90">{body}</p>}
     </div>
   );
+
+  if (r.kind === 'main' || r.kind === 'sub') {
+    const main = r.kind === 'main';
+    return frame(
+      'border-amber-400/90', 'bg-amber-950/30 text-amber-100', 'text-amber-300/80',
+      `🍾 ${main ? '準メン → 本メン' : '仮メン → 準メン'}「${r.name}」に昇格！おめでとう🍾‼️`, 'text-amber-200',
+      main
+        ? 'ついに本メンバーの仲間入りです🎉 これまでの頑張りが実を結びました。これからもよろしくお願いします！'
+        : '仮メンからの昇格、本当におめでとうございます🎉 この調子で本メンを目指していきましょう！'
+    );
+  }
+  if (r.kind === 'downgrade') {
+    return frame(
+      'border-red-600/80', 'bg-red-950/30 text-red-100', 'text-red-300/80',
+      `「${r.name}」のロールが付与されました…`, 'text-red-200',
+      <>でも、ここで終わりじゃありません。次がある！💪<br />今回の経験は必ず次につながります。焦らず、またここから一緒に頑張っていきましょう！</>
+    );
+  }
+  if (r.kind === 'violator') {
+    return frame(
+      'border-red-600/80', 'bg-red-950/30 text-red-100', 'text-red-300/80',
+      `「${r.name}」のロールが付与されました`, 'text-red-200',
+      <>ルール違反があったため、このロールが付与されています。ちゃんと反省してね🙏<br />サーバーのルールをもう一度確認して、次から気をつけましょう。</>
+    );
+  }
+  if (r.shop_item) {
+    return frame(
+      'border-orange-500/80', 'bg-orange-950/30 text-orange-100', 'text-orange-300/80',
+      `🛒 ショップで「${r.shop_item}」を購入したため「${r.name}」のロールを付与しました！`, 'text-orange-200'
+    );
+  }
+  return frame('border-sky-500/70', 'bg-sky-950/30 text-sky-100', 'text-sky-300/80', `「${r.name}」のロールが付与されました！`, 'text-sky-200');
 }
 
 interface TransferRecord {
@@ -571,26 +583,16 @@ export default function MemberGuildPage() {
             }}
           />
         ) : (
-          <div className="space-y-4">
-            <RoleMilestones roles={profile.roles} />
-            <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5">
-              <div className="text-sm text-zinc-500 mb-3">このサーバーでの役職（{profile.roles.length}）</div>
-              {profile.roles.length === 0 ? (
-                <p className="text-sm text-zinc-500">役職はありません</p>
-              ) : (
-                <ul className="divide-y divide-zinc-800">
-                  {profile.roles.map((r) => (
-                    <li key={r.id} className="flex items-center gap-3 py-2.5">
-                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: r.color ?? '#71717a' }} />
-                      <span className="flex-1 min-w-0 truncate text-sm">{r.name}</span>
-                      <span className="text-xs text-zinc-500 whitespace-nowrap">
-                        {r.granted_at ? `${fmtShortDate(r.granted_at)} に付与` : '付与日不明'}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+          <div className="space-y-3">
+            <div className="text-sm text-zinc-500">このサーバーでの役職（{profile.roles.length}）</div>
+            {profile.roles.length === 0 ? (
+              <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 text-sm text-zinc-500">役職はありません</div>
+            ) : (
+              // 新しく付いた順（付与日不明は最後）
+              [...profile.roles]
+                .sort((a, b) => (b.granted_at ?? '').localeCompare(a.granted_at ?? ''))
+                .map((r) => <RoleCard key={r.id} role={r} />)
+            )}
           </div>
         )}
       </div>
