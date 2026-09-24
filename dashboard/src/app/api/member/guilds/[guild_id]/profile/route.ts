@@ -48,7 +48,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     const held = roles.filter((r) => memberRoleIds.has(r.id));
     // 付与日・種類（仮メン・準メン・本メン・評価落ち）。取れなくてもプロフィール自体は返す
     const [kinds, dates, shopRoles] = await Promise.all([
-      loadRoleKinds(pool, guildId, roles).catch((e) => {
+      loadRoleKinds(pool, guildId).catch((e) => {
         console.error('loadRoleKinds failed:', e);
         return null;
       }),

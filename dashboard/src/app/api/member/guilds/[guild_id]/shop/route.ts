@@ -32,7 +32,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     ]);
     const roles = await fetchRoleNames(guildId);
     // 評価期間の終了予定は仮メンにだけ見せる（購入できるかの判定は has_evaluation_period で別に行う）
-    const kinds = await loadRoleKinds(pool, guildId, Array.from(roles.values())).catch(() => null);
+    const kinds = await loadRoleKinds(pool, guildId).catch(() => null);
     const isNewMember = !!kinds && member.roles.some((r) => kinds.newIds.has(r));
     const roleInfo = (ids: string[]) =>
       ids

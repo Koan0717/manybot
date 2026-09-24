@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { DiscordRole, botRequest } from '@/lib/discordApi';
+import { botRequest } from '@/lib/discordApi';
 import { idsFrom } from '@/lib/webAccess';
 
 /**
@@ -8,11 +8,16 @@ import { idsFrom } from '@/lib/webAccess';
 
 export type RoleKind = 'new' | 'sub' | 'main' | 'downgrade' | 'violator';
 
-/** 「Webアクティビティ設定」で選ぶ準メン・本メンのロール（未設定なら本・準メンバーロールから名前で判断） */
-export const WEB_SUB_MEMBER_KEY = 'WEB_SUB_MEMBER_ROLE_IDS';
-export const WEB_MAIN_MEMBER_KEY = 'WEB_MAIN_MEMBER_ROLE_IDS';
-const DOWNGRADE_ROLE_NAME = '評価落ち'; // config.EVALUATION_FAILED_ROLE_NAME
-const VIOLATOR_ROLE_NAME = 'ルール違反者'; // config.VIOLATOR_ROLE_NAME
+/**
+ * 判定に使う「基本・評価設定」のロール。名前での推測はせず、未設定なら当てはまる人はいない扱い。
+ */
+export const ROLE_SETTING_KEYS = {
+  new: ['NEW_MEMBER_ROLE_IDS', 'NEW_MEMBER_ROLE_ID'], // 仮（新規）メンバーロール（旧設定の単一IDも）
+  main: ['MAIN_MEMBER_ROLE_IDS'], // 本メンバーロール
+  sub: ['SUB_MEMBER_ROLE_IDS'], // 準メンバーロール
+  downgrade: ['DOWNGRADE_ROLE_ID'], // 評価落ちロール
+  violator: ['GAMBLE_VIOLATOR_ROLE_IDS'], // 違反者ロール
+} as const;
 
 export interface RoleKinds {
   newIds: Set<string>;
@@ -22,47 +27,38 @@ export interface RoleKinds {
   violatorIds: Set<string>;
 }
 
-export async function loadRoleKinds(pool: Pool, guildId: string, roles: DiscordRole[]): Promise<RoleKinds> {
+/** 「基本・評価設定」のロールID（サーバーに存在しないものも含む。表示で「未設定」を判断するのに使う） */
+export async function loadRoleSettingIds(pool: Pool, guildId: string): Promise<Record<keyof typeof ROLE_SETTING_KEYS, string[]>> {
+  const keys = Object.values(ROLE_SETTING_KEYS).flat();
   const s: Record<string, unknown> = {};
   try {
-    const res = await pool.query(
-      `SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN
-         ('NEW_MEMBER_ROLE_IDS', 'NEW_MEMBER_ROLE_ID', 'MAIN_SUB_MEMBER_ROLE_IDS', 'DOWNGRADE_ROLE_ID', 'EVALUATION_FAILED_ROLE_ID',
-          'GAMBLE_VIOLATOR_ROLE_IDS', 'GAMBLE_VIOLATOR_ROLE_ID', 'VIOLATOR_ROLE_ID', $2, $3)`,
-      [guildId, WEB_SUB_MEMBER_KEY, WEB_MAIN_MEMBER_KEY]
-    );
+    const res = await pool.query('SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key = ANY($2)', [
+      guildId,
+      keys,
+    ]);
     for (const row of res.rows) s[row.setting_key] = row.setting_value;
   } catch (e: any) {
     if (e?.code !== '42P01') throw e;
   }
-  const byId = new Map(roles.map((r) => [r.id, r]));
-  const exists = (ids: string[]) => ids.filter((id) => byId.has(id));
+  const pick = (ks: readonly string[]) => Array.from(new Set(ks.flatMap((k) => idsFrom(s[k]))));
+  return {
+    new: pick(ROLE_SETTING_KEYS.new),
+    main: pick(ROLE_SETTING_KEYS.main),
+    sub: pick(ROLE_SETTING_KEYS.sub),
+    downgrade: pick(ROLE_SETTING_KEYS.downgrade),
+    violator: pick(ROLE_SETTING_KEYS.violator),
+  };
+}
 
-  // 仮メン: Bot の get_new_member_role_ids と同じ（新しい複数設定＋旧設定）
-  const newIds = new Set(exists([...idsFrom(s.NEW_MEMBER_ROLE_IDS), ...idsFrom(s.NEW_MEMBER_ROLE_ID)]));
-
-  // 準メン・本メン: 選んであればそれを使い、無ければ「本・準メンバーロール」のうち名前に「準」を含むものを準メンとする
-  let subIds = exists(idsFrom(s[WEB_SUB_MEMBER_KEY]));
-  let mainIds = exists(idsFrom(s[WEB_MAIN_MEMBER_KEY]));
-  if (!subIds.length && !mainIds.length) {
-    const mainSub = exists(idsFrom(s.MAIN_SUB_MEMBER_ROLE_IDS));
-    subIds = mainSub.filter((id) => byId.get(id)!.name.includes('準'));
-    mainIds = mainSub.filter((id) => !byId.get(id)!.name.includes('準'));
-  }
-
-  // 評価落ち: Bot の is_downgrade_member と同じ（設定ロール＋「評価落ち」という名前のロール）
-  const downgradeIds = new Set([
-    ...exists([...idsFrom(s.DOWNGRADE_ROLE_ID), ...idsFrom(s.EVALUATION_FAILED_ROLE_ID)]),
-    ...roles.filter((r) => r.name === DOWNGRADE_ROLE_NAME).map((r) => r.id),
-  ]);
-
-  // 違反者: ギャンブルの違反者ロール（新旧）・ルール違反者ロール（logging_cog）・「ルール違反者」という名前のロール
-  const violatorIds = new Set([
-    ...exists([...idsFrom(s.GAMBLE_VIOLATOR_ROLE_IDS), ...idsFrom(s.GAMBLE_VIOLATOR_ROLE_ID), ...idsFrom(s.VIOLATOR_ROLE_ID)]),
-    ...roles.filter((r) => r.name === VIOLATOR_ROLE_NAME).map((r) => r.id),
-  ]);
-
-  return { newIds, subIds: new Set(subIds), mainIds: new Set(mainIds), downgradeIds, violatorIds };
+export async function loadRoleKinds(pool: Pool, guildId: string): Promise<RoleKinds> {
+  const ids = await loadRoleSettingIds(pool, guildId);
+  return {
+    newIds: new Set(ids.new),
+    subIds: new Set(ids.sub),
+    mainIds: new Set(ids.main),
+    downgradeIds: new Set(ids.downgrade),
+    violatorIds: new Set(ids.violator),
+  };
 }
 
 export function roleKind(kinds: RoleKinds, roleId: string): RoleKind | null {

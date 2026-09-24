@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { AlertCircle, MonitorSmartphone, Save } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-hot-toast';
-import RoleSelect, { RoleOption } from '@/components/RoleSelect';
+import type { RoleOption } from '@/components/RoleSelect';
 
 // lib/casino/settings.ts の WEB_GAMES と同じ並び・同じキー
 const GAMES = [
@@ -26,9 +26,17 @@ const allOff = (): Enabled => Object.fromEntries(GAMES.map((g) => [g.key, false]
 type RoleAccess = Record<'downgrade' | 'violator', Record<'casino' | 'shop', boolean>>;
 const allAllowed = (): RoleAccess => ({ downgrade: { casino: true, shop: true }, violator: { casino: true, shop: true } });
 const ROLE_GROUPS = [
-  { key: 'downgrade', label: '評価落ち', desc: '「基本・評価設定」の評価落ちロール（未設定なら「評価落ち」という名前のロール）を持つメンバー' },
+  { key: 'downgrade', label: '評価落ち', desc: '「基本・評価設定」の評価落ちロールを持つメンバー' },
   { key: 'violator', label: '違反者', desc: '「基本・評価設定」の違反者ロールを持つメンバー' },
 ] as const;
+// lib/memberRoles.ts の ROLE_SETTING_KEYS と同じ
+const BASE_ROLE_SETTINGS = [
+  { key: 'MAIN_MEMBER_ROLE_IDS', label: '本メンバーロール', use: '昇格のお祝い（黄色の枠）' },
+  { key: 'SUB_MEMBER_ROLE_IDS', label: '準メンバーロール', use: '昇格のお祝い（黄色の枠）' },
+  { key: 'DOWNGRADE_ROLE_ID', label: '評価落ちロール', use: '励まし（赤の枠）・利用制限' },
+  { key: 'GAMBLE_VIOLATOR_ROLE_IDS', label: '違反者ロール', use: '反省のメッセージ（赤の枠）・利用制限' },
+] as const;
+
 const FEATURES = [
   { key: 'casino', label: '🎰 ギャンブル（カジノ）' },
   { key: 'shop', label: '🛒 ショップ' },
@@ -41,9 +49,8 @@ export default function WebActivitySettingsPage() {
   const [enabled, setEnabled] = useState<Enabled>(allOff);
   const [shopEnabled, setShopEnabled] = useState(false);
   const [roleAccess, setRoleAccess] = useState<RoleAccess>(allAllowed);
-  // 昇格のお祝いに使う準メン・本メンのロール（lib/memberRoles.ts）
-  const [subRoleIds, setSubRoleIds] = useState<string[]>([]);
-  const [mainRoleIds, setMainRoleIds] = useState<string[]>([]);
+  // 「基本・評価設定」のロール（役職タブ・利用制限の判定に使う。ここでは表示だけ）
+  const [baseRoles, setBaseRoles] = useState<Record<string, string[]>>({});
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -61,8 +68,7 @@ export default function WebActivitySettingsPage() {
         setEnabled(Object.fromEntries(GAMES.map((g) => [g.key, saved[g.key] === true])) as Enabled);
         setShopEnabled(data?.WEB_SHOP_ENABLED === true);
         const toIds = (v: unknown) => (Array.isArray(v) ? v.map(String) : v ? [String(v)] : []);
-        setSubRoleIds(toIds(data?.WEB_SUB_MEMBER_ROLE_IDS));
-        setMainRoleIds(toIds(data?.WEB_MAIN_MEMBER_ROLE_IDS));
+        setBaseRoles(Object.fromEntries(BASE_ROLE_SETTINGS.map((b) => [b.key, toIds(data?.[b.key])])));
         const ra = data?.WEB_ROLE_ACCESS && typeof data.WEB_ROLE_ACCESS === 'object' ? data.WEB_ROLE_ACCESS : {};
         setRoleAccess({
           downgrade: { casino: ra.downgrade?.casino !== false, shop: ra.downgrade?.shop !== false },
@@ -81,8 +87,6 @@ export default function WebActivitySettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ WEB_GAMES_ENABLED: enabled, WEB_SHOP_ENABLED: shopEnabled, WEB_ROLE_ACCESS: roleAccess,
-          WEB_SUB_MEMBER_ROLE_IDS: subRoleIds,
-          WEB_MAIN_MEMBER_ROLE_IDS: mainRoleIds,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -241,22 +245,27 @@ export default function WebActivitySettingsPage() {
         className="bg-gray-800/50 border border-cyan-500/20 p-6 rounded-xl space-y-4"
       >
         <div className="border-b border-cyan-500/20 pb-4">
-          <h2 className="text-xl font-semibold text-cyan-300">🍾 昇格のお祝い</h2>
+          <h2 className="text-xl font-semibold text-cyan-300">判定に使うロール</h2>
           <p className="text-xs text-gray-500 mt-1">
-            メンバー画面の「役職」タブで、ここで選んだロールを持つ人にお祝いのメッセージ（黄色の枠）を表示します。
-            評価落ちロールを持つ人には励ましのメッセージ（赤の枠）を表示します。
-            どちらも未設定なら、「基本・評価設定」の本・準メンバーロールのうち、名前に「準」を含むものを準メン、それ以外を本メンとして扱います。
+            メンバー画面の「役職」タブの表示と、上の評価落ち・違反者の利用制限は、
+            <Link href={`/dashboard/${guildId}`} className="text-cyan-400 hover:underline mx-1">基本・評価設定</Link>
+            で設定したロールで判定します。未設定のものは、当てはまるメンバーがいない扱いになります。
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="text-sm text-gray-300 font-bold">準メンバーロール（仮メン → 準メン）</label>
-            <RoleSelect label="準メンバーロール" multiple value={subRoleIds} onChange={(v) => setSubRoleIds(v)} roles={roles} />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm text-gray-300 font-bold">本メンバーロール（準メン → 本メン）</label>
-            <RoleSelect label="本メンバーロール" multiple value={mainRoleIds} onChange={(v) => setMainRoleIds(v)} roles={roles} />
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {BASE_ROLE_SETTINGS.map((b) => {
+            const ids = baseRoles[b.key] ?? [];
+            const names = ids.map((id) => roles.find((r) => r.id === id)?.name ?? `不明なロール (${id})`);
+            return (
+              <div key={b.key} className="bg-gray-900/60 border border-gray-700/60 rounded-lg px-4 py-3">
+                <div className="text-sm text-gray-200 font-medium">{b.label}</div>
+                <div className={`text-sm mt-0.5 ${names.length ? 'text-cyan-300' : 'text-red-400 font-semibold'}`}>
+                  {names.length ? names.join('、') : '未設定'}
+                </div>
+                <div className="text-[11px] text-gray-500 mt-1">{b.use}</div>
+              </div>
+            );
+          })}
         </div>
       </motion.div>
 

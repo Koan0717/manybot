@@ -44,6 +44,9 @@ const ROLE_SETTINGS = [
   { key: 'EVALUATOR_MENTION_ROLE_IDS', label: '評価員メンション用ロール', multiple: true },
   { key: 'FREE_INN_ROLE_IDS', label: '無料宿ロール', multiple: true },
   { key: 'MAIN_SUB_MEMBER_ROLE_IDS', label: '本・準メンバーロール', multiple: true },
+  // メンバー画面「役職」タブの昇格のお祝い（本メン・準メンを区別する）に使う
+  { key: 'MAIN_MEMBER_ROLE_IDS', label: '本メンバーロール', multiple: true },
+  { key: 'SUB_MEMBER_ROLE_IDS', label: '準メンバーロール', multiple: true },
   { key: 'EVENT_MANAGER_ROLE_IDS', label: 'イベンター統括ロール', multiple: true },
   { key: 'GAMBLE_EMPLOYEE_ROLE_IDS', label: '賭博従業員ロール', multiple: true },
   { key: 'GAMBLE_MANAGER_ROLE_IDS', label: '賭博統括ロール', multiple: true },

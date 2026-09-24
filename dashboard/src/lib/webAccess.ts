@@ -1,17 +1,14 @@
 import type { Pool } from 'pg';
 import type { DiscordGuildMember } from '@/lib/discordApi';
-import { fetchRoleNames } from '@/lib/shop';
 
 /**
  * 評価落ち・違反者のメンバーが、アクティビティ・Webのカジノとショップを使えるか。
  * 管理ダッシュボード「Webアクティビティ設定」の WEB_ROLE_ACCESS で決める（未設定は使える）。
- * 評価落ち・違反者の判定は Bot（helpers.is_downgrade_member / is_violator_member）と同じ。
+ * 評価落ち・違反者の判定は「基本・評価設定」の評価落ちロール・違反者ロールで行う。
  */
 export const WEB_ROLE_ACCESS_KEY = 'WEB_ROLE_ACCESS';
 export type WebFeature = 'casino' | 'shop';
 export type RoleAccess = Record<'downgrade' | 'violator', Record<WebFeature, boolean>>;
-
-const DOWNGRADE_ROLE_NAME = '評価落ち'; // config.EVALUATION_FAILED_ROLE_NAME
 
 export function parseRoleAccess(raw: unknown): RoleAccess {
   let v: any = raw;
@@ -47,28 +44,20 @@ export async function getMemberFlags(pool: Pool, guildId: string, member: Discor
   try {
     const res = await pool.query(
       `SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN
-         ('DOWNGRADE_ROLE_ID', 'EVALUATION_FAILED_ROLE_ID', 'GAMBLE_VIOLATOR_ROLE_IDS', 'GAMBLE_VIOLATOR_ROLE_ID', $2)`,
+         ('DOWNGRADE_ROLE_ID', 'GAMBLE_VIOLATOR_ROLE_IDS', $2)`,
       [guildId, WEB_ROLE_ACCESS_KEY]
     );
     for (const row of res.rows) s[row.setting_key] = row.setting_value;
   } catch (e: any) {
     if (e?.code !== '42P01') throw e;
   }
-  const access = parseRoleAccess(s[WEB_ROLE_ACCESS_KEY]);
   const has = (ids: string[]) => ids.some((id) => member.roles.includes(id));
-
-  // 違反者: 新しい複数設定を優先し、無ければ旧設定の1つ
-  const violatorIds = idsFrom(s.GAMBLE_VIOLATOR_ROLE_IDS);
-  const violator = has(violatorIds.length ? violatorIds : idsFrom(s.GAMBLE_VIOLATOR_ROLE_ID));
-
-  // 評価落ち: 設定されたロール、または「評価落ち」という名前のロール
-  let downgrade = has([...idsFrom(s.DOWNGRADE_ROLE_ID), ...idsFrom(s.EVALUATION_FAILED_ROLE_ID)]);
-  const needsNameCheck = !downgrade && (!access.downgrade.casino || !access.downgrade.shop) && member.roles.length > 0;
-  if (needsNameCheck) {
-    const roles = await fetchRoleNames(guildId);
-    downgrade = member.roles.some((id) => roles.get(id)?.name === DOWNGRADE_ROLE_NAME);
-  }
-  return { downgrade, violator, access };
+  // 判定は「基本・評価設定」の評価落ちロール・違反者ロールだけ（未設定なら誰も当てはまらない）
+  return {
+    downgrade: has(idsFrom(s.DOWNGRADE_ROLE_ID)),
+    violator: has(idsFrom(s.GAMBLE_VIOLATOR_ROLE_IDS)),
+    access: parseRoleAccess(s[WEB_ROLE_ACCESS_KEY]),
+  };
 }
 
 /** その機能を使えるか。評価落ち・違反者の両方に当てはまるなら、どちらか一方でもOFFなら使えない */
