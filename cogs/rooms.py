@@ -14,19 +14,44 @@ from helpers import (
 # --- モーダル ---
 class RenameModal(discord.ui.Modal, title='チャンネル名の変更'):
     name_input = discord.ui.TextInput(label='新しいチャンネル名', max_length=100, required=True)
+
+    def __init__(self, target=None):
+        super().__init__()
+        # 変更するチャンネル。未指定ならボタンを押したチャンネル（部屋の中の操作パネル）
+        self.target = target
+
     async def on_submit(self, interaction: discord.Interaction):
+        channel = self.target or interaction.channel
+        # 3秒以内に応答しないと「応答しませんでした」になるので、先に受け付けてから変更する
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        new_name = self.name_input.value
         try:
-            await interaction.channel.edit(name=self.name_input.value)
-            await interaction.response.send_message(f"チャンネル名を「{self.name_input.value}」に変更しました！", ephemeral=True)
-        except:
-            await interaction.response.send_message("変更に失敗しました。", ephemeral=True)
+            # Discordのチャンネル名変更は「10分に2回まで」。超えると長く待たされるので打ち切る
+            await asyncio.wait_for(channel.edit(name=new_name), timeout=10)
+            await interaction.followup.send(f"チャンネル名を「{new_name}」に変更しました！", ephemeral=True)
+        except asyncio.TimeoutError:
+            await interaction.followup.send(
+                "⚠️ Discordの制限（チャンネル名の変更は10分に2回まで）にかかったため、今は変更できません。少し時間をおいてからもう一度お試しください。",
+                ephemeral=True,
+            )
+        except discord.Forbidden:
+            await interaction.followup.send("変更に失敗しました（Botにチャンネルの管理権限がありません）。", ephemeral=True)
+        except Exception as e:
+            print(f"[Rooms] rename failed: {e}")
+            await interaction.followup.send("変更に失敗しました。", ephemeral=True)
 
 class LimitModal(discord.ui.Modal, title='人数制限の設定'):
     limit_input = discord.ui.TextInput(label='人数 (0 で無制限)', max_length=2, required=True)
+
+    def __init__(self, target=None):
+        super().__init__()
+        # 変更するチャンネル。未指定ならボタンを押したチャンネル（部屋の中の操作パネル）
+        self.target = target
+
     async def on_submit(self, interaction: discord.Interaction):
         try:
             limit = int(self.limit_input.value)
-            await interaction.channel.edit(user_limit=limit)
+            await (self.target or interaction.channel).edit(user_limit=limit)
             await interaction.response.send_message(f"人数制限を {limit if limit > 0 else '無制限'} に変更しました！", ephemeral=True)
         except:
             await interaction.response.send_message("数字を正しく入力してください。", ephemeral=True)
@@ -203,7 +228,7 @@ class ExtendGambleVCSelectView(discord.ui.View):
 async def process_room_extension(bot, interaction: discord.Interaction, room_type: str, duration: int, price: int):
     await interaction.response.defer(ephemeral=True)
     channel_id = interaction.channel_id
-    room_data = await database.get_room(channel_id)
+    room_data = await database.get_room(channel_id, interaction.guild_id)
     if not room_data:
         return await interaction.edit_original_response(content="この部屋のデータが見つかりません。", view=None)
         
@@ -247,7 +272,7 @@ async def process_room_extension(bot, interaction: discord.Interaction, room_typ
 
 async def handle_extend(bot, interaction: discord.Interaction):
     channel_id = interaction.channel_id
-    room_data = await database.get_room(channel_id)
+    room_data = await database.get_room(channel_id, interaction.guild_id)
     if not room_data:
         await interaction.response.send_message("この部屋のデータが見つかりません。", ephemeral=True)
         return
@@ -281,7 +306,7 @@ async def handle_extend(bot, interaction: discord.Interaction):
         await interaction.response.send_message("「賭博VC」の延長期間を選択してください。", view=view, ephemeral=True)
 
 async def handle_delete(interaction: discord.Interaction):
-    room_data = await database.get_room(interaction.channel_id)
+    room_data = await database.get_room(interaction.channel_id, interaction.guild_id)
     if room_data and interaction.user.id != room_data["owner_id"] and not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("削除は作成者または管理者のみ可能です。", ephemeral=True)
         return
@@ -296,7 +321,7 @@ async def handle_delete(interaction: discord.Interaction):
 
 # --- 共通ユーティリティ ---
 async def check_room_owner(interaction: discord.Interaction) -> bool:
-    room_data = await database.get_room(interaction.channel_id)
+    room_data = await database.get_room(interaction.channel_id, interaction.guild_id)
     if room_data and interaction.user.id != room_data["owner_id"] and not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("作成者または管理者のみ可能です。", ephemeral=True)
         return False
@@ -528,7 +553,7 @@ class VCInvitePanelView(discord.ui.View):
         if not interaction.user.voice or not interaction.user.voice.channel:
             return await interaction.response.send_message("ボイスチャンネルに参加していません。", ephemeral=True)
         
-        room_data = await database.get_room(interaction.user.voice.channel.id)
+        room_data = await database.get_room(interaction.user.voice.channel.id, interaction.guild_id)
         if not room_data or room_data["owner_id"] != interaction.user.id:
             if not interaction.user.guild_permissions.administrator:
                 return await interaction.response.send_message("自分が作成した（所有している）部屋ではありません。", ephemeral=True)
@@ -544,7 +569,7 @@ class VCRenamePanelView(discord.ui.View):
         if not interaction.user.voice or not interaction.user.voice.channel:
             return await interaction.response.send_message("ボイスチャンネルに参加していません。", ephemeral=True)
         
-        room_data = await database.get_room(interaction.user.voice.channel.id)
+        room_data = await database.get_room(interaction.user.voice.channel.id, interaction.guild_id)
         if not room_data or room_data["owner_id"] != interaction.user.id:
             if not interaction.user.guild_permissions.administrator:
                 return await interaction.response.send_message("自分が作成した（所有している）部屋ではありません。", ephemeral=True)
@@ -554,14 +579,14 @@ class VCRenamePanelView(discord.ui.View):
             if cfg and not cfg.get("allow_rename", True):
                 return await interaction.response.send_message("❌ この部屋は名前変更が禁止されています。", ephemeral=True)
         
-        await interaction.response.send_modal(RenameModal())
+        await interaction.response.send_modal(RenameModal(interaction.user.voice.channel))
 
     @discord.ui.button(label="人数制限を変更", style=discord.ButtonStyle.secondary, emoji="👥", custom_id="persistent_vc_limit_panel_btn")
     async def limit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.voice or not interaction.user.voice.channel:
             return await interaction.response.send_message("ボイスチャンネルに参加していません。", ephemeral=True)
         
-        room_data = await database.get_room(interaction.user.voice.channel.id)
+        room_data = await database.get_room(interaction.user.voice.channel.id, interaction.guild_id)
         if not room_data or room_data["owner_id"] != interaction.user.id:
             if not interaction.user.guild_permissions.administrator:
                 return await interaction.response.send_message("自分が作成した（所有している）部屋ではありません。", ephemeral=True)
@@ -571,7 +596,7 @@ class VCRenamePanelView(discord.ui.View):
             if cfg and not cfg.get("allow_limit_change", True):
                 return await interaction.response.send_message("❌ この部屋は人数制限の変更が禁止されています。", ephemeral=True)
         
-        await interaction.response.send_modal(LimitModal())
+        await interaction.response.send_modal(LimitModal(interaction.user.voice.channel))
 
 # --- 購入用Views & Modals ---
 async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
@@ -1408,7 +1433,7 @@ class Rooms(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel):
-        room_data = await database.get_room(channel.id)
+        room_data = await database.get_room(channel.id, channel.guild.id)
         if room_data:
             await database.remove_room(channel.id)
             self.bot.empty_custom_vcs.pop(channel.id, None)

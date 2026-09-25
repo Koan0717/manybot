@@ -221,7 +221,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel):
-        room_data = await database.get_room(channel.id)
+        room_data = await database.get_room(channel.id, channel.guild.id)
         if room_data:
             await database.remove_room(channel.id)
             self.bot.empty_custom_vcs.pop(channel.id, None)
