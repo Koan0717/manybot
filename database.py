@@ -495,6 +495,10 @@ async def setup_db_schema(p):
 
         ''')
 
+        # VCトリガーで作ったVCで画面共有を許可するか（ダッシュボードのVCトリガー設定）
+
+        await conn.execute('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS allow_stream BOOLEAN DEFAULT TRUE')
+
         await conn.execute('''
 
             CREATE TABLE IF NOT EXISTS inquiry_panels (
@@ -2865,7 +2869,7 @@ async def get_auto_vc_config(channel_id: int) -> dict | None:
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids, allowed_role_ids FROM auto_vc_config WHERE channel_id = $1', channel_id)
+        row = await conn.fetchrow('SELECT base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids, allowed_role_ids, allow_stream FROM auto_vc_config WHERE channel_id = $1', channel_id)
 
         if row:
 
@@ -2887,7 +2891,9 @@ async def get_auto_vc_config(channel_id: int) -> dict | None:
 
                 "invite_visible_role_ids": list(row["invite_visible_role_ids"]) if row["invite_visible_role_ids"] else [],
                 
-                "allowed_role_ids": list(row["allowed_role_ids"]) if row["allowed_role_ids"] else []
+                "allowed_role_ids": list(row["allowed_role_ids"]) if row["allowed_role_ids"] else [],
+
+                "allow_stream": row["allow_stream"] is not False
 
             }
 
@@ -2917,7 +2923,7 @@ async def get_all_auto_vc_configs() -> list[dict]:
 
             async with p.acquire() as conn:
 
-                rows = await conn.fetch('SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids, allowed_role_ids FROM auto_vc_config')
+                rows = await conn.fetch('SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids, allowed_role_ids, allow_stream FROM auto_vc_config')
 
                 all_configs.extend([{
 
@@ -2939,7 +2945,9 @@ async def get_all_auto_vc_configs() -> list[dict]:
 
                     "invite_visible_role_ids": list(r["invite_visible_role_ids"]) if r["invite_visible_role_ids"] else [],
 
-                    "allowed_role_ids": list(r["allowed_role_ids"]) if r["allowed_role_ids"] else []
+                    "allowed_role_ids": list(r["allowed_role_ids"]) if r["allowed_role_ids"] else [],
+
+                    "allow_stream": r["allow_stream"] is not False
 
                 } for r in rows])
 

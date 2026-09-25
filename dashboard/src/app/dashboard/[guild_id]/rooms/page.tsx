@@ -53,7 +53,12 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
     DISABLE_6H_GAMBLEVC: false,
     DISABLE_12H_GAMBLEVC: false,
     ROOM_ACCESS_LOW_EVAL_INN_TEXT: true,
-    ENABLE_GAME_VC_HOURLY: true
+    ENABLE_GAME_VC_HOURLY: true,
+    ROOM_STREAM_INN: true,
+    ROOM_STREAM_LUXURY_INN: true,
+    ROOM_STREAM_GAME_VC: true,
+    ROOM_STREAM_GAMBLE_VC: true,
+    ROOM_STREAM_CUSTOM_VC: true,
   });
   
   const defaultRolePrices = {
@@ -404,6 +409,42 @@ export default function RoomsSettingsPage({ params }: { params: { guild_id: stri
                 {toggles.ENABLE_FREE_INN_MAIN_SUB ? '有効' : '無効'}
               </div>
             </label>
+          </div>
+        </div>
+
+        {/* --- 画面共有の許可 --- */}
+        <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-4 mb-6">
+          <h3 className="font-bold text-lg text-white">画面共有の許可</h3>
+          <p className="text-sm text-zinc-400 mt-1 mb-4">
+            部屋のVCで画面共有できるかどうかを設定します。（ON: 画面共有できる / OFF: 作成者も含めて画面共有できない）
+            部屋の中のパネルに「画面共有: できます / できません」と表示されます。変更は、これから作られる部屋から反映されます。
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              { key: 'ROOM_STREAM_INN', label: '宿' },
+              { key: 'ROOM_STREAM_LUXURY_INN', label: '高級宿' },
+              { key: 'ROOM_STREAM_GAME_VC', label: 'ゲームVC' },
+              { key: 'ROOM_STREAM_GAMBLE_VC', label: '賭博VC' },
+              { key: 'ROOM_STREAM_CUSTOM_VC', label: 'カスタムVC' },
+            ].map(({ key, label }) => {
+              const on = (toggles as any)[key] !== false;
+              return (
+                <label key={key} className="flex items-center justify-between cursor-pointer bg-zinc-800/60 border border-zinc-700 rounded-lg px-4 py-3">
+                  <span className="text-white font-medium">{label}</span>
+                  <span className="flex items-center">
+                    <span className="relative">
+                      <input type="checkbox" className="sr-only"
+                        checked={on}
+                        onChange={(e) => setToggles({ ...toggles, [key]: e.target.checked })}
+                      />
+                      <span className={`block w-14 h-8 rounded-full transition-colors ${on ? 'bg-green-600' : 'bg-zinc-600'}`}></span>
+                      <span className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${on ? 'transform translate-x-6' : ''}`}></span>
+                    </span>
+                    <span className="ml-3 text-zinc-300 font-medium whitespace-nowrap w-20">{on ? '許可 (ON)' : '禁止 (OFF)'}</span>
+                  </span>
+                </label>
+              );
+            })}
           </div>
         </div>
 

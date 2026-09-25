@@ -27,6 +27,8 @@ export async function GET(
     const channelIds = channels.map((c: any) => c.id);
 
     const pool = await getPool(guildId); // DBプール取得 (Postgres)
+    // 画面共有の許可（Bot の database.py と同じ列。Botが古くても使えるようにここでも追加する）
+    await pool.query('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS allow_stream BOOLEAN DEFAULT TRUE').catch(() => {});
     
     // DBから全トリガーを取得
     const triggersRes = await pool.query('SELECT channel_id FROM auto_vc_triggers');
@@ -42,7 +44,7 @@ export async function GET(
     // トリガーの詳細設定を取得
     const placeholders = guildTriggerIds.map((_, i) => `$${i + 1}`).join(',');
     const configsRes = await pool.query(
-      `SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids, allowed_role_ids 
+      `SELECT channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids, allowed_role_ids, allow_stream
        FROM auto_vc_config 
        WHERE channel_id::text IN (${placeholders})`,
       guildTriggerIds
@@ -66,6 +68,7 @@ export async function GET(
         is_invite_only: c?.is_invite_only === true,
         invite_visible_role_ids: c?.invite_visible_role_ids || [],
         allowed_role_ids: c?.allowed_role_ids || [],
+        allow_stream: c?.allow_stream !== false,
       };
     });
 
@@ -85,6 +88,7 @@ export async function POST(
   try {
     const data = await request.json(); // Array of triggers
     const pool = await getPool(guildId);
+    await pool.query('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS allow_stream BOOLEAN DEFAULT TRUE').catch(() => {});
 
     // 古いトリガーを削除するために、まずこのサーバーの現在のトリガーを取得
     const token = process.env.DISCORD_BOT_TOKEN;
@@ -123,8 +127,8 @@ export async function POST(
       );
       // configを更新
       const updateQuery = `
-      INSERT INTO auto_vc_config (channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids, allowed_role_ids)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO auto_vc_config (channel_id, base_name, allow_rename, include_owner_name, use_numbering, allow_limit_change, show_panel, is_invite_only, invite_visible_role_ids, allowed_role_ids, allow_stream)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       ON CONFLICT (channel_id) DO UPDATE SET
         base_name = EXCLUDED.base_name,
         allow_rename = EXCLUDED.allow_rename,
@@ -134,7 +138,8 @@ export async function POST(
         show_panel = EXCLUDED.show_panel,
         is_invite_only = EXCLUDED.is_invite_only,
         invite_visible_role_ids = EXCLUDED.invite_visible_role_ids,
-        allowed_role_ids = EXCLUDED.allowed_role_ids
+        allowed_role_ids = EXCLUDED.allowed_role_ids,
+        allow_stream = EXCLUDED.allow_stream
     `;
       await pool.query(updateQuery, [
           cid,
@@ -146,7 +151,8 @@ export async function POST(
           item.show_panel,
           item.is_invite_only || false,
           item.invite_visible_role_ids || [],
-          item.allowed_role_ids || []
+          item.allowed_role_ids || [],
+          item.allow_stream !== false
         ]
       );
     }
