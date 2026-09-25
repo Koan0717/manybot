@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Coins, Crown, Dices, History, Loader2, Search, Send, ShoppingBag, User, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Coins, Crown, Dices, Gift, History, Loader2, Search, Send, ShoppingBag, User, X } from 'lucide-react';
 import Casino, { CasinoInfo } from './Casino';
 import Shop, { ShopInfo } from './Shop';
+import Gacha, { GachaInfo } from './Gacha';
 import { guildIconUrl, isDiscordActivity, keepMemberSessionAlive, loadMemberState, memberFetch } from '@/lib/memberClient';
 
 interface LevelStat { level: number; xp: number; next_xp: number }
@@ -139,12 +140,13 @@ const BotBadge = () => (
   <span className="text-[10px] font-bold bg-[#5865F2] text-white rounded px-1.5 py-0.5 flex-shrink-0">BOT</span>
 );
 
-type Tab = 'profile' | 'transfer' | 'casino' | 'shop' | 'roles';
+type Tab = 'profile' | 'transfer' | 'casino' | 'shop' | 'gacha' | 'roles';
 const TABS: { key: Tab; label: string; icon: typeof User }[] = [
   { key: 'profile', label: 'プロフィール', icon: User },
   { key: 'transfer', label: '送金', icon: Send },
   { key: 'casino', label: 'カジノ', icon: Dices },
   { key: 'shop', label: 'ショップ', icon: ShoppingBag },
+  { key: 'gacha', label: 'ガチャ', icon: Gift },
   { key: 'roles', label: '役職', icon: Crown },
 ];
 
@@ -452,6 +454,8 @@ export default function MemberGuildPage() {
   const [casino, setCasino] = useState<CasinoInfo | null>(null);
   // Webアクティビティ設定でショップがOFFなら「ショップ」タブは出さない
   const [shop, setShop] = useState<ShopInfo | null>(null);
+  // Webアクティビティ設定でガチャがOFFなら「ガチャ」タブは出さない
+  const [gacha, setGacha] = useState<GachaInfo | null>(null);
 
   // サーバーを切り替えたときに前のサーバーの表示が残らないよう、guildId ごとに取り直す
   useEffect(() => {
@@ -464,7 +468,15 @@ export default function MemberGuildPage() {
     setProfile(null);
     setCasino(null);
     setShop(null);
+    setGacha(null);
     setError('');
+    (async () => {
+      try {
+        const res = await memberFetch(`/api/member/guilds/${guildId}/gacha`);
+        const data = await res.json().catch(() => null);
+        if (!cancelled && res.ok && data?.enabled) setGacha(data);
+      } catch {}
+    })();
     (async () => {
       try {
         const res = await memberFetch(`/api/member/guilds/${guildId}/shop`);
@@ -502,7 +514,7 @@ export default function MemberGuildPage() {
   const guildName = profile?.guild.name ?? cachedGuild?.name ?? '';
   const icon = profile ? guildIconUrl(profile.guild) : cachedGuild ? guildIconUrl(cachedGuild) : null;
 
-  const visibleTabs = TABS.filter((t) => (t.key !== 'casino' || casino) && (t.key !== 'shop' || shop));
+  const visibleTabs = TABS.filter((t) => (t.key !== 'casino' || casino) && (t.key !== 'shop' || shop) && (t.key !== 'gacha' || gacha));
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-4 md:p-8">
@@ -600,6 +612,17 @@ export default function MemberGuildPage() {
               setCasino((c) => (c ? { ...c, status: { ...c.status, balance } } : c));
               // 延長したら表示中の終了予定日も更新する（仮メン以外には元々表示していない）
               if (evaluationPeriod) setShop((sh) => (sh?.evaluation_period ? { ...sh, evaluation_period: evaluationPeriod } : sh));
+            }}
+          />
+        ) : tab === 'gacha' && gacha ? (
+          <Gacha
+            guildId={guildId}
+            info={gacha}
+            balance={profile.stats.balance}
+            onPulled={(balance, entry) => {
+              setProfile((p) => (p ? { ...p, stats: { ...p.stats, balance } } : p));
+              setCasino((c) => (c ? { ...c, status: { ...c.status, balance } } : c));
+              setGacha((g) => (g ? { ...g, history: [entry, ...g.history].slice(0, 10) } : g));
             }}
           />
         ) : tab === 'casino' && casino ? (

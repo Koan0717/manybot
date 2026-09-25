@@ -1527,9 +1527,12 @@ class Rooms(commands.Cog):
                                 circled_num = get_circled_number(next_num)
                                 channel_name = f"{channel_name}ー{circled_num}"
 
+                        # トリガーVCに人数制限があれば、作るVCも同じ人数にする（無ければ無制限のまま）
+                        trigger_limit = after.channel.user_limit or 0
                         new_channel = await guild.create_voice_channel(
                             name=channel_name,
                             category=category,
+                            user_limit=trigger_limit,
                             reason=f"Auto-VC for {member.display_name}"
                         )
 

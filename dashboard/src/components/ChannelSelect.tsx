@@ -82,6 +82,12 @@ export default function ChannelSelect({
     }
   };
 
+  // 選択の解除（チップの×・「すべて解除」から）
+  const removeOne = (id: string) => (multiple ? onChange(valArray.filter((v: string) => v !== id)) : onChange(''));
+  const clearAll = () => onChange(multiple ? [] : '');
+  // 削除されたチャンネルなど、一覧に無いIDが設定に残っているとき。表示されず解除できなくなるので別に出す
+  const unknownIds = channels.length ? valArray.filter((id) => !channels.some((x) => String(x.id) === id)) : [];
+
   const selectedChannels = channels.filter((c) => valArray.includes(String(c.id)));
   const filteredChannels = channels.filter((c) =>
     c.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -167,6 +173,26 @@ export default function ChannelSelect({
             </div>
           )}
 
+          {unknownIds.map((id) => (
+
+            <div
+
+              key={id}
+
+              onClick={() => removeOne(id)}
+
+              className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer rounded-lg text-sm border bg-amber-950/40 border-amber-800/70 hover:bg-amber-950/70"
+
+            >
+
+              <span className="font-tech text-amber-300 truncate">⚠ 見つからないチャンネル（削除済みの可能性） ID: {id}</span>
+
+              <span className="text-xs text-amber-300 border border-amber-700 px-2 py-0.5 rounded font-bold flex-shrink-0 font-tech">タップで解除</span>
+
+            </div>
+
+          ))}
+
           {filteredChannels.length === 0 ? (
             <div className="py-12 text-center text-zinc-500 text-sm font-tech">
               「{searchTerm}」に一致するチャンネルは見つかりませんでした
@@ -207,12 +233,23 @@ export default function ChannelSelect({
           <span className="text-xs text-zinc-400 font-tech">
             選択中: <strong className="text-white">{valArray.length}</strong> 個のチャンネル
           </span>
+          <div className="flex items-center gap-2">
+          {valArray.length > 0 && (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="text-xs text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-1.5 rounded-lg font-bold font-tech"
+            >
+              すべて解除
+            </button>
+          )}
           <button
             onClick={() => setIsOpen(false)}
             className="mecha-btn-sheen bg-gradient-to-r from-red-600 to-red-800 hover:from-red-500 hover:to-red-700 text-white px-5 py-1.5 rounded-lg text-xs font-bold font-mecha shadow-lg transition-all"
           >
             決定して閉じる
           </button>
+          </div>
         </div>
       </div>
     </div>
@@ -234,7 +271,7 @@ export default function ChannelSelect({
         }}
       >
         <div className="flex flex-wrap gap-1.5 items-center flex-1 min-w-0">
-          {selectedChannels.length === 0 ? (
+          {selectedChannels.length === 0 && unknownIds.length === 0 ? (
             <span className="text-zinc-500 px-1 text-sm font-tech">{placeholder}</span>
           ) : (
             selectedChannels.map((c) => (
@@ -244,9 +281,40 @@ export default function ChannelSelect({
               >
                 {getChannelIcon(c.type)}
                 {c.name}
+                <button
+                  type="button"
+                  aria-label="選択を解除"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeOne(String(c.id));
+                  }}
+                  className="-mr-1 ml-0.5 w-5 h-5 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-zinc-700"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </span>
             ))
           )}
+          {unknownIds.map((id) => (
+            <span
+              key={id}
+              className="bg-amber-950/60 text-amber-300 text-xs px-2.5 py-1 rounded border border-amber-800 font-bold flex items-center gap-1 font-tech"
+              title={`ID: ${id}`}
+            >
+              ⚠ 見つからないチャンネル
+              <button
+                  type="button"
+                  aria-label="選択を解除"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeOne(String(id));
+                  }}
+                  className="-mr-1 ml-0.5 w-5 h-5 flex items-center justify-center rounded text-zinc-400 hover:text-white hover:bg-zinc-700"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+            </span>
+          ))}
         </div>
         <div className="bg-zinc-800 text-zinc-400 hover:text-white px-2.5 py-1 rounded text-xs border border-zinc-700 flex-shrink-0 flex items-center gap-1 font-bold font-tech">
           <span>選択 / 変更</span>

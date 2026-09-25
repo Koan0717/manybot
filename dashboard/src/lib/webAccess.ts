@@ -2,12 +2,12 @@ import type { Pool } from 'pg';
 import type { DiscordGuildMember } from '@/lib/discordApi';
 
 /**
- * 評価落ち・違反者のメンバーが、アクティビティ・Webのカジノとショップを使えるか。
+ * 評価落ち・違反者のメンバーが、アクティビティ・Webのカジノ・ショップ・ガチャを使えるか。
  * 管理ダッシュボード「Webアクティビティ設定」の WEB_ROLE_ACCESS で決める（未設定は使える）。
  * 評価落ち・違反者の判定は「基本・評価設定」の評価落ちロール・違反者ロールで行う。
  */
 export const WEB_ROLE_ACCESS_KEY = 'WEB_ROLE_ACCESS';
-export type WebFeature = 'casino' | 'shop';
+export type WebFeature = 'casino' | 'shop' | 'gacha';
 export type RoleAccess = Record<'downgrade' | 'violator', Record<WebFeature, boolean>>;
 
 export function parseRoleAccess(raw: unknown): RoleAccess {
@@ -21,8 +21,8 @@ export function parseRoleAccess(raw: unknown): RoleAccess {
   }
   const pick = (group: string, feature: WebFeature) => v?.[group]?.[feature] !== false; // 明示的にOFFのときだけ使えない
   return {
-    downgrade: { casino: pick('downgrade', 'casino'), shop: pick('downgrade', 'shop') },
-    violator: { casino: pick('violator', 'casino'), shop: pick('violator', 'shop') },
+    downgrade: { casino: pick('downgrade', 'casino'), shop: pick('downgrade', 'shop'), gacha: pick('downgrade', 'gacha') },
+    violator: { casino: pick('violator', 'casino'), shop: pick('violator', 'shop'), gacha: pick('violator', 'gacha') },
   };
 }
 
