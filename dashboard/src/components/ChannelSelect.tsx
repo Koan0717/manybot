@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Hash, Volume2, Folder, Search, X, Check } from 'lucide-react';
+import { Hash, Volume2, Folder, Search, X, Check, MessagesSquare } from 'lucide-react';
 
 export interface ChannelOption {
   id: string;
@@ -90,6 +90,7 @@ export default function ChannelSelect({
   const getChannelIcon = (type?: number) => {
     if (type === 2) return <Volume2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />;
     if (type === 4) return <Folder className="w-4 h-4 text-amber-400 flex-shrink-0" />;
+    if (type === 15) return <MessagesSquare className="w-4 h-4 text-sky-400 flex-shrink-0" />;
     return <Hash className="w-4 h-4 text-zinc-400 flex-shrink-0" />;
   };
 

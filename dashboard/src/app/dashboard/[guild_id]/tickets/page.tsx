@@ -28,7 +28,9 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
     target_role_ids: [] as string[],
     staff_role_ids: [] as string[],
     ticket_prefix: 'ticket',
-    panel_type: 'custom_ticket'
+    panel_type: 'custom_ticket',
+    forum_post_title: '',
+    forum_post_content: ''
   });
   const [saving, setSaving] = useState(false);
 
@@ -40,7 +42,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
     ]).then(([panelsData, channelsData, rolesData]: [any, any, any]) => {
       setPanels(Array.isArray(panelsData) ? panelsData : []);
       if (!channelsData.error) {
-        setChannels(channelsData.filter((c: any) => c.type === 0)); // Text channels only
+        setChannels(channelsData.filter((c: any) => c.type === 0 || c.type === 15)); // Text & forum channels
       }
       if (!rolesData.error) {
         setRoles(rolesData.filter((r: any) => r.id !== guildId));
@@ -84,7 +86,9 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         target_role_ids: panel.target_role_ids?.map(String) || [],
         staff_role_ids: panel.staff_role_ids?.map(String) || [],
         ticket_prefix: panel.ticket_prefix || 'ticket',
-        panel_type: panel.panel_type || 'custom_ticket'
+        panel_type: panel.panel_type || 'custom_ticket',
+        forum_post_title: panel.forum_post_title || '',
+        forum_post_content: panel.forum_post_content || ''
       });
     } else {
       setEditingPanel(null);
@@ -98,11 +102,16 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
         target_role_ids: [],
         staff_role_ids: [],
         ticket_prefix: 'ticket',
-        panel_type: 'custom_ticket'
+        panel_type: 'custom_ticket',
+        forum_post_title: '',
+        forum_post_content: ''
       });
     }
     setIsModalOpen(true);
   };
+
+  const isForumChannel = (channelId: string) => channels.find(c => c.id === channelId)?.type === 15;
+  const selectedIsForum = isForumChannel(formData.channel_id);
 
   const closeModal = () => {
     setIsModalOpen(false);
@@ -265,9 +274,14 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-lg font-bold text-white flex items-center font-tech">
-                        <span className="text-red-500 mr-2">#</span>
+                        <span className="text-red-500 mr-2">{ch?.type === 15 ? '💬' : '#'}</span>
                         {ch ? ch.name : panel.channel_id}
                       </h3>
+                      {ch?.type === 15 && (
+                        <span className="text-[11px] px-2 py-0.5 rounded bg-sky-900/40 text-sky-300 border border-sky-800 font-tech font-bold">
+                          フォーラム
+                        </span>
+                      )}
                       <span className="text-[11px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 font-tech font-bold">
                         {panelTypeOptions.find(opt => opt.value === panel.panel_type)?.label || '🎫 汎用チケット'}
                       </span>
@@ -285,6 +299,9 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                     </div>
                   </div>
                   <div className="text-xs text-zinc-500 space-y-1 mb-4 font-tech">
+                    {ch?.type === 15 && (
+                      <p>投稿の題名: <span className="text-zinc-300">{panel.forum_post_title || panel.panel_title}</span></p>
+                    )}
                     <p>チケットの接頭辞: <span className="text-zinc-300 font-mono">{panel.ticket_prefix}-001</span></p>
                     {panel.panel_type === 'reservation' && (
                       <p>指名できる担当者: {panel.staff_role_ids?.length || 0} 個のロール</p>
@@ -294,7 +311,9 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                   </div>
                   <button
                     onClick={async () => {
-                      if (!confirm('このチャンネルにチケット作成パネルを送信しますか？')) return;
+                      if (!confirm(ch?.type === 15
+                        ? 'このフォーラムに新しい投稿を作成し、チケット作成パネルを設置しますか？'
+                        : 'このチャンネルにチケット作成パネルを送信しますか？')) return;
                       try {
                         const res = await fetch(`/api/guilds/${guildId}/tickets`, {
                           method: 'POST',
@@ -309,7 +328,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                     }}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-bold shadow transition-colors font-tech"
                   >
-                    🚀 このチャンネルにパネルを設置する
+                    {ch?.type === 15 ? '🚀 このフォーラムに投稿してパネルを設置する' : '🚀 このチャンネルにパネルを設置する'}
                   </button>
                 </div>
               );
@@ -332,7 +351,7 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                   <label className="block text-sm text-zinc-400 mb-1 font-tech">設置先チャンネル <span className="text-red-500">*</span></label>
                   {editingPanel ? (
                     <div className="bg-zinc-800/80 border border-zinc-700 rounded-lg p-3 text-zinc-400 text-sm font-tech">
-                      #{channels.find(c => c.id === formData.channel_id)?.name || formData.channel_id} (変更不可)
+                      {selectedIsForum ? '💬' : '#'}{channels.find(c => c.id === formData.channel_id)?.name || formData.channel_id} (変更不可)
                     </div>
                   ) : (
                     <ChannelSelect
@@ -344,7 +363,37 @@ export default function TicketsSettingsPage({ params }: { params: { guild_id: st
                       multiple={false}
                     />
                   )}
+                  <p className="text-xs text-zinc-500 mt-1 font-tech">テキストチャンネルのほか、フォーラムチャンネルも選べます。</p>
                 </div>
+
+                {selectedIsForum && (
+                  <div className="space-y-4 border border-sky-800/60 bg-sky-950/20 rounded-lg p-4">
+                    <p className="text-sm text-sky-300 font-bold font-tech">💬 フォーラムへの投稿設定</p>
+                    <div>
+                      <label className="block text-sm text-zinc-400 mb-1 font-tech">投稿の題名</label>
+                      <input
+                        type="text"
+                        value={formData.forum_post_title}
+                        maxLength={100}
+                        onChange={e => setFormData({ ...formData, forum_post_title: e.target.value })}
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500 font-tech"
+                        placeholder={formData.panel_title || 'パネルのタイトルと同じ'}
+                      />
+                      <p className="text-xs text-zinc-500 mt-1 font-tech">空欄の場合は、パネルのタイトルと同じ題名になります。</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-zinc-400 mb-1 font-tech">投稿の内容</label>
+                      <textarea
+                        value={formData.forum_post_content}
+                        maxLength={2000}
+                        onChange={e => setFormData({ ...formData, forum_post_content: e.target.value })}
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white focus:outline-none focus:border-red-500 h-24 font-tech"
+                        placeholder="空欄の場合はチケットのパネルだけを投稿します"
+                      />
+                      <p className="text-xs text-zinc-500 mt-1 font-tech">入力した内容は、投稿の本文としてパネルの上に表示されます。空欄ならパネルだけを投稿します。</p>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm text-zinc-400 mb-1 font-tech">パネルの種類（機能） <span className="text-red-500">*</span></label>

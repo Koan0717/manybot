@@ -248,6 +248,7 @@ class IPC(commands.Cog):
 
                     embed = None
                     view = None
+                    panel = None
 
                     if panel_type == "shop":
                         from cogs.shop import ShopPanelView
@@ -372,7 +373,24 @@ class IPC(commands.Cog):
 
                     if embed and view:
                         try:
-                            sent_msg = await channel.send(embed=embed, view=view)
+                            if isinstance(channel, discord.ForumChannel):
+                                # フォーラムには新規投稿(スレッド)を作り、その最初のメッセージにパネルを付ける
+                                forum_title = ((panel or {}).get("forum_post_title") or "").strip() or embed.title or "チケット"
+                                forum_content = ((panel or {}).get("forum_post_content") or "").strip() or None
+                                tags = []
+                                if channel.flags.require_tag and channel.available_tags:
+                                    tags = [channel.available_tags[0]]
+                                created = await channel.create_thread(
+                                    name=forum_title[:100],
+                                    content=forum_content,
+                                    embed=embed,
+                                    view=view,
+                                    applied_tags=tags,
+                                )
+                                sent_msg = created.message
+                                channel = created.thread
+                            else:
+                                sent_msg = await channel.send(embed=embed, view=view)
                             if panel_type in ["inn", "luxury_inn", "game_vc", "gamble_vc", "custom_vc", "inn_combined", "main_inn", "main_luxury_inn", "luxury_inn_single"]:
                                 try:
                                     await database.save_room_panel(guild_id, channel.id, sent_msg.id, panel_type)

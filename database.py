@@ -3366,6 +3366,8 @@ async def _ensure_ticket_panel_schema(p):
                 "ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS guild_id BIGINT",
                 "ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS id SERIAL",
                 "ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS staff_role_ids BIGINT[] DEFAULT '{}'::BIGINT[]",
+                "ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS forum_post_title TEXT",
+                "ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS forum_post_content TEXT",
                 "ALTER TABLE custom_ticket_panels DROP CONSTRAINT IF EXISTS custom_ticket_panels_pkey",
                 "DROP INDEX IF EXISTS idx_custom_ticket_panels_channel_id",
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_ticket_panels_id ON custom_ticket_panels (id)",
@@ -3424,13 +3426,13 @@ async def get_custom_ticket_panel(guild_id: int, channel_id: int, panel_id: int 
     async with p.acquire() as conn:
         if panel_id is not None:
             row = await conn.fetchrow('''
-                SELECT id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type, staff_role_ids
+                SELECT id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type, staff_role_ids, forum_post_title, forum_post_content
                 FROM custom_ticket_panels
                 WHERE id = $1
             ''', panel_id)
         else:
             row = await conn.fetchrow('''
-                SELECT id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type, staff_role_ids
+                SELECT id, panel_title, panel_description, button_label, button_emoji, mention_role_ids, target_role_ids, ticket_prefix, panel_type, staff_role_ids, forum_post_title, forum_post_content
                 FROM custom_ticket_panels
                 WHERE channel_id = $1
                 ORDER BY id ASC
@@ -3448,7 +3450,9 @@ async def get_custom_ticket_panel(guild_id: int, channel_id: int, panel_id: int 
                 "target_role_ids": row["target_role_ids"] or [],
                 "staff_role_ids": row["staff_role_ids"] or [],
                 "ticket_prefix": row["ticket_prefix"] or "ticket",
-                "panel_type": row["panel_type"] or "custom_ticket"
+                "panel_type": row["panel_type"] or "custom_ticket",
+                "forum_post_title": row["forum_post_title"] or "",
+                "forum_post_content": row["forum_post_content"] or ""
             }
 
         return None
