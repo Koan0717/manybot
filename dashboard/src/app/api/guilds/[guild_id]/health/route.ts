@@ -288,6 +288,21 @@ export async function GET(
         checks.push(await checkChannel(row.channel_id?.toString(), '自己紹介チャンネル'));
         checks.push(await checkChannel(row.welcome_channel_id?.toString(), 'ようこそチャンネル'));
         checks.push(checkRoleExists(row.role_id?.toString(), roleMap, '付与ロール'));
+        // チャンネルごとのロール付与（ONのときだけ）
+        try {
+          const cr = await pool.query(
+            `SELECT channel_roles_enabled, channel_roles::text AS channel_roles FROM self_intro_role_settings WHERE guild_id = $1`,
+            [guildId]
+          );
+          if (cr.rows[0]?.channel_roles_enabled) {
+            const rules = JSON.parse(cr.rows[0].channel_roles || '[]');
+            for (const rule of Array.isArray(rules) ? rules : []) {
+              if (rule?.enabled === false) continue;
+              checks.push(await checkChannel(rule?.channel_id?.toString(), 'チャンネルごとのロール付与: チャンネル'));
+              for (const rid of rule?.role_ids ?? []) checks.push(checkRoleExists(String(rid), roleMap, 'チャンネルごとのロール付与: ロール'));
+            }
+          }
+        } catch {}
       }
       result['self-intro-role'] = finalize(checks);
     } catch (e: any) {

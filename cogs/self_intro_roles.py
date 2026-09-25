@@ -87,6 +87,37 @@ def get_intro_channel_ids(settings: dict) -> list:
     return ids
 
 
+def get_channel_role_rules(settings: dict) -> dict:
+    """
+    チャンネルごとの追加ロール（例: 男性用の自己紹介チャンネル → 男性ロール）。
+    「チャンネルごとのロール付与」がOFFなら空。ONでも、OFFにしてある行は使わない。
+    """
+    if not settings.get("channel_roles_enabled"):
+        return {}
+    rules = {}
+    for rule in settings.get("channel_roles") or []:
+        if not rule.get("enabled", True) or not rule.get("role_ids"):
+            continue
+        rules.setdefault(int(rule["channel_id"]), [])
+        for rid in rule["role_ids"]:
+            if int(rid) not in rules[int(rule["channel_id"])]:
+                rules[int(rule["channel_id"])].append(int(rid))
+    return rules
+
+
+def get_watch_channel_ids(settings: dict) -> list:
+    """監視するチャンネル = 自己紹介チャンネル + チャンネルごとのロールを設定したチャンネル。"""
+    ids = get_intro_channel_ids(settings)
+    for cid in get_channel_role_rules(settings):
+        if cid not in ids:
+            ids.append(cid)
+    return ids
+
+
+def has_any_grant(settings: dict) -> bool:
+    return bool(settings.get("role_id") or get_channel_role_rules(settings))
+
+
 class SelfIntroRoles(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -106,11 +137,11 @@ class SelfIntroRoles(commands.Cog):
         if not settings.get("is_enabled"):
             return
 
-        intro_channel_ids = get_intro_channel_ids(settings)
+        intro_channel_ids = get_watch_channel_ids(settings)
         welcome_channel_id = settings.get("welcome_channel_id")
         template = settings.get("template") or ""
 
-        if not intro_channel_ids or not settings.get("role_id"):
+        if not intro_channel_ids or not has_any_grant(settings):
             return
 
         # 案内メッセージの送信先チャンネルを決定（未設定なら1つ目の自己紹介チャンネル）
@@ -145,7 +176,7 @@ class SelfIntroRoles(commands.Cog):
             print(f"[SelfIntroRoles] Failed to send welcome message: {e}")
 
     async def _intro_target(self, message: discord.Message):
-        """自己紹介として扱うメッセージなら (付与するロール, 項目名) を返す。対象外なら None。"""
+        """自己紹介として扱うメッセージなら (付与するロール一覧, 項目名) を返す。対象外なら None。"""
         if message.author.bot or not message.guild or not isinstance(message.author, discord.Member):
             return None
         guild = message.guild
@@ -156,31 +187,38 @@ class SelfIntroRoles(commands.Cog):
         if not settings.get("is_enabled"):
             return None
 
-        intro_channel_ids = get_intro_channel_ids(settings)
-        role_id = settings.get("role_id")
         template = settings.get("template") or ""
-        if not intro_channel_ids or not role_id or not template:
+        if not template or not has_any_grant(settings):
             return None
 
         # 自己紹介チャンネル（どれか）のメッセージのみ対象（スレッドなら親チャンネルで判定）
         channel_ids = {message.channel.id, getattr(message.channel, "parent_id", None)}
-        if not channel_ids & set(intro_channel_ids):
+        if not channel_ids & set(get_watch_channel_ids(settings)):
             return None
 
-        target_role = guild.get_role(int(role_id))
-        if not target_role or target_role in message.author.roles:
+        # 付与するロール = 共通のロール + 投稿したチャンネルに設定したロール
+        role_ids = []
+        if settings.get("role_id"):
+            role_ids.append(int(settings["role_id"]))
+        rules = get_channel_role_rules(settings)
+        for cid in channel_ids:
+            for rid in rules.get(cid, []) if cid else []:
+                if rid not in role_ids:
+                    role_ids.append(rid)
+        roles = [r for r in (guild.get_role(rid) for rid in role_ids) if r and r not in message.author.roles]
+        if not roles:
             return None
         items = extract_template_items(template)
         if not items:
             return None
-        return target_role, items
+        return roles, items
 
     async def _try_grant(self, message: discord.Message, notify: bool = True, warn: bool = True) -> bool:
         """テンプレートの項目がそろっていればロールを付与する。付与したら True。"""
         target = await self._intro_target(message)
         if not target:
             return False
-        target_role, items = target
+        roles, items = target
         keywords = [k for k, _ in items]
         names = dict(items)
         missing, empty = find_intro_items(message.content, keywords)
@@ -206,14 +244,15 @@ class SelfIntroRoles(commands.Cog):
 
         guild = message.guild
         member = message.author
+        role_names = "、".join(f"**{r.name}**" for r in roles)
         try:
-            await member.add_roles(target_role, reason="自己紹介テンプレート完成によるロール付与")
+            await member.add_roles(*roles, reason="自己紹介テンプレート完成によるロール付与")
         except discord.Forbidden:
-            print(f"[SelfIntroRoles] Cannot add role {target_role.id} to {member} in guild {guild.id}")
+            print(f"[SelfIntroRoles] Cannot add roles {[r.id for r in roles]} to {member} in guild {guild.id}")
             if warn:
                 try:
                     await message.reply(
-                        f"⚠️ Botの権限が足りず、ロール **{target_role.name}** を付与できませんでした。\n"
+                        f"⚠️ Botの権限が足りず、ロール {role_names} を付与できませんでした。\n"
                         "管理者の方へ: サーバー設定 → ロール で、Botのロールを付与するロールより上に移動し、「ロールの管理」権限を付けてください。",
                         delete_after=120,
                         mention_author=False,
@@ -250,7 +289,7 @@ class SelfIntroRoles(commands.Cog):
         if notify:
             try:
                 await member.send(
-                    f"✅ 【{guild.name}】自己紹介ありがとうございます！ロール **{target_role.name}** を付与しました🎉"
+                    f"✅ 【{guild.name}】自己紹介ありがとうございます！ロール {role_names} を付与しました🎉"
                 )
             except (discord.Forbidden, discord.HTTPException):
                 # DM拒否設定の場合は通知なし（ロールは付与済み）
@@ -283,10 +322,10 @@ class SelfIntroRoles(commands.Cog):
                 settings = await database.get_self_intro_role_settings(guild.id)
             except Exception:
                 continue
-            if not settings.get("is_enabled") or not settings.get("role_id") or not settings.get("template"):
+            if not settings.get("is_enabled") or not has_any_grant(settings) or not settings.get("template"):
                 continue
             granted = 0
-            for cid in get_intro_channel_ids(settings):
+            for cid in get_watch_channel_ids(settings):
                 channel = guild.get_channel(cid)
                 if not isinstance(channel, discord.TextChannel):
                     continue
