@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { memberFetch } from '@/lib/memberClient';
 import RouletteWheel, { RouletteWheelHandle } from './RouletteWheel';
 import DiceBowl from './DiceBowl';
+import HorseRace, { RaceData } from './HorseRace';
 
 /** GET /api/member/guilds/[guild_id]/casino の中身 */
 export interface CasinoInfo {
@@ -183,7 +184,8 @@ export default function Casino({
   });
   const [horseNum, setHorseNum] = useState(1);
   const [horseType, setHorseType] = useState<'tan' | 'fuku'>('tan');
-  const [race, setRace] = useState<{ frame: any; track: number } | null>(null);
+  const [race, setRace] = useState<{ id: number; data: RaceData; horse: number; win: boolean } | null>(null);
+  const raceDone = useRef<(() => void) | null>(null);
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
@@ -395,11 +397,12 @@ export default function Casino({
     run(async () => {
       const data = await post('horse', { bet, horse: horseNum, bet_type: horseType });
       if (!data) return;
-      for (const frame of data.frames) {
-        if (!alive.current) return;
-        setRace({ frame, track: data.track });
-        await sleep(1300);
-      }
+      await new Promise<void>((resolve) => {
+        raceDone.current = resolve;
+        setRace({ id: Date.now(), data, horse: horseNum, win: !!data.win });
+      });
+      raceDone.current = null;
+      if (!alive.current) return;
       played(data, data.bet);
       const h = info.horses.find((x) => x.num === horseNum)!;
       setOutcome(
@@ -626,27 +629,16 @@ export default function Casino({
 
         {game === 'horse' && (
           <>
-            {race ? (
-              <div className="space-y-1.5">
-                <div className="text-sm font-semibold">{race.frame.phase}</div>
-                {info.horses.map((h) => {
-                  const p = race.frame.positions[h.num] ?? 0;
-                  return (
-                    <div key={h.num} className="flex items-center gap-2 text-xs">
-                      <span className="w-5">{h.emoji}</span>
-                      <div className="flex-1 h-5 bg-zinc-800 rounded-full relative overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ${h.num === horseNum ? 'bg-red-600' : 'bg-zinc-600'}`}
-                          style={{ width: `${(p / race.track) * 100}%` }}
-                        />
-                      </div>
-                      <span className="w-4">{p >= race.track ? '🏆' : '🏇'}</span>
-                    </div>
-                  );
-                })}
-                <div className="text-xs text-zinc-400 italic">📢 {race.frame.commentary}</div>
-              </div>
-            ) : null}
+            {race && (
+              <HorseRace
+                key={race.id}
+                horses={info.horses}
+                race={race.data}
+                myHorse={race.horse}
+                win={race.win}
+                onFinish={() => raceDone.current?.()}
+              />
+            )}
             <div className="grid grid-cols-1 gap-1.5">
               {info.horses.map((h) => (
                 <button
