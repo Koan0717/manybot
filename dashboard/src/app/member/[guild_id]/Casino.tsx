@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
 import { memberFetch } from '@/lib/memberClient';
+import RouletteWheel, { RouletteWheelHandle } from './RouletteWheel';
+import DiceBowl from './DiceBowl';
 
 /** GET /api/member/guilds/[guild_id]/casino の中身 */
 export interface CasinoInfo {
@@ -168,9 +170,17 @@ export default function Casino({
   const [rouletteType, setRouletteType] = useState<string>('red');
   const [rouletteNumber, setRouletteNumber] = useState('7');
   const [rouletteShown, setRouletteShown] = useState<number | null>(null);
+  const wheelRef = useRef<RouletteWheelHandle>(null);
   const [bj, setBj] = useState<BjView | null>(info.active_blackjack);
   const [chin, setChin] = useState<any>(null);
   const [chinShown, setChinShown] = useState({ player: 0, npc: 0 });
+  // お椀に今見せている出目（転がっている最中は rolling）
+  const [bowl, setBowl] = useState<{ caption: string; dice: number[] | null; rolling: boolean; hand: string | null }>({
+    caption: 'サイコロを振ってください',
+    dice: null,
+    rolling: false,
+    hand: null,
+  });
   const [horseNum, setHorseNum] = useState(1);
   const [horseType, setHorseType] = useState<'tan' | 'fuku'>('tan');
   const [race, setRace] = useState<{ frame: any; track: number } | null>(null);
@@ -283,17 +293,16 @@ export default function Casino({
     run(async () => {
       const body: any = { bet, bet_type: rouletteType };
       if (rouletteType === 'number') body.number = Number(rouletteNumber);
-      let spinning = true;
-      const spin = (async () => {
-        while (spinning && alive.current) {
-          setRouletteShown(Math.floor(Math.random() * 37));
-          await sleep(90);
-        }
-      })();
-      const [data] = await Promise.all([post('roulette', body), sleep(1800)]);
-      spinning = false;
-      await spin;
-      if (!data) return setRouletteShown(null);
+      setRouletteShown(null);
+      // 結果を待つあいだ盤を回し、届いたらその数字で止まるように減速させる
+      wheelRef.current?.startSpin();
+      const data = await post('roulette', body);
+      if (!data) {
+        wheelRef.current?.stop();
+        return;
+      }
+      await wheelRef.current?.spinTo(data.number);
+      if (!alive.current) return;
       setRouletteShown(data.number);
       played(data, data.bet);
       setOutcome(
@@ -339,22 +348,33 @@ export default function Casino({
       if (!data) return;
       setChin(data);
       setChinShown({ player: 0, npc: 0 });
+      setBowl({ caption: '👤 あなたの番（1回目）', dice: null, rolling: false, hand: null });
     });
+
+  /** お椀でサイコロを転がし、決まった出目で止める */
+  const rollBowl = async (caption: string, roll: { dice: number[]; name: string }) => {
+    setBowl({ caption, dice: roll.dice, rolling: true, hand: null });
+    await sleep(1200);
+    if (!alive.current) return false;
+    setBowl({ caption, dice: roll.dice, rolling: false, hand: roll.name });
+    await sleep(700);
+    return alive.current;
+  };
 
   /** プレイヤーの出目を1回ずつ見せる。役が決まったらBotの番を自動で見せて結果を出す */
   const rollChinchiro = async () => {
     if (!chin || busy) return;
     setBusy(true);
-    await sleep(500);
     const shown = chinShown.player + 1;
+    if (!(await rollBowl(`👤 あなたの番（${shown}回目）`, chin.player[shown - 1]))) return;
     setChinShown({ player: shown, npc: 0 });
     if (shown >= chin.player.length) {
       for (let i = 1; i <= chin.npc.length; i++) {
-        await sleep(900);
-        if (!alive.current) return;
+        await sleep(400);
+        if (!(await rollBowl(`🤖 Botの番（${i}回目）`, chin.npc[i - 1]))) return;
         setChinShown({ player: shown, npc: i });
       }
-      await sleep(400);
+      await sleep(300);
       played(chin, chin.bet);
       const vs = `あなた: ${chin.playerHand.name} ／ Bot: ${chin.npcHand.name}`;
       setOutcome(
@@ -364,6 +384,8 @@ export default function Casino({
             ? { tone: 'draw', title: '🤝 引き分け', detail: `${vs}\n${fmt(chin.bet)} ${cur} が戻りました` }
             : { tone: 'lose', title: `💀 負け… ${fmt(chin.loss)} ${cur} 没収`, detail: vs }
       );
+    } else {
+      setBowl((b) => ({ ...b, caption: `👤 あなたの番（${shown + 1}回目）` }));
     }
     if (alive.current) setBusy(false);
   };
@@ -494,13 +516,18 @@ export default function Casino({
 
         {game === 'roulette' && (
           <>
-            <div className="flex justify-center py-2">
-              <div
-                className={`w-24 h-24 rounded-full border-4 border-amber-600 flex items-center justify-center text-3xl font-black ${
-                  rouletteShown === null ? 'bg-zinc-800' : rouletteShown === 0 ? 'bg-emerald-700' : RED.has(rouletteShown) ? 'bg-red-700' : 'bg-zinc-950'
-                }`}
-              >
-                {rouletteShown ?? '?'}
+            <div className="py-2">
+              <RouletteWheel ref={wheelRef} />
+              <div className="text-center mt-2 h-8">
+                {rouletteShown !== null && (
+                  <span
+                    className={`inline-flex items-center justify-center min-w-[3rem] px-3 py-1 rounded-full text-lg font-black border-2 border-amber-500 ${
+                      rouletteShown === 0 ? 'bg-emerald-700' : RED.has(rouletteShown) ? 'bg-red-700' : 'bg-zinc-950'
+                    }`}
+                  >
+                    {rouletteShown}
+                  </span>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -568,6 +595,7 @@ export default function Casino({
 
         {game === 'chinchiro' && (
           <>
+            {chin && <DiceBowl caption={bowl.caption} dice={bowl.dice} rolling={bowl.rolling} hand={bowl.hand} />}
             {chin && (
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
