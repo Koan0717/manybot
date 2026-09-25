@@ -23,6 +23,8 @@ interface VCTrigger {
   use_numbering: boolean;
   allow_limit_change: boolean;
   show_panel: boolean;
+  /** 作られたVCで画面共有を許可するか */
+  allow_stream: boolean;
   is_invite_only: boolean;
   invite_visible_role_ids: string[];
   allowed_role_ids?: string[];
@@ -113,6 +115,7 @@ export default function VCTriggersPage() {
         use_numbering: true,
         allow_limit_change: true,
         show_panel: true,
+        allow_stream: true,
         is_invite_only: false,
         invite_visible_role_ids: [],
         allowed_role_ids: []
@@ -235,6 +238,16 @@ export default function VCTriggersPage() {
                     className="w-5 h-5 rounded border-gray-600 text-indigo-600 focus:ring-indigo-600 bg-zinc-800"
                   />
                   <span className="text-gray-300 font-tech">ユーザーによる部屋名変更を許可</span>
+                </label>
+
+                <label className="flex items-center gap-3 p-3 bg-zinc-900/50 rounded-lg border border-zinc-700/50 cursor-pointer hover:bg-zinc-800 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={trigger.allow_stream !== false}
+                    onChange={(e) => updateTrigger(index, 'allow_stream', e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-600 text-indigo-600 focus:ring-indigo-600 bg-zinc-800"
+                  />
+                  <span className="text-gray-300 font-tech">画面共有を許可（OFFなら作られたVCで画面共有できない）</span>
                 </label>
 
                 <label className="flex items-center gap-3 p-3 bg-zinc-900/50 rounded-lg border border-zinc-700/50 cursor-pointer hover:bg-zinc-800 transition-colors">

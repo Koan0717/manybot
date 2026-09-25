@@ -11,6 +11,55 @@ from helpers import (
     get_new_member_roles, get_downgrade_roles
 )
 
+# --- 画面共有 ---
+# ダッシュボード「VCルーム設定」の画面共有のON/OFF（未設定は許可）
+_STREAM_SETTING_KEYS = {
+    "宿": "ROOM_STREAM_INN",
+    "高級宿": "ROOM_STREAM_LUXURY_INN",
+    "ゲームVC": "ROOM_STREAM_GAME_VC",
+    "賭博VC": "ROOM_STREAM_GAMBLE_VC",
+    "カスタムVC": "ROOM_STREAM_CUSTOM_VC",
+}
+
+
+def is_room_stream_allowed(bot, guild_id: int, room_type: str) -> bool:
+    key = _STREAM_SETTING_KEYS.get(room_type)
+    if not key:
+        return True
+    return get_setting(bot, key, guild_id) not in (False, "false")
+
+
+def stream_status_text(allowed: bool) -> str:
+    """部屋のパネルに出す画面共有の状態"""
+    return "🖥️ 画面共有: **できます**" if allowed else "🚫 画面共有: **できません**"
+
+
+class LegacyStreamButtonsView(discord.ui.View):
+    """
+    以前のパネルにあった「画面共有を許可／禁止」ボタン。画面共有はダッシュボードの設定で決まるようになったので、
+    すでに送られたパネルのボタンが押されたら、その部屋の今の状態を案内する（押しても変更はしない）。
+    """
+
+    def __init__(self):
+        super().__init__(timeout=None)
+        for custom_id in ("inn_stream_allow_btn", "inn_stream_deny_btn", "persistent_stream_allow_btn", "persistent_stream_deny_btn"):
+            button = discord.ui.Button(label="画面共有", custom_id=custom_id)
+            button.callback = self._explain
+            self.add_item(button)
+
+    async def _explain(self, interaction: discord.Interaction):
+        channel = interaction.channel
+        allowed = True
+        try:
+            allowed = channel.overwrites_for(channel.guild.default_role).stream is not False
+        except Exception:
+            pass
+        await interaction.response.send_message(
+            f"画面共有の許可・禁止は、ダッシュボードの設定で決まるようになりました。\n{stream_status_text(allowed)}",
+            ephemeral=True,
+        )
+
+
 # --- モーダル ---
 class RenameModal(discord.ui.Modal, title='チャンネル名の変更'):
     name_input = discord.ui.TextInput(label='新しいチャンネル名', max_length=100, required=True)
@@ -433,34 +482,6 @@ class InnControlView(discord.ui.View):
         if not await check_room_owner(interaction): return
         await interaction.response.send_modal(RenameModal())
 
-    @discord.ui.button(label="画面共有を許可", style=discord.ButtonStyle.secondary, emoji="🖥", custom_id="inn_stream_allow_btn", row=1)
-    async def stream_allow_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await check_room_owner(interaction): return
-        channel = interaction.channel
-        if not isinstance(channel, discord.VoiceChannel):
-            return await interaction.response.send_message("ボイスチャンネルでのみ使用できます。", ephemeral=True)
-        try:
-            overwrite = channel.overwrites_for(channel.guild.default_role)
-            overwrite.stream = True
-            await channel.set_permissions(channel.guild.default_role, overwrite=overwrite)
-            await interaction.response.send_message("✅ 画面共有を **許可** しました。", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"エラー: {e}", ephemeral=True)
-
-    @discord.ui.button(label="画面共有を禁止", style=discord.ButtonStyle.secondary, emoji="🚫", custom_id="inn_stream_deny_btn", row=2)
-    async def stream_deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await check_room_owner(interaction): return
-        channel = interaction.channel
-        if not isinstance(channel, discord.VoiceChannel):
-            return await interaction.response.send_message("ボイスチャンネルでのみ使用できます。", ephemeral=True)
-        try:
-            overwrite = channel.overwrites_for(channel.guild.default_role)
-            overwrite.stream = False
-            await channel.set_permissions(channel.guild.default_role, overwrite=overwrite)
-            await interaction.response.send_message("🚫 画面共有を **禁止** しました。", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"エラー: {e}", ephemeral=True)
-
 class RoomControlView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -487,35 +508,6 @@ class RoomControlView(discord.ui.View):
     async def manage_button(self, interaction, button):
         if not await check_room_owner(interaction): return
         await interaction.response.send_message("管理するユーザーを選択し、操作を選んでください。", view=AccessManageView(interaction.channel), ephemeral=True)
-
-    @discord.ui.button(label="画面共有を許可", style=discord.ButtonStyle.secondary, emoji="🖥", custom_id="persistent_stream_allow_btn", row=2)
-    async def stream_allow_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await check_room_owner(interaction): return
-        channel = interaction.channel
-        if not isinstance(channel, discord.VoiceChannel):
-            return await interaction.response.send_message("ボイスチャンネルでのみ使用できます。", ephemeral=True)
-        try:
-            overwrite = channel.overwrites_for(channel.guild.default_role)
-            overwrite.stream = True
-            await channel.set_permissions(channel.guild.default_role, overwrite=overwrite)
-            await interaction.response.send_message("✅ 画面共有を **許可** しました。", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"エラー: {e}", ephemeral=True)
-
-    @discord.ui.button(label="画面共有を禁止", style=discord.ButtonStyle.secondary, emoji="🚫", custom_id="persistent_stream_deny_btn", row=3)
-    async def stream_deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not await check_room_owner(interaction): return
-        channel = interaction.channel
-        if not isinstance(channel, discord.VoiceChannel):
-            return await interaction.response.send_message("ボイスチャンネルでのみ使用できます。", ephemeral=True)
-        try:
-            overwrite = channel.overwrites_for(channel.guild.default_role)
-            overwrite.stream = False
-            await channel.set_permissions(channel.guild.default_role, overwrite=overwrite)
-            await interaction.response.send_message("🚫 画面共有を **禁止** しました。", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"エラー: {e}", ephemeral=True)
-
 
 class CustomRoomControlView(discord.ui.View):
     def __init__(self):
@@ -890,6 +882,10 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
                             if cat: target_category = cat
                         except:
                             pass
+            # 画面共有（ダッシュボードの設定）。@everyone に許可/禁止を付ける（作成者も含めて全員に効く）
+            stream_allowed = is_room_stream_allowed(bot, interaction.guild.id, room_type)
+            overwrites[interaction.guild.default_role].stream = stream_allowed
+
             channel_name = custom_name if custom_name else f"{room_type}-{interaction.user.display_name}"
             channel = await interaction.guild.create_voice_channel(name=channel_name, category=target_category, overwrites=overwrites, user_limit=(2 if room_type=="宿" else 0))
             
@@ -939,7 +935,7 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
             view = CustomRoomControlView() if room_type=="カスタムVC" else (RoomControlView() if room_type=="高級宿" else InnControlView())
             
             expire_str = "無制限" if duration == 0 else f"<t:{int(expire_at.replace(tzinfo=JST).timestamp())}:F>"
-            embed = discord.Embed(title=f"🏠 {room_type}", description=f"作成者: {interaction.user.mention}\n利用期間: {f'{duration}時間' if duration > 0 else '無制限'}\n終了予定: {expire_str}", color=discord.Color.blue())
+            embed = discord.Embed(title=f"🏠 {room_type}", description=f"作成者: {interaction.user.mention}\n利用期間: {f'{duration}時間' if duration > 0 else '無制限'}\n終了予定: {expire_str}\n{stream_status_text(stream_allowed)}", color=discord.Color.blue())
             await channel.send(content=f"{interaction.user.mention}", embed=embed, view=view)
             
             if interaction.user.voice and interaction.user.voice.channel:
@@ -1381,6 +1377,7 @@ class Rooms(commands.Cog):
         self.bot.add_view(InnControlView())
         self.bot.add_view(RoomControlView())
         self.bot.add_view(CustomRoomControlView())
+        self.bot.add_view(LegacyStreamButtonsView())
         self.bot.add_view(VCRenamePanelView())
         self.bot.add_view(VCInvitePanelView())
         self.bot.add_view(MainInnPanelView())
@@ -1547,10 +1544,13 @@ class Rooms(commands.Cog):
                     invite_visible_role_ids = cfg.get("invite_visible_role_ids", []) if cfg else []
                     allowed_role_ids = cfg.get("allowed_role_ids", []) if cfg else []
 
+                    # 画面共有（ダッシュボードのVCトリガー設定。未設定は許可）
+                    allow_stream = cfg.get("allow_stream", True) is not False if cfg else True
+
                     # デフォルトで全員許可の前提で、制限がある場合のみ上書きする
                     if is_invite_only or allowed_role_ids:
                         overwrites = {
-                            guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False),
+                            guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False, stream=allow_stream),
                             member: discord.PermissionOverwrite(view_channel=True, connect=True, speak=True)
                         }
 
@@ -1569,6 +1569,13 @@ class Rooms(commands.Cog):
                                     overwrites[role] = discord.PermissionOverwrite(view_channel=True, connect=True)
                         
                         await new_channel.edit(overwrites=overwrites)
+                    else:
+                        try:
+                            everyone = new_channel.overwrites_for(guild.default_role)
+                            everyone.stream = allow_stream
+                            await new_channel.set_permissions(guild.default_role, overwrite=everyone)
+                        except Exception as e:
+                            print(f"[Auto-VC] Failed to apply stream permission: {e}")
                     
                     if member.voice and member.voice.channel and member.voice.channel.id == trigger_id:
                         try:
@@ -1579,7 +1586,7 @@ class Rooms(commands.Cog):
                     if not cfg or cfg.get("show_panel", True):
                         embed = discord.Embed(
                             title="⚙️ 部屋の設定",
-                            description="このボタンから部屋の名前や人数制限を変更できます。",
+                            description=f"このボタンから部屋の名前や人数制限を変更できます。\n{stream_status_text(allow_stream)}",
                             color=discord.Color.blue()
                         )
                         await new_channel.send(embed=embed, view=VCRenamePanelView())
