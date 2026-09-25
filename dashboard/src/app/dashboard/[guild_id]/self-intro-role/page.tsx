@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Save, Loader2, Eye, Shield, Hash, Bell, UserPlus } from 'lucide-react';
+import { Save, Loader2, Eye, Shield, Hash, Bell, UserPlus, Plus, Trash2, Split } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import PageHeader from '@/components/PageHeader';
 import ChannelSelect from '@/components/ChannelSelect';
@@ -8,6 +8,16 @@ import RoleSelect from '@/components/RoleSelect';
 
 interface Channel { id: string; name: string; type: number; }
 interface Role { id: string; name: string; color: number; }
+interface ChannelRoleRule { channel_id: string; role_ids: string[]; enabled: boolean; }
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+      <input type="checkbox" className="sr-only peer" checked={checked} onChange={e => onChange(e.target.checked)} />
+      <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+    </label>
+  );
+}
 
 function extractKeywords(template: string): string[] {
   const keywords: string[] = [];
@@ -35,6 +45,10 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
   const [channels, setChannels] = useState<Channel[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [channelRolesEnabled, setChannelRolesEnabled] = useState(false);
+  const [channelRoles, setChannelRoles] = useState<ChannelRoleRule[]>([]);
+  const updateRule = (i: number, patch: Partial<ChannelRoleRule>) =>
+    setChannelRoles(rs => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
   const textChannels = channels.filter(c => c.type === 0);
   const keywords = extractKeywords(template);
@@ -51,6 +65,8 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
         setWelcomeChannelId(settings.welcome_channel_id ?? '');
         setRoleId(settings.role_id ?? '');
         setTemplate(settings.template ?? '');
+        setChannelRolesEnabled(settings.channel_roles_enabled ?? false);
+        setChannelRoles(Array.isArray(settings.channel_roles) ? settings.channel_roles : []);
       }
       if (ch && !ch.error && Array.isArray(ch)) setChannels(ch);
       if (ro && !ro.error && Array.isArray(ro)) setRoles(ro.filter((r: Role) => r.name !== '@everyone'));
@@ -62,8 +78,14 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
   }, [guildId]);
 
   const handleSave = async () => {
-    if (isEnabled && (!channelIds.length || !roleId)) {
-      toast.error('有効にする場合は「自己紹介チャンネル」と「付与するロール」を両方選択してください。');
+    const rules = channelRoles.filter(r => r.channel_id);
+    if (channelRoles.some(r => !r.channel_id || !r.role_ids.length)) {
+      toast.error('チャンネルごとのロール付与で、チャンネルかロールが未選択の行があります。');
+      return;
+    }
+    const activeRules = channelRolesEnabled ? rules.filter(r => r.enabled) : [];
+    if (isEnabled && ((!channelIds.length && !activeRules.length) || (!roleId && !activeRules.length))) {
+      toast.error('有効にする場合は「自己紹介チャンネル」と「付与するロール」を選択してください（チャンネルごとのロール付与を使う場合は共通のロールは省略できます）。');
       return;
     }
 
@@ -77,7 +99,9 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
           welcome_channel_id: welcomeChannelId || null,
           role_id: roleId || null,
           template: template || '',
-          is_enabled: isEnabled
+          is_enabled: isEnabled,
+          channel_roles_enabled: channelRolesEnabled,
+          channel_roles: rules,
         }),
       });
 
@@ -107,10 +131,7 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
             <div className="font-semibold text-white">機能を有効にする</div>
             <div className="text-sm text-zinc-400 mt-1">OFFにすると入室案内もロール付与も行われません</div>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" className="sr-only peer" checked={isEnabled} onChange={e => setIsEnabled(e.target.checked)} />
-            <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
-          </label>
+          <Toggle checked={isEnabled} onChange={setIsEnabled} />
         </div>
       </div>
 
@@ -148,8 +169,8 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-zinc-300 mb-2"><Shield size={14} className="inline mr-1 text-zinc-400" />付与するロール <span className="text-red-400">*</span></label>
-          <p className="text-xs text-zinc-500 mb-2">自己紹介完成後に付与するロールです。</p>
+          <label className="block text-sm font-medium text-zinc-300 mb-2"><Shield size={14} className="inline mr-1 text-zinc-400" />付与するロール（全員共通）</label>
+          <p className="text-xs text-zinc-500 mb-2">どのチャンネルで自己紹介しても付与するロールです。下の「チャンネルごとのロール付与」だけを使う場合は未選択でもかまいません。</p>
           <RoleSelect
             label="付与するロール"
             placeholder="ロールを選択..."
@@ -158,6 +179,74 @@ export default function SelfIntroRolePage({ params }: { params: { guild_id: stri
             onChange={(id: any) => setRoleId(id || '')}
             multiple={false}
           />
+        </div>
+      </div>
+
+      {/* チャンネルごとのロール付与 */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold flex items-center gap-2"><Split size={18} className="text-red-500" />チャンネルごとのロール付与</h2>
+            <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+              自己紹介を書いたチャンネルに応じて、追加でロールを付与します。<br />
+              例: 「自己紹介♂」チャンネル → 男性ロール、「自己紹介♀」チャンネル → 女性ロール<br />
+              ここで選んだチャンネルも自己紹介チャンネルとして監視します（上の共通ロールも一緒に付与されます）。
+            </p>
+          </div>
+          <Toggle checked={channelRolesEnabled} onChange={setChannelRolesEnabled} />
+        </div>
+
+        <div className={`space-y-3 ${channelRolesEnabled ? '' : 'opacity-50'}`}>
+          {!channelRolesEnabled && <p className="text-xs text-zinc-500">OFFのあいだは、下の設定があってもチャンネルごとのロールは付与されません。</p>}
+          {channelRoles.map((rule, i) => (
+            <div key={i} className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
+                  <Toggle checked={rule.enabled} onChange={v => updateRule(i, { enabled: v })} />
+                  <span>{rule.enabled ? 'ON' : 'OFF'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setChannelRoles(rs => rs.filter((_, j) => j !== i))}
+                  className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-zinc-800"
+                  aria-label="この行を削除"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">このチャンネルで自己紹介したら</label>
+                  <ChannelSelect
+                    label="チャンネル"
+                    placeholder="チャンネルを選択..."
+                    channels={textChannels}
+                    value={rule.channel_id}
+                    onChange={(id: any) => updateRule(i, { channel_id: id ? String(id) : '' })}
+                    multiple={false}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">このロールを付与（複数可）</label>
+                  <RoleSelect
+                    label="ロール"
+                    placeholder="ロールを選択..."
+                    roles={roles}
+                    value={rule.role_ids}
+                    onChange={(ids: any) => updateRule(i, { role_ids: Array.isArray(ids) ? ids.map(String) : ids ? [String(ids)] : [] })}
+                    multiple
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setChannelRoles(rs => [...rs, { channel_id: '', role_ids: [], enabled: true }])}
+            className="w-full flex items-center justify-center gap-2 border border-dashed border-zinc-700 hover:border-red-500 text-zinc-400 hover:text-white rounded-lg py-2.5 text-sm transition-colors"
+          >
+            <Plus size={16} /> チャンネルとロールの組み合わせを追加
+          </button>
         </div>
       </div>
 

@@ -1502,6 +1502,12 @@ async def setup_db_schema(p):
 
         await conn.execute("ALTER TABLE self_intro_role_settings ADD COLUMN IF NOT EXISTS channel_ids BIGINT[] DEFAULT '{}'")
 
+        # チャンネルごとの追加ロール
+
+        await conn.execute("ALTER TABLE self_intro_role_settings ADD COLUMN IF NOT EXISTS channel_roles_enabled BOOLEAN DEFAULT FALSE")
+
+        await conn.execute("ALTER TABLE self_intro_role_settings ADD COLUMN IF NOT EXISTS channel_roles JSONB DEFAULT '[]'::jsonb")
+
 
 
         await conn.execute('''
@@ -5208,11 +5214,28 @@ async def is_command_enabled(guild_id: int, command_name: str) -> bool:
 
 # --- 自己紹介ロール設宁E---
 
+def _parse_channel_roles(raw) -> list:
+    """チャンネルごとの追加ロール [{channel_id, role_ids, enabled}] を読み込む。"""
+    try:
+        items = json.loads(raw) if isinstance(raw, str) else (raw or [])
+    except Exception:
+        return []
+    rules = []
+    for item in items if isinstance(items, list) else []:
+        try:
+            channel_id = int(item.get("channel_id"))
+            role_ids = [int(r) for r in (item.get("role_ids") or []) if str(r).isdigit()]
+        except (TypeError, ValueError, AttributeError):
+            continue
+        rules.append({"channel_id": channel_id, "role_ids": role_ids, "enabled": item.get("enabled", True) is not False})
+    return rules
+
+
 async def get_self_intro_role_settings(guild_id: int) -> dict:
     pool = await get_pool(guild_id)
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            'SELECT channel_id, channel_ids, welcome_channel_id, role_id, template, is_enabled FROM self_intro_role_settings WHERE guild_id = $1',
+            'SELECT channel_id, channel_ids, welcome_channel_id, role_id, template, is_enabled, channel_roles_enabled, channel_roles::text AS channel_roles FROM self_intro_role_settings WHERE guild_id = $1',
             guild_id
         )
         if row:
@@ -5225,6 +5248,8 @@ async def get_self_intro_role_settings(guild_id: int) -> dict:
                 "role_id": row['role_id'],
                 "template": row['template'],
                 "is_enabled": row['is_enabled'],
+                "channel_roles_enabled": bool(row['channel_roles_enabled']),
+                "channel_roles": _parse_channel_roles(row['channel_roles']),
             }
         return {"channel_id": None, "welcome_channel_id": None, "role_id": None, "template": None, "is_enabled": False}
 
