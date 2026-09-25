@@ -1,41 +1,43 @@
 import re
+import unicodedata
 import discord
 from discord.ext import commands
 import database
 from helpers import get_setting
 
 
+def normalize_intro_text(text: str) -> str:
+    """
+    表記ゆれを吸収するため、全角/半角をそろえ（NFKC）、空白・記号（【】｜：「」など）・絵文字を取り除く。
+    例:「【鯖で使う名前】山田」「鯖で使う名前｜山田」「鯖で使う名前：山田」はどれも「鯖で使う名前山田」になる。
+    """
+    text = unicodedata.normalize("NFKC", text or "").lower()
+    return re.sub(r"[\W_]+", "", text)
+
+
 def extract_template_keywords(template: str) -> list:
     """
-    テンプレート文字列から【】や「：（:）」で始まるキーワードを抽出する。
-    空行はスキップし、先頭の記号キーワード部分（【〇〇】 または 〇〇：）を返す。
+    テンプレートの各行から項目名を取り出す（比較用に normalize_intro_text 済み）。
+    【〇〇】 / 〇〇： / 〇〇| のような書き方なら 〇〇 の部分、それ以外の行は行全体を項目名にする。
     """
     keywords = []
     for line in template.splitlines():
         line = line.strip()
         if not line:
             continue
-        # 【〇〇】 形式
-        m = re.match(r'(【[^】]+】)', line)
-        if m:
-            keywords.append(m.group(1))
-            continue
-        # 〇〇： または 〇〇: 形式
-        m = re.match(r'([^：:]+[：:])', line)
-        if m:
-            keywords.append(m.group(1))
-            continue
-        # どちらでもない行はそのまま追加（完全一致チェック）
-        keywords.append(line)
+        m = re.match(r"[【\[［「『]([^】\]］」』]+)[】\]］」』]", line)
+        if not m:
+            m = re.match(r"([^：:｜|]+)[：:｜|]", line)
+        label = normalize_intro_text(m.group(1) if m else line)
+        if label and label not in keywords:
+            keywords.append(label)
     return keywords
 
 
 def check_intro_completeness(message_content: str, keywords: list) -> bool:
-    """メッセージに全キーワードが含まれているか確認する。"""
-    for kw in keywords:
-        if kw not in message_content:
-            return False
-    return True
+    """メッセージに全項目名が含まれているか確認する（括弧や区切り記号の違いは気にしない）。"""
+    text = normalize_intro_text(message_content)
+    return all(kw in text for kw in keywords)
 
 
 def get_intro_channel_ids(settings: dict) -> list:
@@ -103,63 +105,56 @@ class SelfIntroRoles(commands.Cog):
         except Exception as e:
             print(f"[SelfIntroRoles] Failed to send welcome message: {e}")
 
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        """自己紹介チャンネルへの投稿を検知してロールを付与する。"""
-        if message.author.bot:
-            return
-        if not message.guild:
-            return
-
+    async def _intro_target(self, message: discord.Message):
+        """自己紹介として扱うメッセージなら (付与するロール, 項目名) を返す。対象外なら None。"""
+        if message.author.bot or not message.guild or not isinstance(message.author, discord.Member):
+            return None
         guild = message.guild
-        member = message.author
-
         try:
             settings = await database.get_self_intro_role_settings(guild.id)
         except Exception:
-            return
-
+            return None
         if not settings.get("is_enabled"):
-            return
+            return None
 
         intro_channel_ids = get_intro_channel_ids(settings)
         role_id = settings.get("role_id")
         template = settings.get("template") or ""
+        if not intro_channel_ids or not role_id or not template:
+            return None
 
-        if not intro_channel_ids or not role_id:
-            return
+        # 自己紹介チャンネル（どれか）のメッセージのみ対象（スレッドなら親チャンネルで判定）
+        channel_ids = {message.channel.id, getattr(message.channel, "parent_id", None)}
+        if not channel_ids & set(intro_channel_ids):
+            return None
 
-        # 自己紹介チャンネル（どれか）のメッセージのみ対象
-        if message.channel.id not in intro_channel_ids:
-            return
-
-        # 既にロールを持っていればスキップ
         target_role = guild.get_role(int(role_id))
-        if not target_role:
-            return
-        if target_role in member.roles:
-            return
-
-        # テンプレートからキーワード抽出
-        if not template:
-            return
+        if not target_role or target_role in message.author.roles:
+            return None
         keywords = extract_template_keywords(template)
         if not keywords:
-            return
+            return None
+        return target_role, keywords
 
-        # メッセージが全キーワードを含んでいるか確認
+    async def _try_grant(self, message: discord.Message, notify: bool = True) -> bool:
+        """テンプレートの項目がそろっていればロールを付与する。付与したら True。"""
+        target = await self._intro_target(message)
+        if not target:
+            return False
+        target_role, keywords = target
         if not check_intro_completeness(message.content, keywords):
-            return
+            return False
 
-        # ロール付与
+        guild = message.guild
+        member = message.author
         try:
             await member.add_roles(target_role, reason="自己紹介テンプレート完成によるロール付与")
         except discord.Forbidden:
-            print(f"[SelfIntroRoles] Cannot add role {role_id} to {member} in guild {guild.id}")
-            return
+            print(f"[SelfIntroRoles] Cannot add role {target_role.id} to {member} in guild {guild.id}")
+            return False
         except Exception as e:
             print(f"[SelfIntroRoles] Failed to add role: {e}")
-            return
+            return False
 
         # 案内メッセージを削除
         try:
@@ -177,13 +172,57 @@ class SelfIntroRoles(commands.Cog):
             print(f"[SelfIntroRoles] Failed to delete welcome message: {e}")
 
         # 付与完了の通知（チャンネルには出さず、本人のDMにだけ送る）
-        try:
-            await member.send(
-                f"✅ 【{guild.name}】自己紹介ありがとうございます！ロール **{target_role.name}** を付与しました🎉"
-            )
-        except (discord.Forbidden, discord.HTTPException):
-            # DM拒否設定の場合は通知なし（ロールは付与済み）
-            pass
+        if notify:
+            try:
+                await member.send(
+                    f"✅ 【{guild.name}】自己紹介ありがとうございます！ロール **{target_role.name}** を付与しました🎉"
+                )
+            except (discord.Forbidden, discord.HTTPException):
+                # DM拒否設定の場合は通知なし（ロールは付与済み）
+                pass
+        return True
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """自己紹介チャンネルへの投稿を検知してロールを付与する。"""
+        await self._try_grant(message)
+
+    @commands.Cog.listener()
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        """投稿後に書き足して項目がそろった場合もロールを付与する。"""
+        if before.content == after.content:
+            return
+        await self._try_grant(after)
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """
+        起動時に、自己紹介チャンネルの最近の投稿を見直す。
+        以前は【】の書き方が違うと判定できなかったため、条件を満たしているのにロールが付いていない人に付け直す。
+        """
+        if getattr(self, "_backfilled", False):
+            return
+        self._backfilled = True
+        for guild in self.bot.guilds:
+            try:
+                settings = await database.get_self_intro_role_settings(guild.id)
+            except Exception:
+                continue
+            if not settings.get("is_enabled") or not settings.get("role_id") or not settings.get("template"):
+                continue
+            granted = 0
+            for cid in get_intro_channel_ids(settings):
+                channel = guild.get_channel(cid)
+                if not isinstance(channel, discord.TextChannel):
+                    continue
+                try:
+                    async for message in channel.history(limit=200):
+                        if await self._try_grant(message):
+                            granted += 1
+                except (discord.Forbidden, discord.HTTPException) as e:
+                    print(f"[SelfIntroRoles] Cannot read history of {cid} in guild {guild.id}: {e}")
+            if granted:
+                print(f"[SelfIntroRoles] Backfilled self-intro role for {granted} member(s) in guild {guild.id}")
 
 
 async def setup(bot):
