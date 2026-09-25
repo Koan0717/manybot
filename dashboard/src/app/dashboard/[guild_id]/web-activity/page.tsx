@@ -23,8 +23,11 @@ type Enabled = Record<GameKey, boolean>;
 const allOff = (): Enabled => Object.fromEntries(GAMES.map((g) => [g.key, false])) as Enabled;
 
 // lib/webAccess.ts の WEB_ROLE_ACCESS と同じ形。未設定は「使える」
-type RoleAccess = Record<'downgrade' | 'violator', Record<'casino' | 'shop', boolean>>;
-const allAllowed = (): RoleAccess => ({ downgrade: { casino: true, shop: true }, violator: { casino: true, shop: true } });
+type RoleAccess = Record<'downgrade' | 'violator', Record<'casino' | 'shop' | 'gacha', boolean>>;
+const allAllowed = (): RoleAccess => ({
+  downgrade: { casino: true, shop: true, gacha: true },
+  violator: { casino: true, shop: true, gacha: true },
+});
 const ROLE_GROUPS = [
   { key: 'downgrade', label: '評価落ち', desc: '「基本・評価設定」の評価落ちロールを持つメンバー' },
   { key: 'violator', label: '違反者', desc: '「基本・評価設定」の違反者ロールを持つメンバー' },
@@ -40,6 +43,7 @@ const BASE_ROLE_SETTINGS = [
 const FEATURES = [
   { key: 'casino', label: '🎰 ギャンブル（カジノ）' },
   { key: 'shop', label: '🛒 ショップ' },
+  { key: 'gacha', label: '🎁 ガチャ' },
 ] as const;
 
 export default function WebActivitySettingsPage() {
@@ -48,6 +52,7 @@ export default function WebActivitySettingsPage() {
 
   const [enabled, setEnabled] = useState<Enabled>(allOff);
   const [shopEnabled, setShopEnabled] = useState(false);
+  const [gachaEnabled, setGachaEnabled] = useState(false);
   const [roleAccess, setRoleAccess] = useState<RoleAccess>(allAllowed);
   // 「基本・評価設定」のロール（役職タブ・利用制限の判定に使う。ここでは表示だけ）
   const [baseRoles, setBaseRoles] = useState<Record<string, string[]>>({});
@@ -67,12 +72,13 @@ export default function WebActivitySettingsPage() {
         const saved = data?.WEB_GAMES_ENABLED && typeof data.WEB_GAMES_ENABLED === 'object' ? data.WEB_GAMES_ENABLED : {};
         setEnabled(Object.fromEntries(GAMES.map((g) => [g.key, saved[g.key] === true])) as Enabled);
         setShopEnabled(data?.WEB_SHOP_ENABLED === true);
+        setGachaEnabled(data?.WEB_GACHA_ENABLED === true);
         const toIds = (v: unknown) => (Array.isArray(v) ? v.map(String) : v ? [String(v)] : []);
         setBaseRoles(Object.fromEntries(BASE_ROLE_SETTINGS.map((b) => [b.key, toIds(data?.[b.key])])));
         const ra = data?.WEB_ROLE_ACCESS && typeof data.WEB_ROLE_ACCESS === 'object' ? data.WEB_ROLE_ACCESS : {};
         setRoleAccess({
-          downgrade: { casino: ra.downgrade?.casino !== false, shop: ra.downgrade?.shop !== false },
-          violator: { casino: ra.violator?.casino !== false, shop: ra.violator?.shop !== false },
+          downgrade: { casino: ra.downgrade?.casino !== false, shop: ra.downgrade?.shop !== false, gacha: ra.downgrade?.gacha !== false },
+          violator: { casino: ra.violator?.casino !== false, shop: ra.violator?.shop !== false, gacha: ra.violator?.gacha !== false },
         });
       })
       .catch(() => setError('設定の取得に失敗しました'))
@@ -86,7 +92,7 @@ export default function WebActivitySettingsPage() {
       const res = await fetch(`/api/guilds/${guildId}/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ WEB_GAMES_ENABLED: enabled, WEB_SHOP_ENABLED: shopEnabled, WEB_ROLE_ACCESS: roleAccess,
+        body: JSON.stringify({ WEB_GAMES_ENABLED: enabled, WEB_SHOP_ENABLED: shopEnabled, WEB_GACHA_ENABLED: gachaEnabled, WEB_ROLE_ACCESS: roleAccess,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -200,13 +206,40 @@ export default function WebActivitySettingsPage() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.08 }}
+        className="bg-gray-800/50 border border-cyan-500/20 p-6 rounded-xl"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-cyan-300">🎁 ガチャ（福引）</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              ONにすると、メンバー画面の「ガチャ」タブでガチャマシンを回して福引を引けます。景品・当たりやすさ・消費額・対象ロールは
+              <Link href={`/dashboard/${guildId}/gacha`} className="text-cyan-400 hover:underline mx-1">福引ガチャ設定</Link>
+              の内容がそのまま使われます（Discordのパネルと共通）。結果のログは「福引ガチャ」のログチャンネルに送られます。
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={gachaEnabled}
+              onChange={(e) => setGachaEnabled(e.target.checked)}
+            />
+            <div className="w-14 h-7 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-cyan-600"></div>
+          </label>
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
         className="bg-gray-800/50 border border-cyan-500/20 p-6 rounded-xl space-y-4"
       >
         <div className="border-b border-cyan-500/20 pb-4">
           <h2 className="text-xl font-semibold text-cyan-300">評価落ち・違反者の利用</h2>
           <p className="text-xs text-gray-500 mt-1">
-            OFFにすると、そのメンバーの画面ではカジノ・ショップのタブが表示されず、使うこともできません。
+            OFFにすると、そのメンバーの画面ではそのタブ（カジノ・ショップ・ガチャ）が表示されず、使うこともできません。
             評価落ちと違反者の両方に当てはまるメンバーは、どちらか一方でもOFFなら使えません。
           </p>
         </div>
@@ -216,7 +249,7 @@ export default function WebActivitySettingsPage() {
               <div className="font-medium text-white">{group.label}</div>
               <div className="text-xs text-gray-500">{group.desc}</div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {FEATURES.map((f) => (
                 <div key={f.key} className="flex items-center justify-between gap-3 bg-gray-900/60 border border-gray-700/60 rounded-lg px-4 py-3">
                   <span className="text-sm text-gray-200">{f.label}</span>
@@ -252,7 +285,7 @@ export default function WebActivitySettingsPage() {
             で設定したロールで判定します。未設定のものは、当てはまるメンバーがいない扱いになります。
           </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {BASE_ROLE_SETTINGS.map((b) => {
             const ids = baseRoles[b.key] ?? [];
             const names = ids.map((id) => roles.find((r) => r.id === id)?.name ?? `不明なロール (${id})`);
