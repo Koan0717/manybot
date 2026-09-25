@@ -6,21 +6,25 @@ import database
 from helpers import get_setting
 
 
+# 項目名と中身を区切るのに使われる記号（比較のときは取り除く）。♀ や絵文字などの中身は残す
+_SEPARATORS = r"[\s【】\[\]［］「」『』()（）<>＜＞《》〈〉〔〕|｜:：;；・,，、。.．\-‐=＝~〜/／_＿*＊#＃→⇒]+"
+
+
 def normalize_intro_text(text: str) -> str:
     """
-    表記ゆれを吸収するため、全角/半角をそろえ（NFKC）、空白・記号（【】｜：「」など）・絵文字を取り除く。
+    表記ゆれを吸収するため、全角/半角をそろえ（NFKC）、空白と区切り記号（【】｜：「」など）を取り除く。
     例:「【鯖で使う名前】山田」「鯖で使う名前｜山田」「鯖で使う名前：山田」はどれも「鯖で使う名前山田」になる。
     """
     text = unicodedata.normalize("NFKC", text or "").lower()
-    return re.sub(r"[\W_]+", "", text)
+    return re.sub(_SEPARATORS, "", text)
 
 
-def extract_template_keywords(template: str) -> list:
+def extract_template_items(template: str) -> list:
     """
-    テンプレートの各行から項目名を取り出す（比較用に normalize_intro_text 済み）。
+    テンプレートの各行から (比較用の項目名, 表示用の項目名) を取り出す。
     【〇〇】 / 〇〇： / 〇〇| のような書き方なら 〇〇 の部分、それ以外の行は行全体を項目名にする。
     """
-    keywords = []
+    items = []
     for line in template.splitlines():
         line = line.strip()
         if not line:
@@ -28,16 +32,51 @@ def extract_template_keywords(template: str) -> list:
         m = re.match(r"[【\[［「『]([^】\]］」』]+)[】\]］」』]", line)
         if not m:
             m = re.match(r"([^：:｜|]+)[：:｜|]", line)
-        label = normalize_intro_text(m.group(1) if m else line)
-        if label and label not in keywords:
-            keywords.append(label)
-    return keywords
+        raw = (m.group(1) if m else line).strip()
+        label = normalize_intro_text(raw)
+        if label and label not in [k for k, _ in items]:
+            items.append((label, raw))
+    return items
+
+
+def extract_template_keywords(template: str) -> list:
+    return [k for k, _ in extract_template_items(template)]
+
+
+def find_intro_items(message_content: str, keywords: list) -> tuple:
+    """
+    メッセージの中で (書かれていない項目, 中身が空の項目) を返す。
+    項目名のあとから次の項目名までを、その項目の中身とみなす。
+    """
+    text = normalize_intro_text(message_content)
+    spans = {}
+    taken = []
+    # 長い項目名から探す（「タイプ」が「好きなタイプ」の中で見つからないように）
+    for kw in sorted(keywords, key=len, reverse=True):
+        start = 0
+        while True:
+            i = text.find(kw, start)
+            if i < 0:
+                break
+            if not any(a <= i < b or a < i + len(kw) <= b for a, b in taken):
+                spans[kw] = (i, i + len(kw))
+                taken.append((i, i + len(kw)))
+                break
+            start = i + 1
+    missing = [kw for kw in keywords if kw not in spans]
+    order = sorted(spans.items(), key=lambda x: x[1][0])
+    empty = []
+    for n, (kw, (_, end)) in enumerate(order):
+        nxt = order[n + 1][1][0] if n + 1 < len(order) else len(text)
+        if not text[end:nxt]:
+            empty.append(kw)
+    return missing, empty
 
 
 def check_intro_completeness(message_content: str, keywords: list) -> bool:
-    """メッセージに全項目名が含まれているか確認する（括弧や区切り記号の違いは気にしない）。"""
-    text = normalize_intro_text(message_content)
-    return all(kw in text for kw in keywords)
+    """全項目が書かれていて、中身も埋まっているか（括弧や区切り記号の違いは気にしない）。"""
+    missing, empty = find_intro_items(message_content, keywords)
+    return not missing and not empty
 
 
 def get_intro_channel_ids(settings: dict) -> list:
@@ -131,18 +170,38 @@ class SelfIntroRoles(commands.Cog):
         target_role = guild.get_role(int(role_id))
         if not target_role or target_role in message.author.roles:
             return None
-        keywords = extract_template_keywords(template)
-        if not keywords:
+        items = extract_template_items(template)
+        if not items:
             return None
-        return target_role, keywords
+        return target_role, items
 
-    async def _try_grant(self, message: discord.Message, notify: bool = True) -> bool:
+    async def _try_grant(self, message: discord.Message, notify: bool = True, warn: bool = True) -> bool:
         """テンプレートの項目がそろっていればロールを付与する。付与したら True。"""
         target = await self._intro_target(message)
         if not target:
             return False
-        target_role, keywords = target
-        if not check_intro_completeness(message.content, keywords):
+        target_role, items = target
+        keywords = [k for k, _ in items]
+        names = dict(items)
+        missing, empty = find_intro_items(message.content, keywords)
+        if missing or empty:
+            # 自己紹介のつもりの投稿（項目が半分以上ある）なら、足りない項目を教える
+            if warn and len(keywords) - len(missing) >= max(1, len(keywords) / 2):
+                lines = []
+                if empty:
+                    lines.append("✏️ 中身が空の項目: " + " ".join(f"【{names[k]}】" for k in empty))
+                if missing:
+                    lines.append("❓ 見つからない項目: " + " ".join(f"【{names[k]}】" for k in missing))
+                try:
+                    await message.reply(
+                        "⚠️ 自己紹介の項目がまだ埋まっていないため、ロールを付与できませんでした。\n"
+                        + "\n".join(lines)
+                        + "\n項目のあとに内容を書いて送り直すか、このメッセージを編集してください。",
+                        delete_after=60,
+                        mention_author=False,
+                    )
+                except discord.HTTPException:
+                    pass
             return False
 
         guild = message.guild
@@ -151,10 +210,26 @@ class SelfIntroRoles(commands.Cog):
             await member.add_roles(target_role, reason="自己紹介テンプレート完成によるロール付与")
         except discord.Forbidden:
             print(f"[SelfIntroRoles] Cannot add role {target_role.id} to {member} in guild {guild.id}")
+            if warn:
+                try:
+                    await message.reply(
+                        f"⚠️ Botの権限が足りず、ロール **{target_role.name}** を付与できませんでした。\n"
+                        "管理者の方へ: サーバー設定 → ロール で、Botのロールを付与するロールより上に移動し、「ロールの管理」権限を付けてください。",
+                        delete_after=120,
+                        mention_author=False,
+                    )
+                except discord.HTTPException:
+                    pass
             return False
         except Exception as e:
             print(f"[SelfIntroRoles] Failed to add role: {e}")
             return False
+
+        # 付与したことがチャンネルでも分かるようにリアクションを付ける
+        try:
+            await message.add_reaction("✅")
+        except discord.HTTPException:
+            pass
 
         # 案内メッセージを削除
         try:
@@ -217,7 +292,7 @@ class SelfIntroRoles(commands.Cog):
                     continue
                 try:
                     async for message in channel.history(limit=200):
-                        if await self._try_grant(message):
+                        if await self._try_grant(message, warn=False):
                             granted += 1
                 except (discord.Forbidden, discord.HTTPException) as e:
                     print(f"[SelfIntroRoles] Cannot read history of {cid} in guild {guild.id}: {e}")
