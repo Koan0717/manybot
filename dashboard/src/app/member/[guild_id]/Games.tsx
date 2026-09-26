@@ -36,7 +36,7 @@ export interface BoardGameView {
 export interface GamesInfo {
   enabled: true;
   currency_name: string;
-  games: { key: GameKey; label: string; bet_enabled: boolean; default_bet: number }[];
+  games: { key: GameKey; label: string; bet_enabled: boolean }[];
   mine: BoardGameView[];
   /** アクティビティを通話で開いているとき、その通話にいる人 */
   voice_peers?: Player[];
@@ -292,12 +292,11 @@ export default function Games({
   const g = info.games.find((x) => x.key === game);
   // 空欄・0 は賭けなし（申し込む人が決め、受ける人も同じ額を賭ける）
   const pvpBet = g?.bet_enabled && pvpBetText !== '' ? Number(pvpBetText) : 0;
-  // ゲームを切り替えたら、ダッシュボードで決めた既定の賭け金を入れておく（0 なら空欄）
+  // ゲームを切り替えたら賭け金の入力は空に戻す（金額は申し込む人が毎回決める）
   useEffect(() => {
-    const d = g?.bet_enabled && g.default_bet > 0 ? String(g.default_bet) : '';
-    setBetText(d);
-    setPvpBetText(d);
-  }, [g?.key, g?.bet_enabled, g?.default_bet]);
+    setBetText('');
+    setPvpBetText('');
+  }, [g?.key]);
 
   const reload = useCallback(async () => {
     try {
@@ -476,7 +475,7 @@ export default function Games({
                   value={pvpBetText}
                   onChange={(e) => setPvpBetText(e.target.value.replace(/[^\d]/g, ''))}
                   inputMode="numeric"
-                  placeholder="空欄・0 で賭けなし"
+                  placeholder="金額を入力（空欄・0 で賭けなし）"
                   className="flex-1 min-w-0 px-3 py-2 bg-zinc-800/60 border border-zinc-700/60 rounded-xl text-sm"
                 />
                 <span className="text-xs text-zinc-400">{info.currency_name}</span>

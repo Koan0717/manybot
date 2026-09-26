@@ -26,7 +26,7 @@ const INVITE_LIMIT_MIN = 10;
 export interface BoardGameSettings {
   currencyName: string;
   enabled: Record<BoardGame, boolean>;
-  bet: Record<BoardGame, { enabled: boolean; defaultBet: number }>;
+  bet: Record<BoardGame, { enabled: boolean }>;
 }
 
 export async function loadBoardGameSettings(pool: Pool, guildId: string): Promise<BoardGameSettings> {
@@ -34,7 +34,7 @@ export async function loadBoardGameSettings(pool: Pool, guildId: string): Promis
   try {
     const res = await pool.query(
       `SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN
-         ($2, 'CURRENCY_NAME', 'OTHELLO_BET_ENABLED', 'OTHELLO_DEFAULT_BET', 'CHESS_BET_ENABLED', 'CHESS_DEFAULT_BET', 'SHOGI_BET_ENABLED', 'SHOGI_DEFAULT_BET')`,
+         ($2, 'CURRENCY_NAME', 'OTHELLO_BET_ENABLED', 'CHESS_BET_ENABLED', 'SHOGI_BET_ENABLED')`,
       [guildId, WEB_BOARDGAMES_KEY]
     );
     for (const r of res.rows) s[r.setting_key] = r.setting_value;
@@ -53,7 +53,7 @@ export async function loadBoardGameSettings(pool: Pool, guildId: string): Promis
     bet: Object.fromEntries(
       BOARD_GAMES.map((g) => {
         const P = g.toUpperCase();
-        return [g, { enabled: t(s[`${P}_BET_ENABLED`]), defaultBet: Math.max(0, Math.floor(Number(s[`${P}_DEFAULT_BET`]) || 100)) }];
+        return [g, { enabled: t(s[`${P}_BET_ENABLED`]) }];
       })
     ) as BoardGameSettings['bet'],
   };

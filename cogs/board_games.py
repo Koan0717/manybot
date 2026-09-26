@@ -677,8 +677,15 @@ class OpponentSelectView(discord.ui.View):
         if opp.bot:
             return await interaction.response.send_message("Botとは対戦できません。AI対戦を選んでください。", ephemeral=True)
         self.stop()
-        channel = await _pick_game_channel(interaction, self.spec)
-        await _send_invitation(interaction, self.spec, opp, channel)
+        spec = self.spec
+        if _truthy(get_setting(interaction.client, f"{spec.prefix}_BET_ENABLED", interaction.guild.id)):
+            # 賭け金は申し込む人が決める（空欄・0 は賭けなし）。受ける人も同じ額を賭ける
+            async def on_bet(it, bet):
+                channel = await _pick_game_channel(it, spec)
+                await _send_invitation(it, spec, opp, channel, bet)
+            return await interaction.response.send_modal(InviteBetModal(spec, on_bet))
+        channel = await _pick_game_channel(interaction, spec)
+        await _send_invitation(interaction, spec, opp, channel, 0)
 
 
 async def _pick_game_channel(interaction: discord.Interaction, spec):
@@ -707,18 +714,32 @@ async def _pick_game_channel(interaction: discord.Interaction, spec):
     return interaction.channel
 
 
-async def _send_invitation(interaction, spec, opponent, channel):
+class InviteBetModal(discord.ui.Modal):
+    bet_input = discord.ui.TextInput(label="賭け金（相手も同じ額を賭けます）", placeholder="空欄・0 で賭けなし", max_length=10, required=False)
+
+    def __init__(self, spec, next_callback):
+        super().__init__(title=f"{spec.name}：賭け金を決める")
+        self.next_callback = next_callback
+
+    async def on_submit(self, interaction: discord.Interaction):
+        raw = (self.bet_input.value or "").strip().replace(",", "")
+        try:
+            bet = int(raw) if raw else 0
+        except ValueError:
+            return await interaction.response.send_message("数字を入力してください。", ephemeral=True)
+        if bet < 0:
+            return await interaction.response.send_message("0以上の金額を入力してください。", ephemeral=True)
+        if bet > 0 and await database.get_balance(interaction.guild.id, interaction.user.id) < bet:
+            return await interaction.response.send_message("残高が足りません。", ephemeral=True)
+        await self.next_callback(interaction, bet)
+
+
+async def _send_invitation(interaction, spec, opponent, channel, bet: int = 0):
     guild_id = interaction.guild.id
     if (spec.key, guild_id, channel.id) in sessions:
         return await interaction.response.edit_message(content=f"❌ {channel.mention} ではすでに{spec.name}の対局中です。", view=None)
-    bet = 0
-    if _truthy(get_setting(interaction.client, f"{spec.prefix}_BET_ENABLED", guild_id)):
-        try:
-            bet = int(get_setting(interaction.client, f"{spec.prefix}_DEFAULT_BET", guild_id) or 0)
-        except Exception:
-            bet = 0
     view = InvitationView(spec, interaction.user.id, opponent.id, channel, guild_id, bet)
-    bet_text = f"\n💰 賭け金: **{bet:,} {_currency(guild_id)}**（各自）" if bet > 0 else ""
+    bet_text = f"\n💰 賭け金: **{bet:,} {_currency(guild_id)}**（あなたも同じ額を賭けます。勝つと {bet * 2:,}）" if bet > 0 else ""
     content = (f"{spec.emoji} **{spec.name}対戦の招待**\n{interaction.user.mention} から {opponent.mention} へ対戦の申し込みです！{bet_text}\n"
                f"対局場所: {channel.mention}\n\n5分以内に返事をしてください。")
     await interaction.response.edit_message(content=f"✅ {channel.mention} に招待を送りました！", view=None)

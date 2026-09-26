@@ -17,7 +17,6 @@ export default function BoardGameSettings({ game, name, icon: Icon }: { game: 'o
 
   const defaults = (data: any = {}) => ({
     [`${P}_BET_ENABLED`]: data[`${P}_BET_ENABLED`] ?? false,
-    [`${P}_DEFAULT_BET`]: data[`${P}_DEFAULT_BET`] ?? 100,
     [`${P}_SHOW_STATS`]: data[`${P}_SHOW_STATS`] ?? true,
     [`${P}_PANEL_CHANNEL`]: data[`${P}_PANEL_CHANNEL`] ?? '',
     [`${P}_AUTO_VC_ENABLED`]: data[`${P}_AUTO_VC_ENABLED`] ?? false,
@@ -133,7 +132,7 @@ export default function BoardGameSettings({ game, name, icon: Icon }: { game: 'o
         <div className="flex items-center justify-between bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
           <div>
             <p className="text-sm font-tech text-zinc-300 font-medium">賭け ON/OFF</p>
-            <p className="text-xs font-tech text-zinc-500 mt-0.5">{name}での賭けを有効にします</p>
+            <p className="text-xs font-tech text-zinc-500 mt-0.5">{name}での賭けを有効にします（金額は対局を申し込む人が毎回決めます）</p>
           </div>
           <button
             onClick={() => updateSetting(`${P}_BET_ENABLED`, !settings[`${P}_BET_ENABLED`])}
@@ -147,18 +146,6 @@ export default function BoardGameSettings({ game, name, icon: Icon }: { game: 'o
           </button>
         </div>
 
-        {settings[`${P}_BET_ENABLED`] && (
-          <div className="flex flex-col space-y-2 bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
-            <label className="text-sm font-tech text-zinc-300 font-medium">デフォルト賭け金額</label>
-            <input
-              type="number"
-              min={1}
-              value={settings[`${P}_DEFAULT_BET`]}
-              onChange={(e) => updateSetting(`${P}_DEFAULT_BET`, parseInt(e.target.value) || 100)}
-              className="w-full bg-zinc-900 border border-zinc-600 rounded px-3 py-2 text-white font-tech focus:outline-none focus:border-cyan-500 transition-colors"
-            />
-          </div>
-        )}
 
         <div className="flex items-center justify-between bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
           <div>

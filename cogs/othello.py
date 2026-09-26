@@ -1105,42 +1105,77 @@ class OpponentSelectView(discord.ui.View):
             return await interaction.response.send_message("Botとは対戦できません。AI対戦を選択してください。", ephemeral=True)
 
         self.stop()
+        bet_enabled = get_setting(interaction.client, "OTHELLO_BET_ENABLED", interaction.guild.id if interaction.guild else None)
+        if bet_enabled and (str(bet_enabled).lower() == "true" or bet_enabled is True):
+            # 賭け金は申し込む人が決める（空欄・0 は賭けなし）。受ける人も同じ額を賭ける
+            opponent = self.selected_user
+            initiator_id = self.initiator_id
 
-        # 開始者が通話（VC）に入っているかチェック
-        bot = interaction.client
-        guild = interaction.guild
-        member = guild.get_member(self.initiator_id) if guild else None
-        in_vc = (member and member.voice and member.voice.channel)
+            async def on_bet(it: discord.Interaction, bet: int):
+                await _show_vc_check(it, initiator_id, opponent, bet)
+            return await interaction.response.send_modal(InviteBetModal(on_bet))
+        await _show_vc_check(interaction, self.initiator_id, self.selected_user, 0)
 
-        auto_vc_setting = get_setting(bot, "OTHELLO_AUTO_VC_ENABLED", guild.id if guild else None)
-        auto_vc_enabled = (str(auto_vc_setting).lower() == "true" or auto_vc_setting is True)
 
-        vc_view = VCCheckView(self.initiator_id, self.selected_user, in_vc, auto_vc_enabled)
-        
-        if in_vc:
-            vc_name = member.voice.channel.name
+class InviteBetModal(discord.ui.Modal, title="オセロ：賭け金を決める"):
+    bet_input = discord.ui.TextInput(label="賭け金（相手も同じ額を賭けます）", placeholder="空欄・0 で賭けなし", max_length=10, required=False)
+
+    def __init__(self, next_callback):
+        super().__init__()
+        self.next_callback = next_callback
+
+    async def on_submit(self, interaction: discord.Interaction):
+        raw = (self.bet_input.value or "").strip().replace(",", "")
+        try:
+            bet = int(raw) if raw else 0
+        except ValueError:
+            return await interaction.response.send_message("数字を入力してください。", ephemeral=True)
+        if bet < 0:
+            return await interaction.response.send_message("0以上の金額を入力してください。", ephemeral=True)
+        if bet > 0 and interaction.guild and await database.get_balance(interaction.guild.id, interaction.user.id) < bet:
+            return await interaction.response.send_message("残高が足りません。", ephemeral=True)
+        await self.next_callback(interaction, bet)
+
+
+async def _show_vc_check(interaction: discord.Interaction, initiator_id: int, opponent, bet: int):
+    """対局する場所（通話のチャット・専用VC・指定チャンネル）を確認する"""
+    self_initiator_id = initiator_id
+
+    # 開始者が通話（VC）に入っているかチェック
+    bot = interaction.client
+    guild = interaction.guild
+    member = guild.get_member(self_initiator_id) if guild else None
+    in_vc = (member and member.voice and member.voice.channel)
+
+    auto_vc_setting = get_setting(bot, "OTHELLO_AUTO_VC_ENABLED", guild.id if guild else None)
+    auto_vc_enabled = (str(auto_vc_setting).lower() == "true" or auto_vc_setting is True)
+
+    vc_view = VCCheckView(self_initiator_id, opponent, in_vc, auto_vc_enabled, bet)
+    
+    if in_vc:
+        vc_name = member.voice.channel.name
+        prompt = (
+            f"対戦相手: {opponent.mention}\n\n"
+            f"現在ボイスチャンネル「**{vc_name}**」に接続中です。\n"
+            f"この通話のテキストチャンネルにゲームボードを設置しますか？"
+        )
+    else:
+        if auto_vc_enabled:
             prompt = (
-                f"対戦相手: {self.selected_user.mention}\n\n"
-                f"現在ボイスチャンネル「**{vc_name}**」に接続中です。\n"
-                f"この通話のテキストチャンネルにゲームボードを設置しますか？"
+                f"対戦相手: {opponent.mention}\n\n"
+                f"現在ボイスチャンネルに接続していません。\n"
+                f"ダッシュボードの設定に基づき、専用の対戦VCを新しく作成します。"
             )
         else:
-            if auto_vc_enabled:
-                prompt = (
-                    f"対戦相手: {self.selected_user.mention}\n\n"
-                    f"現在ボイスチャンネルに接続していません。\n"
-                    f"ダッシュボードの設定に基づき、専用の対戦VCを新しく作成します。"
-                )
-            else:
-                prompt = (
-                    f"対戦相手: {self.selected_user.mention}\n\n"
-                    f"対戦ゲームを行う場所を確認してください。"
-                )
+            prompt = (
+                f"対戦相手: {opponent.mention}\n\n"
+                f"対戦ゲームを行う場所を確認してください。"
+            )
 
-        await interaction.response.edit_message(
-            content=prompt,
-            view=vc_view
-        )
+    await interaction.response.edit_message(
+        content=prompt,
+        view=vc_view
+    )
 
 
 # ============================================================
@@ -1149,8 +1184,9 @@ class OpponentSelectView(discord.ui.View):
 class VCCheckView(discord.ui.View):
     """PvPゲームを行うチャンネルを決定するView。"""
 
-    def __init__(self, initiator_id: int, opponent: discord.Member, in_vc: bool, auto_vc_enabled: bool):
+    def __init__(self, initiator_id: int, opponent: discord.Member, in_vc: bool, auto_vc_enabled: bool, bet: int = 0):
         super().__init__(timeout=60)
+        self.bet = bet
         self.initiator_id = initiator_id
         self.opponent = opponent
         self.in_vc = in_vc
@@ -1211,7 +1247,7 @@ class VCCheckView(discord.ui.View):
             target_channel = interaction.channel
 
         self.stop()
-        await _send_pvp_invitation(interaction, self.opponent, target_channel)
+        await _send_pvp_invitation(interaction, self.opponent, target_channel, self.bet)
 
     async def use_other_channel(self, interaction: discord.Interaction):
         """専用VC作成または指定チャンネルで対戦"""
@@ -1250,7 +1286,7 @@ class VCCheckView(discord.ui.View):
             target_channel = interaction.channel
 
         self.stop()
-        await _send_pvp_invitation(interaction, self.opponent, target_channel)
+        await _send_pvp_invitation(interaction, self.opponent, target_channel, self.bet)
 
     async def cancel(self, interaction: discord.Interaction):
         if interaction.user.id != self.initiator_id:
@@ -1259,7 +1295,7 @@ class VCCheckView(discord.ui.View):
         await interaction.response.edit_message(content="対戦の作成をキャンセルしました。", view=None)
 
 
-async def _send_pvp_invitation(interaction: discord.Interaction, opponent: discord.Member, game_channel):
+async def _send_pvp_invitation(interaction: discord.Interaction, opponent: discord.Member, game_channel, bet: int = 0):
     """PvPの招待メッセージを対象チャンネルに送信する。"""
     bot = interaction.client
     guild_id = interaction.guild.id if interaction.guild else None
@@ -1273,14 +1309,6 @@ async def _send_pvp_invitation(interaction: discord.Interaction, opponent: disco
             await interaction.response.edit_message(content=msg, view=None)
         return
 
-    bet_enabled = get_setting(bot, "OTHELLO_BET_ENABLED", guild_id)
-    default_bet_raw = get_setting(bot, "OTHELLO_DEFAULT_BET", guild_id)
-    bet = 0
-    if bet_enabled and (str(bet_enabled).lower() == "true" or bet_enabled is True):
-        try:
-            bet = int(default_bet_raw) if default_bet_raw else 0
-        except Exception:
-            bet = 0
 
     initiator = interaction.user
     invite_view = InvitationView(
@@ -1292,7 +1320,7 @@ async def _send_pvp_invitation(interaction: discord.Interaction, opponent: disco
     )
 
     currency_name = get_setting(bot, "CURRENCY_NAME", guild_id) or "コイン"
-    bet_text = f"\n💰 賭け金: **{bet:,} {currency_name}**" if bet > 0 else ""
+    bet_text = f"\n💰 賭け金: **{bet:,} {currency_name}**（あなたも同じ額を賭けます。勝つと {bet * 2:,}）" if bet > 0 else ""
     content = (
         f"♟️ **オセロ対戦の招待**\n"
         f"{initiator.mention} から {opponent.mention} へ対戦申し込みがありました！{bet_text}\n"
