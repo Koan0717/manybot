@@ -573,6 +573,9 @@ async def end_game(channel, session: OthelloSession, winner: int):
                 # 黒の勝ち
                 prize = session.bet * 2
                 await database.add_balance(session.guild_id, session.black_id, prize)
+                if not session.is_ai and session.white_id:
+                    # 送金履歴に「負けた人 → 勝った人」へ賭け金分を残す
+                    await database.log_transfer(session.guild_id, session.white_id, session.black_id, session.bet, "othello")
                 embed.add_field(
                     name="💰 賭け精算",
                     value=f"⚫ 黒 <@{session.black_id}> 元金 **{session.bet:,}** → **{prize:,} {currency_name}**（+{prize - session.bet:,}）",
@@ -589,6 +592,7 @@ async def end_game(channel, session: OthelloSession, winner: int):
                 else:
                     prize = session.bet * 2
                     await database.add_balance(session.guild_id, session.white_id, prize)
+                    await database.log_transfer(session.guild_id, session.black_id, session.white_id, session.bet, "othello")
                     embed.add_field(
                         name="💰 賭け精算",
                         value=f"⬜ 白 <@{session.white_id}> 元金 **{session.bet:,}** → **{prize:,} {currency_name}**（+{prize - session.bet:,}）",

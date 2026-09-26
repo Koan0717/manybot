@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import type { Pool, PoolClient } from 'pg';
 import { DiscordGuildMember, botRequest, memberAvatarUrl, memberDisplayName } from '@/lib/discordApi';
 import { CasinoError, recordGameResult, withTransaction } from '@/lib/casino/db';
+import { recordTransfer } from '@/lib/transferLogs';
 import * as O from './othello';
 import * as C from './chess';
 import * as S from './shogi';
@@ -246,6 +247,14 @@ async function settle(client: PoolClient, row: Row, winner: 0 | 1 | 2, reason: s
       guildId: row.guild_id, userId: uid, game: row.game, isWin, isDraw, bet, payout,
       kind: `${mode}_${isDraw ? 'draws' : isWin ? 'wins' : 'losses'}`,
     });
+  }
+  // 送金履歴に「負けた人 → 勝った人」へ賭け金分を残す
+  const firstId = row.first_id;
+  const secondId = row.second_id;
+  if (bet > 0 && row.mode === 'pvp' && winner !== 0 && firstId && secondId) {
+    const winId = winner === 1 ? firstId : secondId;
+    const loseId = winner === 1 ? secondId : firstId;
+    await recordTransfer(client, { guildId: row.guild_id, senderId: loseId, receiverId: winId, amount: bet, source: row.game });
   }
   await client.query(
     `UPDATE web_board_games SET status = 'finished', winner = $2, reason = $3, settlement = $4::jsonb, updated_at = NOW() WHERE id = $1`,
