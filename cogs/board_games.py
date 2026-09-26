@@ -365,13 +365,13 @@ async def end_game(channel, session: BoardSession, winner, reason: str):
             elif session.is_ai:
                 if winner == 1:
                     await database.add_balance(session.guild_id, session.first_id, session.bet * 2)
-                    embed.add_field(name="💰 賭け精算", value=f"<@{session.first_id}> が **{session.bet * 2:,} {cur}** 獲得！", inline=False)
+                    embed.add_field(name="💰 賭け精算", value=f"<@{session.first_id}> 元金 **{session.bet:,}** → **{session.bet * 2:,} {cur}**（+{session.bet:,}）", inline=False)
                 else:
                     embed.add_field(name="💰 賭け精算", value=f"AI の勝ち。**{session.bet:,} {cur}** 没収。", inline=False)
             else:
                 win_id = session.first_id if winner == 1 else session.second_id
                 await database.add_balance(session.guild_id, win_id, session.bet * 2)
-                embed.add_field(name="💰 賭け精算", value=f"<@{win_id}> が **{session.bet * 2:,} {cur}** 獲得！", inline=False)
+                embed.add_field(name="💰 賭け精算", value=f"<@{win_id}> 元金 **{session.bet:,}** → **{session.bet * 2:,} {cur}**（+{session.bet:,}）", inline=False)
         except Exception as e:
             print(f"[ERROR] board_games 賭け精算: {e}")
 

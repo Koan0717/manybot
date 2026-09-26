@@ -29,6 +29,8 @@ export interface BoardGameView {
   notes: string[];
   winner: number | null;
   reason: string | null;
+  /** 自分の精算（賭けがあった対局だけ）: 賭けた額・受け取った額・精算後の所持金 */
+  settlement?: { bet: number; payout: number; balance: number } | null;
 }
 /** GET /api/member/guilds/[guild_id]/boardgames の中身（enabled: true のとき） */
 export interface GamesInfo {
@@ -167,7 +169,10 @@ function GameScreen({ guildId, initial, onBack, onFinished }: { guildId: string;
           ) : (
             <>
               <div className="text-sm">
-                <b>{oppName}</b> さんから対局の申し込みです{g.bet > 0 ? `（賭け金 ${fmt(g.bet)}）` : ''}
+                <b>{oppName}</b> さんから対局の申し込みです
+                {g.bet > 0 && (
+                  <div className="mt-2 text-amber-300 font-bold">💰 賭け金 {fmt(g.bet)}（あなたも同じ額を賭けます。勝つと {fmt(g.bet * 2)}）</div>
+                )}
               </div>
               <div className="flex gap-2 justify-center">
                 <button onClick={() => act({ action: 'accept' })} disabled={sending} className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-bold">
@@ -194,6 +199,21 @@ function GameScreen({ guildId, initial, onBack, onFinished }: { guildId: string;
                 <div className="px-6 py-3 rounded-2xl bg-black/75 border border-amber-400/60 text-center" style={{ animation: 'hl-banner 0.4s ease-out' }}>
                   <div className="text-2xl font-black">{resultText}</div>
                   <div className="text-xs text-zinc-300 mt-1">{g.reason}</div>
+                  {g.settlement && g.settlement.bet > 0 && (
+                    <div className="mt-2 pt-2 border-t border-white/10 text-sm space-y-0.5">
+                      {g.settlement.payout > g.settlement.bet ? (
+                        <div>
+                          💰 元金 <b>{fmt(g.settlement.bet)}</b> → <b className="text-amber-300">{fmt(g.settlement.payout)}</b>
+                          <span className="text-emerald-300 font-bold ml-1">（+{fmt(g.settlement.payout - g.settlement.bet)}）</span>
+                        </div>
+                      ) : g.settlement.payout === g.settlement.bet ? (
+                        <div>💰 元金 <b>{fmt(g.settlement.bet)}</b> は返金されました</div>
+                      ) : (
+                        <div>💸 元金 <b>{fmt(g.settlement.bet)}</b> → <b className="text-red-400">0</b><span className="text-red-400 ml-1">（-{fmt(g.settlement.bet)}）</span></div>
+                      )}
+                      <div className="text-xs text-zinc-400">所持金: {fmt(g.settlement.balance)}</div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -270,7 +290,14 @@ export default function Games({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ id: string; display_name: string; avatar_url: string; is_bot: boolean }[]>([]);
   const g = info.games.find((x) => x.key === game);
-  const pvpBet = g?.bet_enabled && pvpBetText !== '' ? Number(pvpBetText) : undefined;
+  // 空欄・0 は賭けなし（申し込む人が決め、受ける人も同じ額を賭ける）
+  const pvpBet = g?.bet_enabled && pvpBetText !== '' ? Number(pvpBetText) : 0;
+  // ゲームを切り替えたら、ダッシュボードで決めた既定の賭け金を入れておく（0 なら空欄）
+  useEffect(() => {
+    const d = g?.bet_enabled && g.default_bet > 0 ? String(g.default_bet) : '';
+    setBetText(d);
+    setPvpBetText(d);
+  }, [g?.key, g?.bet_enabled, g?.default_bet]);
 
   const reload = useCallback(async () => {
     try {
@@ -421,7 +448,7 @@ export default function Games({
                   value={betText}
                   onChange={(e) => setBetText(e.target.value.replace(/[^\d]/g, ''))}
                   inputMode="numeric"
-                  placeholder={`賭け金（例: ${fmt(g.default_bet)}／なしなら空欄）`}
+                  placeholder="賭け金（空欄・0 で賭けなし）"
                   className="flex-1 min-w-0 px-3 py-2.5 bg-zinc-800/60 border border-zinc-700/60 rounded-xl text-sm"
                 />
                 <span className="text-xs text-zinc-400">{info.currency_name}</span>
@@ -434,7 +461,9 @@ export default function Games({
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Swords className="w-4 h-4" />} AI対戦を始める
             </button>
-            {g.bet_enabled && <p className="text-[11px] text-zinc-500 text-center">勝つと賭け金の2倍、引き分けは返金、負けると没収です</p>}
+            {g.bet_enabled && Number(betText) > 0 && (
+              <p className="text-[11px] text-zinc-500 text-center">勝つと {fmt(Number(betText) * 2)}（賭け金の2倍）、引き分けは返金、負けると没収です</p>
+            )}
           </div>
 
           {/* 対人戦 */}
@@ -447,7 +476,7 @@ export default function Games({
                   value={pvpBetText}
                   onChange={(e) => setPvpBetText(e.target.value.replace(/[^\d]/g, ''))}
                   inputMode="numeric"
-                  placeholder={`${fmt(g.default_bet)}（0で賭けなし）`}
+                  placeholder="空欄・0 で賭けなし"
                   className="flex-1 min-w-0 px-3 py-2 bg-zinc-800/60 border border-zinc-700/60 rounded-xl text-sm"
                 />
                 <span className="text-xs text-zinc-400">{info.currency_name}</span>
@@ -500,7 +529,7 @@ export default function Games({
               </div>
             ))}
             <p className="text-[11px] text-zinc-500">
-              相手にはDiscordのDMでお知らせが届きます。先手はランダムで決まります。{g.bet_enabled ? `賭け金は各自 ${fmt(pvpBet ?? g.default_bet)} ${info.currency_name}（相手が受けたときに2人から預かり、勝った人が2人分を受け取ります）。` : ''}
+              相手にはDiscordのDMでお知らせが届きます。先手はランダムで決まります。{pvpBet > 0 ? `賭け金は各自 ${fmt(pvpBet)} ${info.currency_name}（相手も同じ額を賭けます。勝った人が ${fmt(pvpBet * 2)} を受け取ります）。` : ''}
             </p>
           </div>
         </>

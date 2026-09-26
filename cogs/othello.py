@@ -571,11 +571,11 @@ async def end_game(channel, session: OthelloSession, winner: int):
                 )
             elif winner == 1:
                 # 黒の勝ち
-                prize = session.bet * 2 if not session.is_ai else session.bet
+                prize = session.bet * 2
                 await database.add_balance(session.guild_id, session.black_id, prize)
                 embed.add_field(
                     name="💰 賭け精算",
-                    value=f"⚫ 黒 <@{session.black_id}> が **{prize:,} {currency_name}** 獲得！",
+                    value=f"⚫ 黒 <@{session.black_id}> 元金 **{session.bet:,}** → **{prize:,} {currency_name}**（+{prize - session.bet:,}）",
                     inline=False
                 )
             else:
@@ -591,7 +591,7 @@ async def end_game(channel, session: OthelloSession, winner: int):
                     await database.add_balance(session.guild_id, session.white_id, prize)
                     embed.add_field(
                         name="💰 賭け精算",
-                        value=f"⬜ 白 <@{session.white_id}> が **{prize:,} {currency_name}** 獲得！",
+                        value=f"⬜ 白 <@{session.white_id}> 元金 **{session.bet:,}** → **{prize:,} {currency_name}**（+{prize - session.bet:,}）",
                         inline=False
                     )
         except Exception as e:
@@ -604,7 +604,7 @@ async def end_game(channel, session: OthelloSession, winner: int):
             is_black_win = (winner == 1)
             is_draw = (winner == 0)
             black_bet = session.bet
-            black_payout = (session.bet * 2 if not session.is_ai else session.bet) if is_black_win else (session.bet if is_draw else 0)
+            black_payout = (session.bet * 2) if is_black_win else (session.bet if is_draw else 0)
             
             extra_b = {}
             if session.is_ai:
