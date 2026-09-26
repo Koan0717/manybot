@@ -860,6 +860,110 @@ class BoardGamesCog(commands.Cog):
         self.bot.add_view(ChessPanelView())
         self.bot.add_view(ShogiPanelView())
         self.idle_check.start()
+        self._presence_synced = False
+
+    # ------------------------------------------------------------
+    # アクティビティ・Web のボードゲーム連携
+    #  - voice_presence: 誰がどの通話にいるか（アクティビティで「この通話にいる人」を出すため）
+    #  - activity_join_intents: 招待の「アクティビティで参加」を押した人を、起動後にその対局へ案内するため
+    # ------------------------------------------------------------
+    async def _ensure_tables(self, guild_id: int):
+        pool = await database.get_pool(guild_id)
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS voice_presence (
+                    guild_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    channel_id BIGINT NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (guild_id, user_id)
+                )
+            """)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS activity_join_intents (
+                    guild_id BIGINT NOT NULL,
+                    user_id BIGINT NOT NULL,
+                    game_id TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (guild_id, user_id)
+                )
+            """)
+        return pool
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if self._presence_synced:
+            return
+        self._presence_synced = True
+        for guild in self.bot.guilds:
+            try:
+                pool = await self._ensure_tables(guild.id)
+                async with pool.acquire() as conn:
+                    await conn.execute("DELETE FROM voice_presence WHERE guild_id = $1", guild.id)
+                    for vc in list(guild.voice_channels) + list(guild.stage_channels):
+                        for m in vc.members:
+                            if not m.bot:
+                                await conn.execute(
+                                    "INSERT INTO voice_presence (guild_id, user_id, channel_id) VALUES ($1, $2, $3) "
+                                    "ON CONFLICT (guild_id, user_id) DO UPDATE SET channel_id = EXCLUDED.channel_id, updated_at = NOW()",
+                                    guild.id, m.id, vc.id)
+            except Exception as e:
+                print(f"[board_games] voice_presence sync failed ({guild.id}): {e}")
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member: discord.Member, before, after):
+        if member.bot or before.channel == after.channel:
+            return
+        try:
+            pool = await self._ensure_tables(member.guild.id)
+            async with pool.acquire() as conn:
+                if after.channel:
+                    await conn.execute(
+                        "INSERT INTO voice_presence (guild_id, user_id, channel_id) VALUES ($1, $2, $3) "
+                        "ON CONFLICT (guild_id, user_id) DO UPDATE SET channel_id = EXCLUDED.channel_id, updated_at = NOW()",
+                        member.guild.id, member.id, after.channel.id)
+                else:
+                    await conn.execute("DELETE FROM voice_presence WHERE guild_id = $1 AND user_id = $2", member.guild.id, member.id)
+        except Exception as e:
+            print(f"[board_games] voice_presence update failed: {e}")
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        """Web の招待メッセージの「アクティビティで参加」ボタン（custom_id: bgjoin:<guild_id>:<game_id>）"""
+        if interaction.type != discord.InteractionType.component:
+            return
+        custom_id = (interaction.data or {}).get("custom_id", "")
+        if not custom_id.startswith("bgjoin:"):
+            return
+        try:
+            _, guild_id, game_id = custom_id.split(":", 2)
+            guild_id = int(guild_id)
+        except ValueError:
+            return
+        try:
+            pool = await self._ensure_tables(guild_id)
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    "INSERT INTO activity_join_intents (guild_id, user_id, game_id) VALUES ($1, $2, $3) "
+                    "ON CONFLICT (guild_id, user_id) DO UPDATE SET game_id = EXCLUDED.game_id, created_at = NOW()",
+                    guild_id, interaction.user.id, game_id)
+        except Exception as e:
+            print(f"[board_games] join intent save failed: {e}")
+        # その場でアクティビティを起動する（起動できない場所ではやり方を案内する）
+        try:
+            await interaction.response.launch_activity()
+        except Exception as e:
+            print(f"[board_games] launch_activity failed: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "ここではアクティビティを起動できませんでした。\n"
+                        "サーバーのボイスチャンネルに入って、アプリ（🚀 アクティビティ）からこのBotを起動してください。"
+                        "起動すると、そのまま対局に参加できます。",
+                        ephemeral=True,
+                    )
+            except Exception:
+                pass
 
     def cog_unload(self):
         self.idle_check.cancel()

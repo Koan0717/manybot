@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Bot, Flag, Loader2, Search, Swords, Users } from 'lucide-react';
-import { memberFetch } from '@/lib/memberClient';
+import { getActivityContext, memberFetch } from '@/lib/memberClient';
 import { ChessBoardView, OthelloBoardView, ShogiBoardView } from './Boards';
 
 type GameKey = 'othello' | 'chess' | 'shogi';
@@ -36,6 +36,8 @@ export interface GamesInfo {
   currency_name: string;
   games: { key: GameKey; label: string; bet_enabled: boolean; default_bet: number }[];
   mine: BoardGameView[];
+  /** アクティビティを通話で開いているとき、その通話にいる人 */
+  voice_peers?: Player[];
 }
 
 const GAME_META: Record<GameKey, { icon: string; label: string; sides: [string, string]; color: string }> = {
@@ -243,23 +245,58 @@ function GameScreen({ guildId, initial, onBack, onFinished }: { guildId: string;
 
 // ---------------- 一覧・新しい対局 ----------------
 
-export default function Games({ guildId, info, onChanged }: { guildId: string; info: GamesInfo; onChanged: () => void }) {
+export default function Games({
+  guildId,
+  info,
+  onChanged,
+  openGameId,
+  onOpened,
+}: {
+  guildId: string;
+  info: GamesInfo;
+  onChanged: () => void;
+  openGameId?: string | null;
+  onOpened?: () => void;
+}) {
   const [game, setGame] = useState<GameKey>(info.games[0]?.key ?? 'othello');
   const [mine, setMine] = useState<BoardGameView[]>(info.mine);
   const [open, setOpen] = useState<BoardGameView | null>(null);
   const [level, setLevel] = useState(3);
   const [betText, setBetText] = useState('');
+  // 対人戦の賭け金（空欄なら既定の金額）
+  const [pvpBetText, setPvpBetText] = useState('');
+  const [peers, setPeers] = useState<Player[]>(info.voice_peers ?? []);
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ id: string; display_name: string; avatar_url: string; is_bot: boolean }[]>([]);
   const g = info.games.find((x) => x.key === game);
+  const pvpBet = g?.bet_enabled && pvpBetText !== '' ? Number(pvpBetText) : undefined;
 
   const reload = useCallback(async () => {
     try {
-      const data = await api(`/api/member/guilds/${guildId}/boardgames`);
-      if (data.enabled) setMine(data.mine);
+      const ctx = getActivityContext();
+      const data = await api(`/api/member/guilds/${guildId}/boardgames${ctx?.channelId ? `?channel_id=${ctx.channelId}` : ''}`);
+      if (data.enabled) {
+        setMine(data.mine);
+        setPeers(data.voice_peers ?? []);
+      }
     } catch {}
   }, [guildId]);
+
+  // 招待から来たとき・お知らせの「参加する」を押したときは、その対局をすぐ開く
+  useEffect(() => {
+    if (!openGameId) return;
+    (async () => {
+      try {
+        const data = await api(`/api/member/guilds/${guildId}/boardgames/${openGameId}`);
+        setOpen(data.game);
+      } catch (e: any) {
+        toast.error(e.message);
+      } finally {
+        onOpened?.();
+      }
+    })();
+  }, [openGameId, guildId, onOpened]);
 
   // 一覧を開いているあいだは招待・相手の手を数秒ごとに確認する
   useEffect(() => {
@@ -384,7 +421,7 @@ export default function Games({ guildId, info, onChanged }: { guildId: string; i
                   value={betText}
                   onChange={(e) => setBetText(e.target.value.replace(/[^\d]/g, ''))}
                   inputMode="numeric"
-                  placeholder="賭け金（なしなら空欄）"
+                  placeholder={`賭け金（例: ${fmt(g.default_bet)}／なしなら空欄）`}
                   className="flex-1 min-w-0 px-3 py-2.5 bg-zinc-800/60 border border-zinc-700/60 rounded-xl text-sm"
                 />
                 <span className="text-xs text-zinc-400">{info.currency_name}</span>
@@ -403,6 +440,40 @@ export default function Games({ guildId, info, onChanged }: { guildId: string; i
           {/* 対人戦 */}
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
             <div className="font-semibold flex items-center gap-2"><Users className="w-4 h-4" /> メンバーと対戦</div>
+            {g.bet_enabled && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-400 flex-shrink-0">賭け金（各自）</span>
+                <input
+                  value={pvpBetText}
+                  onChange={(e) => setPvpBetText(e.target.value.replace(/[^\d]/g, ''))}
+                  inputMode="numeric"
+                  placeholder={`${fmt(g.default_bet)}（0で賭けなし）`}
+                  className="flex-1 min-w-0 px-3 py-2 bg-zinc-800/60 border border-zinc-700/60 rounded-xl text-sm"
+                />
+                <span className="text-xs text-zinc-400">{info.currency_name}</span>
+              </div>
+            )}
+            {/* 同じ通話にいる人（アクティビティを通話で開いているとき） */}
+            {peers.length > 0 && (
+              <div className="bg-indigo-950/40 border border-indigo-700/60 rounded-xl p-3 space-y-2">
+                <div className="font-semibold text-sm">🎧 この通話にいる人と対戦</div>
+                {peers.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2 bg-zinc-900/60 rounded-xl px-3 py-2">
+                    {p.avatar_url ? <img src={p.avatar_url} alt="" className="w-7 h-7 rounded-full" /> : <span className="w-7 h-7 rounded-full bg-zinc-700" />}
+                    <span className="flex-1 min-w-0 truncate text-sm">{p.name}</span>
+                    <button
+                      onClick={() => create({ action: 'invite', opponent_id: p.id, bet: pvpBet })}
+                      disabled={busy}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-xs font-bold"
+                    >
+                      {GAME_META[game].label}を申し込む
+                    </button>
+                  </div>
+                ))}
+                <p className="text-[11px] text-zinc-400">相手がこの通話でアクティビティを開いていれば、すぐ「参加する」のお知らせが出ます。</p>
+              </div>
+            )}
+
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <input
@@ -419,7 +490,7 @@ export default function Games({ guildId, info, onChanged }: { guildId: string; i
                 <button
                   onClick={() => {
                     setQuery('');
-                    create({ action: 'invite', opponent_id: m.id });
+                    create({ action: 'invite', opponent_id: m.id, bet: pvpBet });
                   }}
                   disabled={busy}
                   className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold"
@@ -429,7 +500,7 @@ export default function Games({ guildId, info, onChanged }: { guildId: string; i
               </div>
             ))}
             <p className="text-[11px] text-zinc-500">
-              相手にはDiscordのDMでお知らせが届きます。先手はランダムで決まります。{g.bet_enabled ? `賭け金は各自 ${fmt(g.default_bet)} ${info.currency_name}（勝った人が2人分を受け取ります）。` : ''}
+              相手にはDiscordのDMでお知らせが届きます。先手はランダムで決まります。{g.bet_enabled ? `賭け金は各自 ${fmt(pvpBet ?? g.default_bet)} ${info.currency_name}（相手が受けたときに2人から預かり、勝った人が2人分を受け取ります）。` : ''}
             </p>
           </div>
         </>

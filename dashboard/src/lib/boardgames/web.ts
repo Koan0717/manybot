@@ -357,7 +357,7 @@ export async function createAiGame(pool: Pool, s: BoardGameSettings, guildId: st
   return gameView(row, userId);
 }
 
-export async function createInvite(pool: Pool, s: BoardGameSettings, guildId: string, userId: string, game: BoardGame, opponentId: unknown) {
+export async function createInvite(pool: Pool, s: BoardGameSettings, guildId: string, userId: string, game: BoardGame, opponentId: unknown, betRaw?: unknown) {
   if (typeof opponentId !== 'string' || !/^\d{15,25}$/.test(opponentId)) throw new CasinoError('対戦相手を選んでください');
   if (opponentId === userId) throw new CasinoError('自分自身とは対戦できません');
   let opp: DiscordGuildMember;
@@ -367,7 +367,16 @@ export async function createInvite(pool: Pool, s: BoardGameSettings, guildId: st
     throw new CasinoError('相手がこのサーバーにいません', 404);
   }
   if (opp.user.bot) throw new CasinoError('Botとは対戦できません。AI対戦を選んでください');
-  const bet = s.bet[game].enabled ? s.bet[game].defaultBet : 0;
+  // 賭けがONなら、申し込む人が金額を決める（空欄なら既定の金額、0 なら賭けなし）
+  let bet = 0;
+  if (s.bet[game].enabled) {
+    bet = betRaw === undefined || betRaw === null || betRaw === '' ? s.bet[game].defaultBet : Number(betRaw);
+    if (!Number.isSafeInteger(bet) || bet < 0) throw new CasinoError('賭け金は0以上の整数で入力してください');
+  }
+  if (bet > 0) {
+    const bal = await pool.query('SELECT balance FROM users WHERE guild_id = $1 AND user_id = $2', [guildId, userId]);
+    if ((Number(bal.rows[0]?.balance) || 0) < bet) throw new CasinoError('残高が足りません');
+  }
   const id = randomUUID();
   const row = await withTransaction(pool, async (client) => {
     const dup = await client.query(
@@ -385,26 +394,79 @@ export async function createInvite(pool: Pool, s: BoardGameSettings, guildId: st
     );
     return r.rows[0] as Row;
   });
-  // 相手にDMで知らせる（失敗しても招待はできている）
+  await notifyInvite(pool, s, guildId, userId, opponentId, game, bet, id);
+  return gameView(row, userId);
+}
+
+// ---------------- 招待の通知・アクティビティ連携 ----------------
+
+/** 相手にDMで知らせ、相手が通話中ならその通話のチャットにも出す。「アクティビティで参加」ボタンを押すとアクティビティが起動する */
+async function notifyInvite(pool: Pool, s: BoardGameSettings, guildId: string, fromId: string, toId: string, game: BoardGame, bet: number, gameId: string) {
+  const me = await memberInfo(guildId, fromId);
+  const text = `🎮 **${me?.name ?? 'メンバー'}** さんから **${BOARD_GAME_LABEL[game]}** の対局の申し込みが届きました！${
+    bet ? `（賭け金 ${bet.toLocaleString()} ${s.currencyName}）` : ''
+  }\n下のボタンでアクティビティが開き、そのまま対局に参加できます（${INVITE_LIMIT_MIN}分以内）。`;
+  const components = [
+    { type: 1, components: [{ type: 2, style: 3, label: 'アクティビティで参加', emoji: { name: '🎮' }, custom_id: `bgjoin:${guildId}:${gameId}` }] },
+  ];
   try {
-    const me = await memberInfo(guildId, userId);
     const dm = await botRequest<{ id: string }>('/users/@me/channels', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient_id: opponentId }),
+      body: JSON.stringify({ recipient_id: toId }),
     });
     await botRequest(`/channels/${dm.id}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content: `🎮 **${me?.name ?? 'メンバー'}** さんから **${BOARD_GAME_LABEL[game]}** の対局の申し込みが届きました！${bet ? `（賭け金 ${bet.toLocaleString()} ${s.currencyName}）` : ''}\nアクティビティ・Web のプロフィール画面の「ゲーム」タブから受けられます（${INVITE_LIMIT_MIN}分以内）。`,
-        allowed_mentions: { parse: [] },
-      }),
+      body: JSON.stringify({ content: text, components, allowed_mentions: { parse: [] } }),
     });
   } catch (e) {
     console.error('board game invite DM failed:', e);
   }
-  return gameView(row, userId);
+  // 相手が通話中なら、その通話のチャットにも（押すとその通話でアクティビティが起動する）
+  try {
+    const vc = await pool.query('SELECT channel_id::text AS channel_id FROM voice_presence WHERE guild_id = $1 AND user_id = $2', [guildId, toId]);
+    const channelId = vc.rows[0]?.channel_id;
+    if (channelId) {
+      await botRequest(`/channels/${channelId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: `<@${toId}> ${text}`, components, allowed_mentions: { users: [toId] } }),
+      });
+    }
+  } catch (e: any) {
+    if (e?.code !== '42P01') console.error('board game invite VC post failed:', e);
+  }
+}
+
+/** 同じ通話にいる人（Bot が記録している voice_presence から。自分とBotは除く） */
+export async function voicePeers(pool: Pool, guildId: string, channelId: string, me: string) {
+  if (!/^\d{15,25}$/.test(channelId)) return [];
+  try {
+    const res = await pool.query(
+      'SELECT user_id::text AS user_id FROM voice_presence WHERE guild_id = $1 AND channel_id = $2 AND user_id <> $3 ORDER BY updated_at LIMIT 20',
+      [guildId, channelId, me]
+    );
+    return (await Promise.all(res.rows.map((r) => memberInfo(guildId, r.user_id)))).filter(Boolean);
+  } catch (e: any) {
+    if (e?.code === '42P01') return [];
+    throw e;
+  }
+}
+
+/** 「アクティビティで参加」を押してから5分以内なら、その対局のIDを返す（1回だけ） */
+export async function consumeJoinIntent(pool: Pool, guildId: string, userId: string): Promise<string | null> {
+  try {
+    const res = await pool.query(
+      `DELETE FROM activity_join_intents WHERE guild_id = $1 AND user_id = $2 RETURNING game_id, created_at > NOW() - INTERVAL '5 minutes' AS fresh`,
+      [guildId, userId]
+    );
+    const row = res.rows[0];
+    return row?.fresh ? String(row.game_id) : null;
+  } catch (e: any) {
+    if (e?.code === '42P01') return null;
+    throw e;
+  }
 }
 
 // ---------------- 1局の操作 ----------------

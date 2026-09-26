@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, LogOut, Server } from 'lucide-react';
-import { MemberState, clearMemberState, guildIconUrl, keepMemberSessionAlive, loadMemberState, markLoggedOut } from '@/lib/memberClient';
+import { MemberState, clearMemberState, getActivityContext, guildIconUrl, keepMemberSessionAlive, loadMemberState, markLoggedOut, memberFetch } from '@/lib/memberClient';
 
 export default function MemberHome() {
   const router = useRouter();
@@ -17,6 +17,35 @@ export default function MemberHome() {
     }
     setState(s);
     keepMemberSessionAlive();
+    // アクティビティで開いたとき: 招待の「アクティビティで参加」から来たならその対局へ、
+    // サーバーの通話で開いたならそのサーバーの画面へそのまま進む
+    const ctx = getActivityContext();
+    if (!ctx) return;
+    // 自動で進むのはアクティビティを開いた最初の1回だけ（「別のサーバーを選ぶ」で戻ってきたときは進まない）
+    try {
+      if (sessionStorage.getItem('member_activity_autonav')) return;
+      sessionStorage.setItem('member_activity_autonav', '1');
+    } catch {}
+    let cancelled = false;
+    (async () => {
+      const ids = s.guilds.map((g) => g.id);
+      const order = ctx.guildId && ids.includes(ctx.guildId) ? [ctx.guildId, ...ids.filter((id) => id !== ctx.guildId)] : ids;
+      for (const gid of order.slice(0, 10)) {
+        try {
+          const res = await memberFetch(`/api/member/guilds/${gid}/boardgames/join`);
+          const data = await res.json().catch(() => ({}));
+          if (cancelled) return;
+          if (data?.game_id) {
+            router.replace(`/member/${gid}?game=${encodeURIComponent(data.game_id)}`);
+            return;
+          }
+        } catch {}
+      }
+      if (!cancelled && ctx.guildId && ids.includes(ctx.guildId)) router.replace(`/member/${ctx.guildId}`);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
   const logout = () => {

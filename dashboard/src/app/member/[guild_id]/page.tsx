@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Coins, Crown, Dices, Gamepad2, Gift, History, Loader2, Search, Send, ShoppingBag, User, X } from 'lucide-react';
@@ -8,7 +8,7 @@ import Casino, { CasinoInfo } from './Casino';
 import Shop, { ShopInfo } from './Shop';
 import Gacha, { GachaInfo } from './Gacha';
 import Games, { GamesInfo } from './Games';
-import { guildIconUrl, isDiscordActivity, keepMemberSessionAlive, loadMemberState, memberFetch } from '@/lib/memberClient';
+import { guildIconUrl, isDiscordActivity, keepMemberSessionAlive, loadMemberState, memberFetch, getActivityContext } from '@/lib/memberClient';
 
 interface LevelStat { level: number; xp: number; next_xp: number }
 interface Profile {
@@ -460,6 +460,10 @@ export default function MemberGuildPage() {
   const [gacha, setGacha] = useState<GachaInfo | null>(null);
   // Webアクティビティ設定でボードゲームがどれもOFFなら「ゲーム」タブは出さない
   const [games, setGames] = useState<GamesInfo | null>(null);
+  // 招待から来たとき・招待が届いたときに開く対局
+  const [openGameId, setOpenGameId] = useState<string | null>(null);
+  const [inviteBanner, setInviteBanner] = useState<{ id: string; text: string } | null>(null);
+  const seenInvites = useRef<Set<string>>(new Set());
 
   // サーバーを切り替えたときに前のサーバーの表示が残らないよう、guildId ごとに取り直す
   useEffect(() => {
@@ -477,9 +481,29 @@ export default function MemberGuildPage() {
     setError('');
     (async () => {
       try {
-        const res = await memberFetch(`/api/member/guilds/${guildId}/boardgames`);
+        const ctx = getActivityContext();
+        const q = ctx?.channelId ? `?channel_id=${ctx.channelId}` : '';
+        const res = await memberFetch(`/api/member/guilds/${guildId}/boardgames${q}`);
         const data = await res.json().catch(() => null);
-        if (!cancelled && res.ok && data?.enabled) setGames(data);
+        if (cancelled || !res.ok || !data?.enabled) return;
+        setGames(data);
+        for (const g of data.mine ?? []) seenInvites.current.add(g.id);
+        // 招待の「アクティビティで参加」から来たなら、その対局をすぐ開く
+        let target = new URLSearchParams(window.location.search).get('game');
+        if (target) window.history.replaceState(null, '', window.location.pathname);
+        else if (ctx) {
+          const j = await memberFetch(`/api/member/guilds/${guildId}/boardgames/join`).then((r) => r.json()).catch(() => null);
+          target = j?.game_id ?? null;
+        }
+        if (!target && ctx) {
+          // アクティビティで開いたときに、自分宛ての招待が届いていればそれを開く
+          const invite = (data.mine ?? []).find((g: any) => g.status === 'invited' && g.inviter_id !== (g.you === 1 ? g.first?.id : g.second?.id));
+          target = invite?.id ?? null;
+        }
+        if (!cancelled && target) {
+          setOpenGameId(target);
+          setTab('games');
+        }
       } catch {}
     })();
     (async () => {
@@ -530,6 +554,28 @@ export default function MemberGuildPage() {
     (t) => (t.key !== 'casino' || casino) && (t.key !== 'shop' || shop) && (t.key !== 'gacha' || gacha) && (t.key !== 'games' || games)
   );
 
+  // ゲームタブ以外を見ているあいだに対局の申し込みが届いたら、上にお知らせを出す
+  useEffect(() => {
+    if (!games || tab === 'games') return;
+    const timer = setInterval(async () => {
+      try {
+        const res = await memberFetch(`/api/member/guilds/${guildId}/boardgames`);
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.enabled) return;
+        const fresh = (data.mine ?? []).find(
+          (g: any) => g.status === 'invited' && g.inviter_id !== (g.you === 1 ? g.first?.id : g.second?.id) && !seenInvites.current.has(g.id)
+        );
+        for (const g of data.mine ?? []) seenInvites.current.add(g.id);
+        if (fresh) {
+          const from = (fresh.you === 1 ? fresh.second : fresh.first)?.name ?? 'メンバー';
+          const label = ({ othello: 'オセロ', chess: 'チェス', shogi: '将棋' } as Record<string, string>)[fresh.game] ?? fresh.game;
+          setInviteBanner({ id: fresh.id, text: `${from} さんから${label}の対局の申し込み！` });
+        }
+      } catch {}
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [games, tab, guildId]);
+
   // 賭けの精算などで残高が変わったときに取り直す
   const refreshProfile = async () => {
     try {
@@ -577,6 +623,26 @@ export default function MemberGuildPage() {
             </button>
           ))}
         </nav>
+
+        {inviteBanner && tab !== 'games' && (
+          <div className="mb-4 flex items-center gap-3 bg-amber-950/60 border border-amber-500/70 rounded-2xl px-4 py-3 shadow-[0_0_16px_rgba(245,158,11,0.3)]">
+            <Gamepad2 className="w-5 h-5 text-amber-300 flex-shrink-0" />
+            <span className="flex-1 text-sm font-bold">{inviteBanner.text}</span>
+            <button
+              onClick={() => {
+                setOpenGameId(inviteBanner.id);
+                setInviteBanner(null);
+                setTab('games');
+              }}
+              className="px-3 py-1.5 rounded-lg bg-amber-500 text-zinc-900 text-xs font-black"
+            >
+              参加する
+            </button>
+            <button onClick={() => setInviteBanner(null)} className="text-zinc-400 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {error ? (
           <div className="bg-red-950/50 border border-red-900/60 text-red-200 rounded-2xl p-5 text-sm">{error}</div>
@@ -648,7 +714,7 @@ export default function MemberGuildPage() {
             }}
           />
         ) : tab === 'games' && games ? (
-          <Games key={guildId} guildId={guildId} info={games} onChanged={refreshProfile} />
+          <Games key={guildId} guildId={guildId} info={games} onChanged={refreshProfile} openGameId={openGameId} onOpened={() => setOpenGameId(null)} />
         ) : tab === 'casino' && casino ? (
           <Casino
             key={guildId}

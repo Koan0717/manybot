@@ -13,6 +13,7 @@ import {
   isBoardGame,
   listGames,
   loadBoardGameSettings,
+  voicePeers,
 } from '@/lib/boardgames/web';
 
 export const dynamic = 'force-dynamic';
@@ -36,6 +37,9 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     await ensureBoardGameTable(pool);
     await expireGames(pool, guildId);
     const mine = await listGames(pool, guildId, session.discord_id);
+    // アクティビティを通話で開いているときは、その通話にいる人（すぐ申し込めるように）
+    const channelId = new URL(request.url).searchParams.get('channel_id');
+    const peers = channelId ? await voicePeers(pool, guildId, channelId, session.discord_id) : [];
     // ゲームがOFFでも、始めてしまった対局は最後まで遊べるようにする
     if (!games.length && !mine.some((g) => g.status === 'active')) return NextResponse.json({ enabled: false });
     return NextResponse.json({
@@ -43,6 +47,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
       currency_name: s.currencyName,
       games: games.map((g) => ({ key: g, label: BOARD_GAME_LABEL[g], bet_enabled: s.bet[g].enabled, default_bet: s.bet[g].defaultBet })),
       mine,
+      voice_peers: peers,
     });
   } catch (e) {
     console.error('boardgames list failed:', e);
@@ -68,7 +73,7 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
       body?.action === 'ai'
         ? await createAiGame(pool, s, guildId, session.discord_id, game, body?.level, body?.bet)
         : body?.action === 'invite'
-          ? await createInvite(pool, s, guildId, session.discord_id, game, body?.opponent_id)
+          ? await createInvite(pool, s, guildId, session.discord_id, game, body?.opponent_id, body?.bet)
           : null;
     if (!view) return NextResponse.json({ error: '操作が不正です' }, { status: 400 });
     return NextResponse.json({ success: true, game: view });
