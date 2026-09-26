@@ -15,6 +15,10 @@ import {
   BlackjackState,
   Card,
   CoinSide,
+  HL_RANKS,
+  HighLowGuess,
+  HighLowOutcome,
+  HlCard,
   HORSES,
   HorseBetType,
   ROULETTE_BET_LABEL,
@@ -24,13 +28,15 @@ import {
   bjScore,
   dealBlackjack,
   dealerPlay,
+  hlFirstCard,
+  hlNextCard,
   playChinchiro,
   playCoinflip,
   playHorse,
   playRoulette,
   playSlot,
 } from './engine';
-import { CasinoSettings, applyTax } from './settings';
+import { CasinoSettings, applyTax, highLowTotalMul } from './settings';
 
 /**
  * Web・アクティビティのカジノ。各ゲームの流れ（賭け金の受付→抽選→払い戻し→ログ→戦績）は cogs/gambling.py と同じ。
@@ -463,3 +469,190 @@ export async function settleStaleBlackjack(ctx: PlayContext): Promise<void> {
 }
 
 export const HORSE_LIST = HORSES;
+
+// ---------------- High & Low ----------------
+
+interface HighLowState {
+  card: HlCard;
+  history: HlCard[];
+  streak: number;
+  revealed: boolean;
+}
+type HlReason = 'lose' | 'cashout' | 'max' | 'timeout';
+
+interface HlSessionRow {
+  id: string;
+  bet: string;
+  play_number: number;
+  state: HighLowState;
+}
+
+const hlText = (c: HlCard) => `${c.suit}${HL_RANKS[c.value - 1]}`;
+const hlAmount = (ctx: PlayContext, bet: number, streak: number) => Math.trunc(bet * highLowTotalMul(ctx.s.highlow, streak));
+
+async function loadHlSession(client: PoolClient | Pool, ctx: PlayContext, lock: boolean): Promise<HlSessionRow | null> {
+  const res = await client.query(
+    `SELECT id, bet::text AS bet, play_number, state FROM web_casino_sessions
+      WHERE guild_id = $1 AND user_id = $2 AND game = 'highlow'
+      ORDER BY created_at ASC LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
+    [ctx.guildId, ctx.userId]
+  );
+  return res.rows[0] ?? null;
+}
+
+/** 勝負を終えて払い戻す（cogs/gambling.py の HighLowGameView.finish と同じ） */
+async function settleHighLow(client: PoolClient, ctx: PlayContext, bet: number, state: HighLowState, reason: HlReason) {
+  let payout = 0;
+  let tax = 0;
+  if (reason !== 'lose') {
+    const raw = hlAmount(ctx, bet, state.streak);
+    ({ payout, tax } = raw > bet ? applyTax(ctx.s, bet, raw) : { payout: raw, tax: 0 });
+    await addBalance(client, ctx.guildId, ctx.userId, payout);
+  }
+  const isWin = reason !== 'lose' && state.streak > 0;
+  const isDraw = reason !== 'lose' && state.streak === 0;
+  const kind = reason === 'lose' ? 'miss' : reason === 'max' ? 'max_streak' : isWin ? 'cashout' : null;
+  await recordGameResult(client, { guildId: ctx.guildId, userId: ctx.userId, game: 'highlow', isWin, isDraw, bet, payout, kind });
+  return { reason, payout, tax, isWin, isDraw };
+}
+
+async function logHighLow(ctx: PlayContext, bet: number, state: HighLowState, r: Awaited<ReturnType<typeof settleHighLow>>) {
+  await sendGamblingLog(ctx.pool, ctx.guildId, {
+    title: '🃏 ギャンブルログ: High & Low',
+    color: r.isWin ? GOLD : r.isDraw ? GREY : RED,
+    fields: [
+      player(ctx),
+      betField(ctx, bet),
+      { name: '結果', value: r.isWin ? '勝ち 🏆' : r.isDraw ? '引き分け 🤝' : '負け 💀', inline: true },
+      r.isWin
+        ? { name: '獲得額 (配当)', value: `+${money(ctx, r.payout - bet)}`, inline: true }
+        : r.isDraw
+          ? { name: '獲得額', value: '±0', inline: true }
+          : { name: '損失額', value: `-${money(ctx, bet)}`, inline: true },
+      { name: '連勝', value: `${state.streak}連勝`, inline: true },
+      { name: 'カード', value: state.history.slice(-12).map(hlText).join(' → '), inline: false },
+    ],
+  });
+}
+
+function hlView(ctx: PlayContext, id: string | null, bet: number, playNumber: number, state: HighLowState) {
+  const max = ctx.s.highlow.maxStreak;
+  return {
+    id,
+    bet,
+    playNumber,
+    card: state.card,
+    history: state.history.slice(-12),
+    streak: state.streak,
+    max_streak: max,
+    mul: ctx.s.highlow.mul,
+    muls: highLowMuls(ctx.s),
+    revealed: state.revealed,
+    amount: hlAmount(ctx, bet, state.streak),
+    next_amount: state.streak < max ? hlAmount(ctx, bet, state.streak + 1) : null,
+  };
+}
+
+/** 1連勝〜最大連勝の受け取り倍率（画面の連勝メーター用） */
+export function highLowMuls(s: CasinoSettings): number[] {
+  return Array.from({ length: s.highlow.maxStreak }, (_, i) => Math.round(highLowTotalMul(s.highlow, i + 1) * 100) / 100);
+}
+
+/** 進行中の High & Low（あれば）。画面を開き直したときに続きから遊べるようにする */
+export async function activeHighLow(ctx: PlayContext) {
+  const row = await loadHlSession(ctx.pool, ctx, false);
+  if (!row) return null;
+  return { ...hlView(ctx, row.id, Number(row.bet), row.play_number, row.state), finished: false };
+}
+
+export async function highlow(ctx: PlayContext, body: any) {
+  const action = body?.action;
+  if (action === 'start') {
+    const out = await withTransaction(ctx.pool, async (client) => {
+      const existing = await loadHlSession(client, ctx, true);
+      if (existing) return { resumed: true, id: existing.id, bet: Number(existing.bet), playNumber: existing.play_number, state: existing.state };
+      const { bet, playNumber } = await beginPlay(client, ctx.s, ctx.guildId, ctx.userId, body?.bet);
+      const first = hlFirstCard();
+      const state: HighLowState = { card: first, history: [first], streak: 0, revealed: false };
+      const id = randomUUID();
+      await client.query(
+        `INSERT INTO web_casino_sessions (id, guild_id, user_id, game, bet, play_number, state)
+         VALUES ($1, $2, $3, 'highlow', $4, $5, $6::jsonb)`,
+        [id, ctx.guildId, ctx.userId, bet, playNumber, JSON.stringify(state)]
+      );
+      return { resumed: false, id, bet, playNumber, state };
+    });
+    return {
+      ...hlView(ctx, out.id, out.bet, out.playNumber, out.state),
+      resumed: out.resumed,
+      finished: false,
+      last: null,
+      balance: await getBalance(ctx.pool, ctx.guildId, ctx.userId),
+    };
+  }
+
+  if (action !== 'guess' && action !== 'cashout') throw new CasinoError('操作が不正です');
+  const guess: HighLowGuess | null = body?.guess === 'high' ? 'high' : body?.guess === 'low' ? 'low' : null;
+  if (action === 'guess' && !guess) throw new CasinoError('High か Low を選んでください');
+  const out = await withTransaction(ctx.pool, async (client) => {
+    const row = await loadHlSession(client, ctx, true);
+    if (!row || (body?.id && row.id !== body.id)) throw new CasinoError('進行中のゲームが見つかりません。もう一度始めてください', 409);
+    const bet = Number(row.bet);
+    const state = row.state;
+    let last: { guess: HighLowGuess; outcome: HighLowOutcome; from: HlCard } | null = null;
+    let settled: Awaited<ReturnType<typeof settleHighLow>> | null = null;
+    if (action === 'guess') {
+      const from = state.card;
+      const r = hlNextCard(ctx.s, from.value, guess!);
+      state.card = r.card;
+      state.history.push(r.card);
+      state.revealed = true;
+      last = { guess: guess!, outcome: r.outcome, from };
+      if (r.outcome === 'lose') settled = await settleHighLow(client, ctx, bet, state, 'lose');
+      else if (r.outcome === 'win') {
+        state.streak += 1;
+        if (state.streak >= ctx.s.highlow.maxStreak) settled = await settleHighLow(client, ctx, bet, state, 'max');
+      }
+    } else {
+      if (!state.revealed) throw new CasinoError('1回以上めくってから受け取れます');
+      settled = await settleHighLow(client, ctx, bet, state, (body?.reason === 'timeout' ? 'timeout' : 'cashout') as HlReason);
+    }
+    if (settled) await client.query('DELETE FROM web_casino_sessions WHERE id = $1', [row.id]);
+    else {
+      await client.query('UPDATE web_casino_sessions SET state = $1::jsonb, updated_at = NOW() WHERE id = $2', [JSON.stringify(state), row.id]);
+    }
+    return { id: row.id, bet, playNumber: row.play_number, state, last, settled };
+  });
+  if (out.settled) await logHighLow(ctx, out.bet, out.state, out.settled);
+  return {
+    ...hlView(ctx, out.id, out.bet, out.playNumber, out.state),
+    resumed: false,
+    finished: !!out.settled,
+    last: out.last,
+    result: out.settled,
+    balance: await getBalance(ctx.pool, ctx.guildId, ctx.userId),
+  };
+}
+
+/** 放置された High & Low を、10分たったらその時点の額で受け取って片付ける（まだめくっていなければ賭け金を返す） */
+export async function settleStaleHighLow(ctx: PlayContext): Promise<void> {
+  const stale = await ctx.pool.query(
+    `SELECT id FROM web_casino_sessions
+      WHERE guild_id = $1 AND user_id = $2 AND game = 'highlow' AND updated_at < NOW() - INTERVAL '10 minutes'`,
+    [ctx.guildId, ctx.userId]
+  );
+  for (const { id } of stale.rows) {
+    try {
+      const out = await withTransaction(ctx.pool, async (client) => {
+        const row = await loadHlSession(client, ctx, true);
+        if (!row || row.id !== id) return null;
+        const settled = await settleHighLow(client, ctx, Number(row.bet), row.state, 'timeout');
+        await client.query('DELETE FROM web_casino_sessions WHERE id = $1', [row.id]);
+        return { bet: Number(row.bet), state: row.state, settled };
+      });
+      if (out) await logHighLow(ctx, out.bet, out.state, out.settled);
+    } catch (e) {
+      console.error('settleStaleHighLow failed:', e);
+    }
+  }
+}

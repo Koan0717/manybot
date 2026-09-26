@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { highLowTotalMul, parseHighLowTable } from '@/lib/casino/settings';
 
 const GAME_TITLES: Record<string, string> = {
   chinchiro: "🎲 チンチロリン",
@@ -7,7 +8,8 @@ const GAME_TITLES: Record<string, string> = {
   slot: "🎰 スロット",
   blackjack: "🃏 ブラックジャック",
   roulette: "🎡 ルーレット",
-  horse: "🏇 競馬"
+  horse: "🏇 競馬",
+  highlow: "🃏 High & Low"
 };
 
 const GAME_DESCRIPTIONS: Record<string, string> = {
@@ -16,7 +18,8 @@ const GAME_DESCRIPTIONS: Record<string, string> = {
   slot: "こちらのボタンからスロットをプレイできます。\n\n**【配当倍率】**\n- **7️⃣7️⃣7️⃣**: `10.0倍`\n- **⭐⭐⭐**: `5.0倍`\n- **その他絵柄3つ揃い**: `3.0倍`\n- **絵柄2つ揃い**: `1.5倍`\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率は設定によって異なる場合があります。",
   blackjack: "こちらのボタンからブラックジャックをプレイできます。\n\n**【配当倍率】**\n- **通常勝利**: `2.0倍`\n- **ブラックジャック(BJ)勝利**: `2.5倍`\n- **引き分け**: `1.0倍` (返還)\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率は設定によって異なる場合があります。",
   roulette: "こちらのボタンからルーレットをプレイできます。\n\n**【配当倍率】**\n- **2倍賭け的中**: `2.0倍`\n- **3倍賭け的中**: `3.0倍`\n- **1点掛け的中**: `36.0倍`\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率は設定によって異なる場合があります。",
-  horse: "こちらのボタンから競馬をプレイできます。\n出走する5頭の馬から賭けたい馬と馬券を選択してください。\n\n**【出走馬】**\n- 1️⃣ 🟥 **1号馬: キタサンブラック**\n- 2️⃣ 🟦 **2号馬: ディープインパクト**\n- 3️⃣ 🟩 **3号馬: オルフェーヴル**\n- 4️⃣ 🟨 **4号馬: ゴールドシップ**\n- 5️⃣ 🟪 **5号馬: イクイノックス**\n\n**【配当倍率】**\n- 🥇 **単勝 (1着的中)**: `4.5倍`\n- 🥉 **複勝 (1〜3着以内的中)**: `1.5倍`\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率は設定によって異なる場合があります。"
+  horse: "こちらのボタンから競馬をプレイできます。\n出走する5頭の馬から賭けたい馬と馬券を選択してください。\n\n**【出走馬】**\n- 1️⃣ 🟥 **1号馬: キタサンブラック**\n- 2️⃣ 🟦 **2号馬: ディープインパクト**\n- 3️⃣ 🟩 **3号馬: オルフェーヴル**\n- 4️⃣ 🟨 **4号馬: ゴールドシップ**\n- 5️⃣ 🟪 **5号馬: イクイノックス**\n\n**【配当倍率】**\n- 🥇 **単勝 (1着的中)**: `4.5倍`\n- 🥉 **複勝 (1〜3着以内的中)**: `1.5倍`\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率は設定によって異なる場合があります。",
+  highlow: "こちらのボタンから High & Low をプレイできます。\n次のカードが今のカードより **High（大きい）** か **Low（小さい）** かを当ててください。\n\n**【ルール】**\n- A が一番小さく、K が一番大きい\n- 連勝するほど受け取れる額が増える（最大 `5連勝`）\n{STREAK_TABLE}\n- いつでも「受け取る」で勝ち逃げできる\n- 同じ数字は引き分け（そのまま続行）\n- 外れると賭け金は没収\n\n※ カジノ手数料設定が有効な場合、勝利配当から手数料が引かれます。\n※ 実際の倍率・最大連勝数は設定によって異なる場合があります。"
 };
 
 const GAME_COLORS: Record<string, number> = {
@@ -25,7 +28,8 @@ const GAME_COLORS: Record<string, number> = {
   slot: 16766720, // discord.Color.gold()
   blackjack: 10038562, // discord.Color.dark_red()
   roulette: 15158332, // discord.Color.red()
-  horse: 1102720 // discord.Color.dark_teal()
+  horse: 1102720, // discord.Color.dark_teal()
+  highlow: 2067276 // discord.Color.dark_green()
 };
 
 const GAME_CUSTOM_IDS: Record<string, string> = {
@@ -34,7 +38,8 @@ const GAME_CUSTOM_IDS: Record<string, string> = {
   slot: "persistent_slot_btn",
   blackjack: "persistent_blackjack_btn",
   roulette: "persistent_roulette_btn",
-  horse: "persistent_horse_racing_btn"
+  horse: "persistent_horse_racing_btn",
+  highlow: "persistent_highlow_btn"
 };
 
 const GAME_STATS_CUSTOM_IDS: Record<string, string> = {
@@ -43,7 +48,8 @@ const GAME_STATS_CUSTOM_IDS: Record<string, string> = {
   slot: "persistent_slot_stats_btn",
   blackjack: "persistent_blackjack_stats_btn",
   roulette: "persistent_roulette_stats_btn",
-  horse: "persistent_horse_racing_stats_btn"
+  horse: "persistent_horse_racing_stats_btn",
+  highlow: "persistent_highlow_stats_btn"
 };
 
 const GAME_EMOJIS: Record<string, string> = {
@@ -52,7 +58,8 @@ const GAME_EMOJIS: Record<string, string> = {
   slot: "🎰",
   blackjack: "🃏",
   roulette: "🎡",
-  horse: "🏇"
+  horse: "🏇",
+  highlow: "🃏"
 };
 
 export async function POST(
@@ -107,11 +114,29 @@ export async function POST(
       });
     }
 
+    // High & Low は倍率・最大連勝数を今の設定で表示する
+    let description = GAME_DESCRIPTIONS[game_type];
+    if (game_type === 'highlow') {
+      const hl = await pool.query(
+        "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN ('GAMBLE_HIGHLOW_MUL', 'GAMBLE_HIGHLOW_MAX_STREAK', 'GAMBLE_HIGHLOW_STREAK_MULS')",
+        [params.guild_id]
+      );
+      const raw = (k: string) => hl.rows.find((r: any) => r.setting_key === k)?.setting_value;
+      const mul = Number(raw('GAMBLE_HIGHLOW_MUL')) || 1.8;
+      const maxStreak = Math.max(1, Math.floor(Number(raw('GAMBLE_HIGHLOW_MAX_STREAK')) || 5));
+      const table = parseHighLowTable(raw('GAMBLE_HIGHLOW_STREAK_MULS'));
+      const settingsLike = { win: 0, draw: 0, lose: 0, mul, maxStreak, table };
+      const lines = Array.from({ length: maxStreak }, (_, i) => `${i + 1}連勝: \`×${Math.round(highLowTotalMul(settingsLike, i + 1) * 100) / 100}\``);
+      description = description
+        .replace('`5連勝`', `\`${maxStreak}連勝\``)
+        .replace('{STREAK_TABLE}', `**【連勝ごとの受け取り倍率】**\n${lines.join(' / ')}`);
+    }
+
     const payload = {
       embeds: [
         {
           title: GAME_TITLES[game_type],
-          description: GAME_DESCRIPTIONS[game_type],
+          description,
           color: GAME_COLORS[game_type]
         }
       ],

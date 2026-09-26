@@ -382,3 +382,34 @@ export function dealBlackjack(s: CasinoSettings): BlackjackState {
 export function dealerPlay(state: BlackjackState) {
   while (bjScore(state.dealer) < 17) state.dealer.push(state.deck.pop()!);
 }
+
+// ---------------- High & Low ----------------
+
+export const HL_SUITS = ['♠️', '♥️', '♦️', '♣️'];
+export const HL_RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+export type HighLowGuess = 'high' | 'low';
+export type HighLowOutcome = 'win' | 'draw' | 'lose';
+/** value は 1(A)〜13(K) */
+export interface HlCard { value: number; suit: string }
+
+export function hlFirstCard(): HlCard {
+  return { value: randint(1, 13), suit: choice(HL_SUITS) };
+}
+
+/**
+ * 次のカード（cogs/gambling.py の highlow_next_card と同じ）。勝ち・引き分け・負けを設定の確率で決めてから、
+ * それに合うカードを選ぶ。ありえない結果は、勝ちなら負けに、負けなら引き分けにする。
+ */
+export function hlNextCard(s: CasinoSettings, current: number, guess: HighLowGuess): { outcome: HighLowOutcome; card: HlCard } {
+  const h = s.highlow;
+  const total = h.win + h.draw + h.lose;
+  const r = random() * (total > 0 ? total : 1);
+  let outcome: HighLowOutcome = r < h.win ? 'win' : r < h.win + h.draw ? 'draw' : 'lose';
+  const higher = Array.from({ length: 13 - current }, (_, i) => current + 1 + i);
+  const lower = Array.from({ length: current - 1 }, (_, i) => i + 1);
+  const [winCards, loseCards] = guess === 'high' ? [higher, lower] : [lower, higher];
+  if (outcome === 'win' && !winCards.length) outcome = 'lose';
+  if (outcome === 'lose' && !loseCards.length) outcome = 'draw';
+  const value = outcome === 'win' ? choice(winCards) : outcome === 'lose' ? choice(loseCards) : current;
+  return { outcome, card: { value, suit: choice(HL_SUITS) } };
+}

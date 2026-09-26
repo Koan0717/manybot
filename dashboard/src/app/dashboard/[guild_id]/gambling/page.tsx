@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Save, AlertCircle, Settings, Dices, Coins, Cherry, Spade, Disc, Trophy, Percent } from 'lucide-react';
+import { Save, AlertCircle, Settings, Dices, Coins, Cherry, Spade, Disc, Trophy, Percent, ArrowUpDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import ChannelSelect from '@/components/ChannelSelect';
@@ -54,6 +54,7 @@ export default function GamblingSettingsPage() {
             GAMBLE_BLACKJACK_SHOW_STATS: data.GAMBLE_BLACKJACK_SHOW_STATS ?? true,
             GAMBLE_ROULETTE_SHOW_STATS: data.GAMBLE_ROULETTE_SHOW_STATS ?? true,
             GAMBLE_HORSE_SHOW_STATS: data.GAMBLE_HORSE_SHOW_STATS ?? true,
+            GAMBLE_HIGHLOW_SHOW_STATS: data.GAMBLE_HIGHLOW_SHOW_STATS ?? true,
             
             GAMBLE_CHINCHIRO_RATE_PINZORO: data.GAMBLE_CHINCHIRO_RATE_PINZORO ?? 0.02,
             GAMBLE_CHINCHIRO_RATE_ARASHI: data.GAMBLE_CHINCHIRO_RATE_ARASHI ?? 0.05,
@@ -98,7 +99,15 @@ export default function GamblingSettingsPage() {
             GAMBLE_HORSE_RATE_WIN_TAN: data.GAMBLE_HORSE_RATE_WIN_TAN ?? 0.20,
             GAMBLE_HORSE_RATE_WIN_FUKU: data.GAMBLE_HORSE_RATE_WIN_FUKU ?? 0.60,
             GAMBLE_HORSE_MUL_TAN: data.GAMBLE_HORSE_MUL_TAN ?? 4.5,
-            GAMBLE_HORSE_MUL_FUKU: data.GAMBLE_HORSE_MUL_FUKU ?? 1.5
+            GAMBLE_HORSE_MUL_FUKU: data.GAMBLE_HORSE_MUL_FUKU ?? 1.5,
+
+            GAMBLE_HIGHLOW_RATE_WIN: data.GAMBLE_HIGHLOW_RATE_WIN ?? 0.45,
+            GAMBLE_HIGHLOW_RATE_DRAW: data.GAMBLE_HIGHLOW_RATE_DRAW ?? 0.07,
+            GAMBLE_HIGHLOW_RATE_LOSE: data.GAMBLE_HIGHLOW_RATE_LOSE ?? 0.48,
+            GAMBLE_HIGHLOW_MUL: data.GAMBLE_HIGHLOW_MUL ?? 1.8,
+            GAMBLE_HIGHLOW_MAX_STREAK: data.GAMBLE_HIGHLOW_MAX_STREAK ?? 5,
+            // 連勝ごとの受け取り倍率（カンマ区切り。空なら「1回当てるごとの倍率」を掛けていく）
+            GAMBLE_HIGHLOW_STREAK_MULS: data.GAMBLE_HIGHLOW_STREAK_MULS === undefined || data.GAMBLE_HIGHLOW_STREAK_MULS === null ? '' : String(data.GAMBLE_HIGHLOW_STREAK_MULS)
           });
         }
         if (!channelsData.error && Array.isArray(channelsData)) {
@@ -194,6 +203,7 @@ export default function GamblingSettingsPage() {
     { id: 'blackjack', label: 'ブラックジャック', icon: Spade },
     { id: 'roulette', label: 'ルーレット', icon: Disc },
     { id: 'horse', label: '競馬', icon: Trophy },
+    { id: 'highlow', label: 'High & Low', icon: ArrowUpDown },
   ];
 
   // Pie chart data generation
@@ -258,6 +268,39 @@ export default function GamblingSettingsPage() {
       ];
     }
   }
+
+  if (activeTab === 'highlow') {
+    pieData = [
+      { name: '当たり', value: settings.GAMBLE_HIGHLOW_RATE_WIN },
+      { name: '引き分け (同じ数字)', value: settings.GAMBLE_HIGHLOW_RATE_DRAW },
+      { name: 'ハズレ', value: settings.GAMBLE_HIGHLOW_RATE_LOSE },
+    ];
+  }
+
+  // High & Low の連勝ごとの受け取り倍率
+  const hlMaxStreak = Math.min(30, Math.max(1, Math.floor(Number(settings.GAMBLE_HIGHLOW_MAX_STREAK) || 1)));
+  const hlStep = Number(settings.GAMBLE_HIGHLOW_MUL) || 0;
+  const hlRaw = String(settings.GAMBLE_HIGHLOW_STREAK_MULS ?? '').split(',').map((x) => x.trim());
+  // Bot と同じく、先頭から数字が続くところまでを表として使う
+  const hlTable: number[] = [];
+  for (const x of hlRaw) {
+    const n = Number(x);
+    if (x === '' || !Number.isFinite(n) || n <= 0) break;
+    hlTable.push(n);
+  }
+  const hlAuto = (n: number) => Math.round(Math.pow(hlStep, n) * 100) / 100;
+  // 表に無い連勝数は、表の最後から「1回当てるごとの倍率」を掛けて伸ばす（Bot と同じ）
+  const hlMulAt = (n: number) => {
+    const t = hlTable;
+    if (n <= t.length) return t[n - 1];
+    if (t.length) return Math.round(t[t.length - 1] * Math.pow(hlStep, n - t.length) * 100) / 100;
+    return hlAuto(n);
+  };
+  const setHlMulAt = (n: number, value: string) => {
+    const next = Array.from({ length: hlMaxStreak }, (_, i) => (i < hlTable.length ? hlRaw[i] : String(hlMulAt(i + 1))));
+    next[n - 1] = value;
+    updateSetting('GAMBLE_HIGHLOW_STREAK_MULS', next.join(','));
+  };
 
   const renderInput = (label: string, key: string, isPercent: boolean = false, step: string = "0.01") => (
     <div className="flex flex-col space-y-2 bg-gray-800/40 p-4 rounded-lg border border-gray-700/50 hover:border-purple-500/30 transition-colors">
@@ -552,6 +595,80 @@ export default function GamblingSettingsPage() {
               </div>
             )}
 
+            {activeTab === 'highlow' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between border-b border-gray-700 pb-2 mb-4">
+                  <h3 className="text-xl font-bold text-white">High & Low 設定</h3>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-300">戦績ボタン表示:</span>
+                    <button
+                      onClick={() => updateSetting('GAMBLE_HIGHLOW_SHOW_STATS', !settings.GAMBLE_HIGHLOW_SHOW_STATS)}
+                      className={`px-3 py-1 text-sm rounded-lg font-bold transition-colors ${settings.GAMBLE_HIGHLOW_SHOW_STATS ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                    >
+                      {settings.GAMBLE_HIGHLOW_SHOW_STATS ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-sm text-gray-400 bg-gray-800/40 border border-gray-700/50 rounded-lg p-4 leading-relaxed">
+                  次のカードが今のカードより大きい（High）か小さい（Low）かを当てるゲームです。A が一番小さく K が一番大きく、同じ数字は引き分け（そのまま続行）です。
+                  連勝するほど受け取れる額が増え（下の「連勝ごとの受け取り倍率」で連勝数ごとに決められます）、いつでも受け取って勝ち逃げできます。外れると賭け金は没収です。
+                </div>
+
+                <h4 className="text-lg font-semibold text-gray-200">確率設定 (%) ※1回めくるごと</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {renderInput('当たり確率', 'GAMBLE_HIGHLOW_RATE_WIN', true)}
+                  {renderInput('引き分け確率 (同じ数字)', 'GAMBLE_HIGHLOW_RATE_DRAW', true)}
+                  {renderInput('ハズレ確率', 'GAMBLE_HIGHLOW_RATE_LOSE', true)}
+                  <div className="text-xs text-gray-500 col-span-2 md:col-span-3">
+                    ※ ありえない結果（K で High を選んだときの当たりなど）はハズレ、A で High のときのハズレは引き分けになります。
+                  </div>
+                </div>
+
+                <h4 className="text-lg font-semibold text-gray-200 mt-8">倍率・連勝設定</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  {renderInput('1回当てるごとの倍率 (倍)', 'GAMBLE_HIGHLOW_MUL', false, '0.1')}
+                  {renderInput('最大連勝数 (到達で自動受け取り)', 'GAMBLE_HIGHLOW_MAX_STREAK', false, '1')}
+                </div>
+                <div className="bg-gray-800/40 border border-gray-700/50 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <div className="text-sm text-gray-200 font-semibold">連勝ごとの受け取り倍率 (賭け金の何倍を受け取れるか)</div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        例: 8連勝を ×100 にすると、8連勝した人は賭け金の100倍を受け取れます。最大連勝数を増やすと欄が増えます。
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateSetting('GAMBLE_HIGHLOW_STREAK_MULS', '')}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold"
+                    >
+                      自動（1回ごとの倍率 ×{hlStep} を掛ける）に戻す
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {Array.from({ length: hlMaxStreak }, (_, i) => (
+                      <label key={i} className="flex flex-col gap-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2">
+                        <span className="text-xs text-gray-400">{i + 1}連勝で ×</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          value={hlRaw[i] !== undefined && hlRaw[i] !== '' && i <= hlTable.length ? hlRaw[i] : hlMulAt(i + 1)}
+                          onChange={(e) => setHlMulAt(i + 1, e.target.value)}
+                          className={`w-full min-w-0 bg-transparent text-base font-bold focus:outline-none ${i < hlTable.length ? 'text-amber-300' : 'text-gray-300'}`}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {hlTable.length ? '黄色の数字が設定した倍率です。' : '今は自動（1回当てるごとの倍率を掛けていく）です。数字を変えるとその値で保存されます。'}
+                    賭け金 1,000 で {hlMaxStreak}連勝すると {Math.trunc(1000 * (hlMulAt(hlMaxStreak) || 0)).toLocaleString()} を受け取れます。
+                  </div>
+                </div>
+              </div>
+            )}
+
           </motion.div>
         </div>
 
@@ -657,6 +774,7 @@ export default function GamblingSettingsPage() {
               <option value="blackjack">🃏 ブラックジャック</option>
               <option value="roulette">🎡 ルーレット</option>
               <option value="horse">🏇 競馬</option>
+              <option value="highlow">🃏 High & Low</option>
             </select>
           </div>
           <div className="flex-1 w-full">
