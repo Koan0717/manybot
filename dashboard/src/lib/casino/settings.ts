@@ -64,7 +64,7 @@ export interface CasinoSettings {
     mulPinzoro: number; mulArashi: number; mulShigoro: number; mulHifumi: number; mulNormal: number;
   };
   horse: { rateTan: number; rateFuku: number; mulTan: number; mulFuku: number };
-  highlow: { win: number; draw: number; lose: number; mul: number; maxStreak: number; table: number[] };
+  highlow: { win: number; draw: number; lose: number; mul: number; maxStreak: number; table: number[]; winTable: number[] };
 }
 
 export function parseEnabledGames(raw: unknown): Record<WebGame, boolean> {
@@ -164,19 +164,21 @@ export async function loadCasinoSettings(pool: Pool, guildId: string): Promise<C
       mul: orFalsy(v('GAMBLE_HIGHLOW_MUL'), 1.8),
       maxStreak: Math.max(1, Math.floor(orNull(v('GAMBLE_HIGHLOW_MAX_STREAK'), 5))),
       table: parseHighLowTable(s['GAMBLE_HIGHLOW_STREAK_MULS']),
+      // 連勝ごとの当たり確率（0〜1 のカンマ区切り。1つ目は「0連勝から1連勝目を当てる確率」）
+      winTable: parseHighLowTable(s['GAMBLE_HIGHLOW_STREAK_WIN_RATES'], true, 1),
     },
   };
 }
 
 /** 連勝ごとの受け取り倍率（"1.8,3.2,6" のカンマ区切り）。cogs/gambling.py の parse_highlow_table と同じ */
-export function parseHighLowTable(raw: unknown): number[] {
+export function parseHighLowTable(raw: unknown, allowZero = false, upper?: number): number[] {
   if (raw === null || raw === undefined || raw === '') return [];
   const items = Array.isArray(raw) ? raw : String(raw).split(',');
   const table: number[] = [];
   for (const x of items) {
     const n = Number(String(x).trim());
-    if (!Number.isFinite(n) || n <= 0 || String(x).trim() === '') break;
-    table.push(n);
+    if (!Number.isFinite(n) || n < 0 || (n === 0 && !allowZero) || String(x).trim() === '') break;
+    table.push(upper !== undefined ? Math.min(n, upper) : n);
   }
   return table;
 }
@@ -187,6 +189,16 @@ export function highLowTotalMul(h: CasinoSettings['highlow'], streak: number): n
   if (streak <= h.table.length) return h.table[streak - 1];
   if (h.table.length) return h.table[h.table.length - 1] * Math.pow(h.mul, streak - h.table.length);
   return Math.pow(h.mul, streak);
+}
+
+/** streak 連勝中にめくるときの確率（cogs/gambling.py の highlow_rates と同じ） */
+export function highLowRates(h: CasinoSettings['highlow'], streak: number): { win: number; draw: number; lose: number } {
+  if (streak < h.winTable.length) {
+    const win = h.winTable[streak];
+    const draw = Math.min(h.draw, Math.max(0, 1 - win));
+    return { win, draw, lose: Math.max(0, 1 - win - draw) };
+  }
+  return { win: h.win, draw: h.draw, lose: h.lose };
 }
 
 /** Bot と同じ手数料計算（純利益に対して課税）。chinchiro だけは獲得額そのものに課税する */

@@ -603,7 +603,7 @@ export async function highlow(ctx: PlayContext, body: any) {
     let settled: Awaited<ReturnType<typeof settleHighLow>> | null = null;
     if (action === 'guess') {
       const from = state.card;
-      const r = hlNextCard(ctx.s, from.value, guess!);
+      const r = hlNextCard(ctx.s, from.value, guess!, state.streak);
       state.card = r.card;
       state.history.push(r.card);
       state.revealed = true;

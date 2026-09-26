@@ -1869,10 +1869,25 @@ def highlow_settings(bot, guild_id):
         "mul": num("GAMBLE_HIGHLOW_MUL", 1.8) or 1.8,
         "max_streak": max(1, int(num("GAMBLE_HIGHLOW_MAX_STREAK", 5))),
         "table": parse_highlow_table(get_setting(bot, "GAMBLE_HIGHLOW_STREAK_MULS", guild_id)),
+        "win_table": parse_highlow_table(get_setting(bot, "GAMBLE_HIGHLOW_STREAK_WIN_RATES", guild_id), allow_zero=True, upper=1.0),
     }
 
 
-def parse_highlow_table(raw) -> list:
+def highlow_rates(s: dict, streak: int):
+    """
+    streak 連勝中にめくるときの (当たり, 引き分け, ハズレ) の確率。
+    連勝ごとの当たり確率が決めてあればそれを使い、引き分けは共通の値、残りをハズレにする。
+    決めていない連勝数は、共通の当たり・引き分け・ハズレ確率を使う。
+    """
+    table = s.get("win_table") or []
+    if streak < len(table):
+        win = table[streak]
+        draw = min(s["draw"], max(0.0, 1.0 - win))
+        return win, draw, max(0.0, 1.0 - win - draw)
+    return s["win"], s["draw"], s["lose"]
+
+
+def parse_highlow_table(raw, allow_zero: bool = False, upper: float = None) -> list:
     """連勝ごとの受け取り倍率（"1.8,3.2,6,..." のようなカンマ区切り）。未設定なら空（1回ごとの倍率を掛けていく）。"""
     if raw is None or raw == "":
         return []
@@ -1883,9 +1898,9 @@ def parse_highlow_table(raw) -> list:
             v = float(str(x).strip())
         except ValueError:
             break
-        if v <= 0:
+        if v < 0 or (v == 0 and not allow_zero):
             break
-        table.append(v)
+        table.append(min(v, upper) if upper is not None else v)
     return table
 
 
@@ -1901,7 +1916,7 @@ def highlow_total_mul(s: dict, streak: int) -> float:
     return s["mul"] ** streak
 
 
-def highlow_next_card(current: int, guess: str, s: dict):
+def highlow_next_card(current: int, guess: str, s: dict, streak: int = 0):
     """
     次のカードを決める。勝ち・引き分け・負けを設定の確率で決めてから、それに合うカードを選ぶ
     （他のゲームと同じく、当たりやすさは管理者の設定どおりになる）。
@@ -1909,9 +1924,10 @@ def highlow_next_card(current: int, guess: str, s: dict):
     ありえない結果（Kで「High」の勝ちなど）は、勝ちなら負けに、負けなら引き分けにする。
     返り値: (結果 "win"/"draw"/"lose", 次のカード (数字, マーク))
     """
-    total = s["win"] + s["draw"] + s["lose"]
+    p_win, p_draw, p_lose = highlow_rates(s, streak)
+    total = p_win + p_draw + p_lose
     r = random.random() * (total if total > 0 else 1.0)
-    outcome = "win" if r < s["win"] else ("draw" if r < s["win"] + s["draw"] else "lose")
+    outcome = "win" if r < p_win else ("draw" if r < p_win + p_draw else "lose")
     higher = list(range(current + 1, 14))
     lower = list(range(1, current))
     win_cards, lose_cards = (higher, lower) if guess == "high" else (lower, higher)
@@ -2021,7 +2037,7 @@ class HighLowGameView(discord.ui.View):
             if self.finished:
                 return await interaction.response.defer()
             before = self.card
-            outcome, card = highlow_next_card(before[0], guess, self.s)
+            outcome, card = highlow_next_card(before[0], guess, self.s, self.streak)
             self.card = card
             self.history.append(card)
             self.revealed = True

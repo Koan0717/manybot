@@ -107,7 +107,9 @@ export default function GamblingSettingsPage() {
             GAMBLE_HIGHLOW_MUL: data.GAMBLE_HIGHLOW_MUL ?? 1.8,
             GAMBLE_HIGHLOW_MAX_STREAK: data.GAMBLE_HIGHLOW_MAX_STREAK ?? 5,
             // 連勝ごとの受け取り倍率（カンマ区切り。空なら「1回当てるごとの倍率」を掛けていく）
-            GAMBLE_HIGHLOW_STREAK_MULS: data.GAMBLE_HIGHLOW_STREAK_MULS === undefined || data.GAMBLE_HIGHLOW_STREAK_MULS === null ? '' : String(data.GAMBLE_HIGHLOW_STREAK_MULS)
+            GAMBLE_HIGHLOW_STREAK_MULS: data.GAMBLE_HIGHLOW_STREAK_MULS === undefined || data.GAMBLE_HIGHLOW_STREAK_MULS === null ? '' : String(data.GAMBLE_HIGHLOW_STREAK_MULS),
+            // 連勝ごとの当たり確率（0〜1 のカンマ区切り。空なら共通の当たり確率）
+            GAMBLE_HIGHLOW_STREAK_WIN_RATES: data.GAMBLE_HIGHLOW_STREAK_WIN_RATES === undefined || data.GAMBLE_HIGHLOW_STREAK_WIN_RATES === null ? '' : String(data.GAMBLE_HIGHLOW_STREAK_WIN_RATES)
           });
         }
         if (!channelsData.error && Array.isArray(channelsData)) {
@@ -300,6 +302,44 @@ export default function GamblingSettingsPage() {
     const next = Array.from({ length: hlMaxStreak }, (_, i) => (i < hlTable.length ? hlRaw[i] : String(hlMulAt(i + 1))));
     next[n - 1] = value;
     updateSetting('GAMBLE_HIGHLOW_STREAK_MULS', next.join(','));
+  };
+
+  // High & Low の連勝ごとの当たり確率（i 番目 = i 連勝中にめくって当てる確率）
+  const hlWinRaw = String(settings.GAMBLE_HIGHLOW_STREAK_WIN_RATES ?? '').split(',').map((x) => x.trim());
+  const hlWinTable: number[] = [];
+  for (const x of hlWinRaw) {
+    const n = Number(x);
+    if (x === '' || !Number.isFinite(n) || n < 0) break;
+    hlWinTable.push(Math.min(1, n));
+  }
+  const hlBaseWin = Number(settings.GAMBLE_HIGHLOW_RATE_WIN) || 0;
+  const hlBaseDraw = Number(settings.GAMBLE_HIGHLOW_RATE_DRAW) || 0;
+  const hlBaseLose = Number(settings.GAMBLE_HIGHLOW_RATE_LOSE) || 0;
+  // Bot の highlow_rates と同じ
+  const hlRatesAt = (streak: number) => {
+    if (streak < hlWinTable.length) {
+      const win = hlWinTable[streak];
+      const draw = Math.min(hlBaseDraw, Math.max(0, 1 - win));
+      return { win, draw, lose: Math.max(0, 1 - win - draw) };
+    }
+    return { win: hlBaseWin, draw: hlBaseDraw, lose: hlBaseLose };
+  };
+  const setHlWinAt = (streak: number, percent: string) => {
+    const next = Array.from({ length: hlMaxStreak }, (_, i) =>
+      i < hlWinTable.length ? String(hlWinTable[i]) : String(Math.round(hlBaseWin * 10000) / 10000)
+    );
+    const v = parseFloat(percent);
+    next[streak] = isNaN(v) ? '' : String(Math.round((v / 100) * 10000) / 10000);
+    updateSetting('GAMBLE_HIGHLOW_STREAK_WIN_RATES', next.join(','));
+  };
+  // n 連勝までたどり着く確率（引き分けはやり直しなので、当たり ÷ (当たり + ハズレ) を掛けていく）
+  const hlReach = (n: number) => {
+    let p = 1;
+    for (let i = 0; i < n; i++) {
+      const r = hlRatesAt(i);
+      p *= r.win + r.lose > 0 ? r.win / (r.win + r.lose) : 0;
+    }
+    return p;
   };
 
   const renderInput = (label: string, key: string, isPercent: boolean = false, step: string = "0.01") => (
@@ -630,6 +670,79 @@ export default function GamblingSettingsPage() {
                   {renderInput('1回当てるごとの倍率 (倍)', 'GAMBLE_HIGHLOW_MUL', false, '0.1')}
                   {renderInput('最大連勝数 (到達で自動受け取り)', 'GAMBLE_HIGHLOW_MAX_STREAK', false, '1')}
                 </div>
+                <div className="bg-gray-800/40 border border-gray-700/50 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <div className="text-sm text-gray-200 font-semibold">連勝ごとの当たり確率 (%)</div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        「n連勝目」を当てる確率です（例: 8連勝目を 10% にすると、7連勝中の人が次を当てる確率が10%になります）。引き分けは上の共通の確率で、残りがハズレになります。
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateSetting('GAMBLE_HIGHLOW_STREAK_WIN_RATES', '')}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 font-bold"
+                    >
+                      全部 共通の当たり確率（{(hlBaseWin * 100).toFixed(1)}%）に戻す
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {Array.from({ length: hlMaxStreak }, (_, i) => {
+                      const r = hlRatesAt(i);
+                      const custom = i < hlWinTable.length;
+                      return (
+                        <label key={i} className="flex flex-col gap-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2">
+                          <span className="text-xs text-gray-400">{i + 1}連勝目を当てる</span>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              value={custom ? Number((hlWinTable[i] * 100).toFixed(2)) : Number((hlBaseWin * 100).toFixed(2))}
+                              onChange={(e) => setHlWinAt(i, e.target.value)}
+                              className={`w-full min-w-0 bg-transparent text-base font-bold focus:outline-none ${custom ? 'text-emerald-300' : 'text-gray-300'}`}
+                            />
+                            <span className="text-xs text-gray-500">%</span>
+                          </div>
+                          <span className="text-[10px] text-gray-500">
+                            引き分け {(r.draw * 100).toFixed(1)}% / ハズレ {(r.lose * 100).toFixed(1)}%
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-gray-300">
+                      <thead>
+                        <tr className="text-gray-500">
+                          <th className="text-left font-medium py-1">連勝</th>
+                          <th className="text-right font-medium py-1">たどり着く確率</th>
+                          <th className="text-right font-medium py-1">受け取り倍率</th>
+                          <th className="text-right font-medium py-1">そこで受け取ったときの期待値</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: hlMaxStreak }, (_, i) => {
+                          const reach = hlReach(i + 1);
+                          const ev = reach * (hlMulAt(i + 1) || 0);
+                          return (
+                            <tr key={i} className="border-t border-gray-800">
+                              <td className="py-1">{i + 1}連勝</td>
+                              <td className="text-right py-1">{reach >= 0.001 ? `${(reach * 100).toFixed(2)}%` : `${(reach * 100).toFixed(4)}%`}</td>
+                              <td className="text-right py-1">×{hlMulAt(i + 1)}</td>
+                              <td className={`text-right py-1 font-bold ${ev > 1 ? 'text-red-400' : 'text-emerald-300'}`}>{ev.toFixed(2)}倍</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <div className="text-[11px] text-gray-500 mt-1">
+                      期待値は「賭け金の何倍が戻ってくるか」の平均です。1倍を超える（赤字）と、そこまで狙う人がいるほどサーバー全体のお金が増えます。
+                    </div>
+                  </div>
+                </div>
+
                 <div className="bg-gray-800/40 border border-gray-700/50 rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div>

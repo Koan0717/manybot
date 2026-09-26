@@ -1,5 +1,5 @@
 import { randomInt } from 'crypto';
-import type { CasinoSettings } from './settings';
+import { type CasinoSettings, highLowRates } from './settings';
 
 /**
  * カジノの各ゲームの判定。cogs/gambling.py と同じ抽選・同じ倍率で結果を決める。
@@ -400,8 +400,8 @@ export function hlFirstCard(): HlCard {
  * 次のカード（cogs/gambling.py の highlow_next_card と同じ）。勝ち・引き分け・負けを設定の確率で決めてから、
  * それに合うカードを選ぶ。ありえない結果は、勝ちなら負けに、負けなら引き分けにする。
  */
-export function hlNextCard(s: CasinoSettings, current: number, guess: HighLowGuess): { outcome: HighLowOutcome; card: HlCard } {
-  const h = s.highlow;
+export function hlNextCard(s: CasinoSettings, current: number, guess: HighLowGuess, streak = 0): { outcome: HighLowOutcome; card: HlCard } {
+  const h = highLowRates(s.highlow, streak);
   const total = h.win + h.draw + h.lose;
   const r = random() * (total > 0 ? total : 1);
   let outcome: HighLowOutcome = r < h.win ? 'win' : r < h.win + h.draw ? 'draw' : 'lose';
