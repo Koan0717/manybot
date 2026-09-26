@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requireGuildMember } from '@/lib/memberAuth';
 import { CasinoError, ensureCasinoTables } from '@/lib/casino/db';
-import { PlayContext, blackjack, chinchiro, coinflip, horse, roulette, slot } from '@/lib/casino/games';
+import { PlayContext, blackjack, chinchiro, coinflip, highlow, horse, roulette, slot } from '@/lib/casino/games';
 import { WebGame, isWebGame, loadCasinoSettings } from '@/lib/casino/settings';
 import { canUseFeature, getMemberFlags } from '@/lib/webAccess';
 
@@ -13,6 +13,7 @@ const HANDLERS: Record<WebGame, (ctx: PlayContext, body: any) => Promise<unknown
   blackjack,
   chinchiro,
   horse,
+  highlow,
 };
 
 /**
@@ -31,8 +32,8 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
   try {
     const pool = await getPool(guildId);
     const s = await loadCasinoSettings(pool, guildId);
-    // 始めてしまったブラックジャックの続き（hit / stand）は、途中でOFFにされても最後まで遊べるようにする
-    const continuing = game === 'blackjack' && body?.action !== 'start';
+    // 始めてしまったブラックジャック・High & Low の続きは、途中でOFFにされても最後まで遊べるようにする
+    const continuing = (game === 'blackjack' || game === 'highlow') && body?.action !== 'start';
     if (!s.enabled[game] && !continuing) {
       return NextResponse.json({ error: 'このゲームは現在Webでは遊べません' }, { status: 403 });
     }

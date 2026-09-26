@@ -1849,6 +1849,265 @@ class HorseRacingView(discord.ui.View):
         await show_user_game_stats(interaction, "horse")
 
 # --- ギャンブル期待値設定 管理者UI (2段階ドリルダウン) ---
+# --- High & Low ---
+HL_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+HL_SUITS = ["♠️", "♥️", "♦️", "♣️"]
+
+
+def highlow_settings(bot, guild_id):
+    """High & Low の確率・倍率（ダッシュボードの「ギャンブル設定」→ High & Low）。"""
+    def num(key, default):
+        v = get_setting(bot, key, guild_id)
+        try:
+            return float(v) if v is not None else default
+        except (TypeError, ValueError):
+            return default
+    return {
+        "win": max(0.0, num("GAMBLE_HIGHLOW_RATE_WIN", 0.45)),
+        "draw": max(0.0, num("GAMBLE_HIGHLOW_RATE_DRAW", 0.07)),
+        "lose": max(0.0, num("GAMBLE_HIGHLOW_RATE_LOSE", 0.48)),
+        "mul": num("GAMBLE_HIGHLOW_MUL", 1.8) or 1.8,
+        "max_streak": max(1, int(num("GAMBLE_HIGHLOW_MAX_STREAK", 5))),
+    }
+
+
+def highlow_next_card(current: int, guess: str, s: dict):
+    """
+    次のカードを決める。勝ち・引き分け・負けを設定の確率で決めてから、それに合うカードを選ぶ
+    （他のゲームと同じく、当たりやすさは管理者の設定どおりになる）。
+    A(1)が一番弱く、K(13)が一番強い。同じ数字は引き分け。
+    ありえない結果（Kで「High」の勝ちなど）は、勝ちなら負けに、負けなら引き分けにする。
+    返り値: (結果 "win"/"draw"/"lose", 次のカード (数字, マーク))
+    """
+    total = s["win"] + s["draw"] + s["lose"]
+    r = random.random() * (total if total > 0 else 1.0)
+    outcome = "win" if r < s["win"] else ("draw" if r < s["win"] + s["draw"] else "lose")
+    higher = list(range(current + 1, 14))
+    lower = list(range(1, current))
+    win_cards, lose_cards = (higher, lower) if guess == "high" else (lower, higher)
+    if outcome == "win" and not win_cards:
+        outcome = "lose"
+    if outcome == "lose" and not lose_cards:
+        outcome = "draw"
+    value = random.choice(win_cards if outcome == "win" else lose_cards if outcome == "lose" else [current])
+    return outcome, (value, random.choice(HL_SUITS))
+
+
+def hl_card_text(card) -> str:
+    return f"{card[1]} **{HL_RANKS[card[0] - 1]}**"
+
+
+class HighLowBetModal(discord.ui.Modal, title='High & Low：賭け金入力'):
+    bet_input = discord.ui.TextInput(label='賭ける金額', placeholder='例: 1000', max_length=10, required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            bot = interaction.client
+            max_bet = int(get_setting(bot, "GAMBLE_MAX_BET") or 100000)
+            bet = int(self.bet_input.value)
+            currency_name = get_setting(bot, "CURRENCY_NAME") or "コイン"
+            if bet <= 0 or bet > max_bet:
+                return await interaction.response.send_message(f"1〜{max_bet:,}の範囲で入力してください。", ephemeral=True)
+            await interaction.response.defer(ephemeral=True)
+            user_data = await database.get_user(interaction.guild.id, interaction.user.id)
+            today_str = datetime.datetime.now(JST).strftime("%Y-%m-%d")
+            count = user_data.get("chinchiro_count", 0)
+            daily_bet = user_data.get("chinchiro_daily_bet", 0)
+            if user_data.get("chinchiro_last_date") != today_str:
+                await database.reset_gambling_count(interaction.guild.id, interaction.user.id, today_str)
+                count = 0
+                daily_bet = 0
+            max_plays = get_setting(bot, "GAMBLE_MAX_PLAYS")
+            max_plays = 10 if max_plays is None else int(max_plays)
+            if max_plays > 0 and count >= max_plays:
+                return await interaction.followup.send(f"本日のプレイ上限({max_plays}回)に達しました。", ephemeral=True)
+            daily_limit = get_setting(bot, "GAMBLE_DAILY_LIMIT")
+            if daily_limit is not None and int(daily_limit) > 0 and daily_bet + bet > int(daily_limit):
+                return await interaction.followup.send(f"1日の賭け金上限({int(daily_limit):,} {currency_name})を超えるため賭けられません。\n本日既に賭けた額: {daily_bet:,} {currency_name}", ephemeral=True)
+            if await database.get_balance(interaction.guild.id, interaction.user.id) < bet:
+                return await interaction.followup.send("残高不足です。", ephemeral=True)
+
+            if not await database.remove_balance(interaction.guild.id, interaction.user.id, bet):
+                return await interaction.followup.send("残高不足です。", ephemeral=True)
+            await database.increment_gambling_count(interaction.guild.id, interaction.user.id, bet)
+
+            view = HighLowGameView(interaction.user, bet, highlow_settings(bot, interaction.guild.id), currency_name, interaction.guild)
+            msg = await interaction.followup.send(
+                f"🃏 **High & Low 開始！** (本日 {count+1}/{max_plays if max_plays > 0 else '無制限'}回目)\n賭け金: **{bet:,} {currency_name}**",
+                embed=view.build_embed("次のカードは今のカードより **High（大きい）** か **Low（小さい）** か？"),
+                view=view,
+                ephemeral=True,
+            )
+            view.message = msg
+        except ValueError:
+            try:
+                await interaction.followup.send("金額は半角数字で入力してください。", ephemeral=True)
+            except Exception:
+                await interaction.response.send_message("金額は半角数字で入力してください。", ephemeral=True)
+        except Exception as e:
+            print(f"[ERROR] HighLowBetModal: {e}")
+            try:
+                await interaction.followup.send("エラーが発生しました。", ephemeral=True)
+            except Exception:
+                await interaction.response.send_message("エラーが発生しました。", ephemeral=True)
+
+
+class HighLowGameView(discord.ui.View):
+    def __init__(self, user, bet, s, currency_name, guild):
+        super().__init__(timeout=120)
+        self.user = user
+        self.guild = guild
+        self.bet = bet
+        self.s = s
+        self.currency_name = currency_name
+        self.card = (random.randint(1, 13), random.choice(HL_SUITS))
+        self.history = [self.card]
+        self.streak = 0
+        self.revealed = False
+        self.finished = False
+        self.message = None
+        self.lock = asyncio.Lock()
+        self.cashout_btn.disabled = True
+
+    def current_amount(self) -> int:
+        return int(self.bet * (self.s["mul"] ** self.streak))
+
+    def build_embed(self, description: str, color=discord.Color.dark_green()) -> discord.Embed:
+        embed = discord.Embed(title="🃏 High & Low", description=description, color=color)
+        embed.add_field(name="今のカード", value=hl_card_text(self.card), inline=True)
+        embed.add_field(name="🔥 連勝", value=f"{self.streak} / {self.s['max_streak']}", inline=True)
+        embed.add_field(name="💰 受け取れる額", value=f"{self.current_amount():,} {self.currency_name}", inline=True)
+        if not self.finished and self.streak < self.s["max_streak"]:
+            nxt = int(self.bet * (self.s["mul"] ** (self.streak + 1)))
+            embed.add_field(name="次に当てると", value=f"{nxt:,} {self.currency_name}（{self.s['mul']}倍ずつ増える）", inline=False)
+        embed.add_field(name="これまでのカード", value=" → ".join(hl_card_text(c) for c in self.history[-8:]), inline=False)
+        return embed
+
+    async def guess(self, interaction: discord.Interaction, guess: str):
+        if interaction.user != self.user:
+            return await interaction.response.send_message("これはあなたのゲームではありません。", ephemeral=True)
+        async with self.lock:
+            if self.finished:
+                return await interaction.response.defer()
+            before = self.card
+            outcome, card = highlow_next_card(before[0], guess, self.s)
+            self.card = card
+            self.history.append(card)
+            self.revealed = True
+            label = "⬆️ High" if guess == "high" else "⬇️ Low"
+            head = f"{label} を選択 → {hl_card_text(before)} から {hl_card_text(card)}\n"
+            if outcome == "lose":
+                await self.finish(interaction, "lose", head + "💀 **ハズレ…** 賭け金は没収されました。")
+                return
+            if outcome == "win":
+                self.streak += 1
+                if self.streak >= self.s["max_streak"]:
+                    await self.finish(interaction, "max", head + f"🎉 **{self.streak}連勝達成！** 最大連勝なので自動で受け取ります。")
+                    return
+                text = head + f"⭕ **当たり！** {self.streak}連勝中！ 続けるか、ここで受け取るか選んでください。"
+            else:
+                text = head + "🤝 **同じ数字（引き分け）** 連勝はそのまま。続けるか、ここで受け取るか選んでください。"
+            self.cashout_btn.disabled = False
+            await interaction.response.edit_message(embed=self.build_embed(text), view=self)
+
+    async def finish(self, interaction, reason: str, text: str):
+        """勝負を終えて払い戻す。reason: lose / cashout / max / timeout"""
+        self.finished = True
+        self.stop()
+        for item in self.children:
+            item.disabled = True
+        bot = interaction.client if interaction else _bot_instance
+        guild = self.guild
+        payout = 0
+        tax_amount = 0
+        tax_rate = 0.0
+        if reason != "lose":
+            payout = self.current_amount()
+            if payout > self.bet and get_setting(bot, "GAMBLE_TAX_ENABLED", guild.id):
+                tax_rate = get_setting(bot, "GAMBLE_TAX_RATE", guild.id)
+                if tax_rate is None:
+                    tax_rate = 0.05
+                tax_amount = int((payout - self.bet) * tax_rate)
+                payout -= tax_amount
+            await database.add_balance(guild.id, self.user.id, payout)
+        is_win = reason != "lose" and self.streak > 0
+        is_draw = reason != "lose" and self.streak == 0
+        if is_win:
+            text += f"\n\n🏆 **{payout:,} {self.currency_name}** を受け取りました！"
+            if tax_amount:
+                text += f"\n※ カジノ手数料 ({tax_rate*100:.1f}%) として **{tax_amount:,} {self.currency_name}** が引かれました。"
+        elif is_draw:
+            text += f"\n\n🤝 賭け金 **{payout:,} {self.currency_name}** が戻りました。"
+        color = discord.Color.gold() if is_win else discord.Color.light_grey() if is_draw else discord.Color.red()
+        embed = self.build_embed(text, color)
+        if interaction:
+            await interaction.response.edit_message(embed=embed, view=self)
+        elif self.message:
+            try:
+                await self.message.edit(embed=embed, view=self)
+            except Exception:
+                pass
+
+        log = discord.Embed(title="🃏 ギャンブルログ: High & Low", color=color, timestamp=discord.utils.utcnow())
+        log.add_field(name="プレイヤー", value=f"{self.user.mention} (ID: {self.user.id})", inline=True)
+        log.add_field(name="賭け金", value=f"{self.bet:,} {self.currency_name}", inline=True)
+        log.add_field(name="結果", value="勝ち 🏆" if is_win else "引き分け 🤝" if is_draw else "負け 💀", inline=True)
+        if is_win:
+            log.add_field(name="獲得額 (配当)", value=f"+{payout - self.bet:,} {self.currency_name}", inline=True)
+        elif not is_draw:
+            log.add_field(name="損失額", value=f"-{self.bet:,} {self.currency_name}", inline=True)
+        log.add_field(name="連勝", value=f"{self.streak}連勝", inline=True)
+        log.add_field(name="カード", value=" → ".join(hl_card_text(c) for c in self.history[-12:]), inline=False)
+        await send_log(bot, guild, "gambling", log)
+
+        try:
+            extra_key = "miss" if reason == "lose" else "max_streak" if reason == "max" else "cashout" if is_win else None
+            await database.record_game_result(
+                guild.id, self.user.id, "highlow",
+                is_win=is_win, is_draw=is_draw, bet=self.bet, payout=payout, extra_key=extra_key
+            )
+        except Exception as e:
+            print(f"[ERROR] record_game_result (highlow): {e}")
+
+    async def on_timeout(self):
+        # 放置されたら、その時点の額で受け取る（まだ1回もめくっていなければ賭け金を返す）
+        async with self.lock:
+            if not self.finished:
+                await self.finish(None, "timeout", "⏰ 時間切れのため、その時点の額で受け取りました。")
+
+    @discord.ui.button(label="High", emoji="⬆️", style=discord.ButtonStyle.success)
+    async def high_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.guess(interaction, "high")
+
+    @discord.ui.button(label="Low", emoji="⬇️", style=discord.ButtonStyle.primary)
+    async def low_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.guess(interaction, "low")
+
+    @discord.ui.button(label="受け取る", emoji="💰", style=discord.ButtonStyle.secondary)
+    async def cashout_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.user:
+            return await interaction.response.send_message("これはあなたのゲームではありません。", ephemeral=True)
+        async with self.lock:
+            if self.finished or not self.revealed:
+                return await interaction.response.defer()
+            await self.finish(interaction, "cashout", f"💰 **{self.streak}連勝** で受け取りました。")
+
+
+class HighLowView(discord.ui.View):
+    def __init__(self, show_stats: bool = True):
+        super().__init__(timeout=None)
+        if not show_stats:
+            self.remove_item(self.stats_btn)
+
+    @discord.ui.button(label="🃏 High & Low で遊ぶ", style=discord.ButtonStyle.primary, custom_id="persistent_highlow_btn")
+    async def play(self, it, btn):
+        await it.response.send_modal(HighLowBetModal())
+
+    @discord.ui.button(label="📊 自分の戦績", style=discord.ButtonStyle.secondary, custom_id="persistent_highlow_stats_btn")
+    async def stats_btn(self, it, btn):
+        await show_user_game_stats(it, "highlow")
+
+
 def calculate_gamble_win_rates(game_name: str, expectation: float):
     """
     指定されたゲーム名と期待値から、プレイヤーとBot（あるいはハウス）の勝率を計算して返します。
@@ -2954,6 +3213,7 @@ class Gambling(commands.Cog):
         self.bot.add_view(BlackjackView())
         self.bot.add_view(RouletteView())
         self.bot.add_view(HorseRacingView())
+        self.bot.add_view(HighLowView())
         self.bot.tree.add_command(GambleEmployeeGroup(self.bot))
 
     async def cog_unload(self):

@@ -7,6 +7,7 @@ import { memberFetch } from '@/lib/memberClient';
 import RouletteWheel, { RouletteWheelHandle } from './RouletteWheel';
 import DiceBowl from './DiceBowl';
 import HorseRace, { RaceData } from './HorseRace';
+import HighLow, { HlResponse, HlView } from './HighLow';
 
 /** GET /api/member/guilds/[guild_id]/casino の中身 */
 export interface CasinoInfo {
@@ -20,11 +21,13 @@ export interface CasinoInfo {
     roulette: { two: number; three: number; number: number };
     blackjack: { normal: number; bj: number };
     horse: { tan: number; fuku: number };
+    highlow?: { mul: number; max_streak: number };
   };
   horses: { num: number; name: string; emoji: string }[];
   active_blackjack: BjView | null;
+  active_highlow?: HlView | null;
 }
-type GameKey = 'coinflip' | 'slot' | 'roulette' | 'blackjack' | 'chinchiro' | 'horse';
+type GameKey = 'coinflip' | 'slot' | 'roulette' | 'blackjack' | 'chinchiro' | 'horse' | 'highlow';
 
 interface Card { suit: string; value: string }
 interface BjView {
@@ -41,7 +44,7 @@ interface BjView {
 }
 
 const GAME_ICON: Record<GameKey, string> = {
-  coinflip: '🪙', slot: '🎰', roulette: '🎡', blackjack: '🃏', chinchiro: '🎲', horse: '🏇',
+  coinflip: '🪙', slot: '🎰', roulette: '🎡', blackjack: '🃏', chinchiro: '🎲', horse: '🏇', highlow: '🔼',
 };
 const fmt = (n: number) => n.toLocaleString('ja-JP');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -103,6 +106,7 @@ const STAT_DETAILS: Partial<Record<GameKey, { title: string; rows: [string, stri
   blackjack: { title: '🃏 詳細履歴', rows: [['bj_win', 'ブラックジャック勝利'], ['normal_win', '通常勝利'], ['bust', 'バスト']] },
   roulette: { title: '🎡 当選履歴', rows: [['win_36x', '数字1点的中'], ['win_3x', 'ダズン的中'], ['win_2x', '赤黒/偶奇等的中']] },
   horse: { title: '🏇 的中履歴', rows: [['tan_win', '単勝的中 (1着)'], ['fuku_win', '複勝的中 (1〜3着)']] },
+  highlow: { title: '🔼 詳細履歴', rows: [['max_streak', '最大連勝で受け取り'], ['cashout', '途中で受け取り'], ['miss', 'ハズレ']] },
 };
 
 function StatsCard({ game, label, stat, cur }: { game: GameKey; label: string; stat: GameStat; cur: string }) {
@@ -160,7 +164,7 @@ export default function Casino({
   info: CasinoInfo;
   onPlayed: (next: { balance: number; plays_today?: number; bet_delta?: number }) => void;
 }) {
-  const [game, setGame] = useState<GameKey>(info.active_blackjack ? 'blackjack' : info.games[0].key);
+  const [game, setGame] = useState<GameKey>(info.active_blackjack ? 'blackjack' : info.active_highlow ? 'highlow' : info.games[0].key);
   const [betText, setBetText] = useState('');
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -173,6 +177,7 @@ export default function Casino({
   const [rouletteShown, setRouletteShown] = useState<number | null>(null);
   const wheelRef = useRef<RouletteWheelHandle>(null);
   const [bj, setBj] = useState<BjView | null>(info.active_blackjack);
+  const [hl, setHl] = useState<HlView | null>(info.active_highlow ?? null);
   const [chin, setChin] = useState<any>(null);
   const [chinShown, setChinShown] = useState({ player: 0, npc: 0 });
   // お椀に今見せている出目（転がっている最中は rolling）
@@ -215,7 +220,7 @@ export default function Casino({
   const taxNote = (tax: number | undefined) => (tax ? `\n※ カジノ手数料 ${(tax_rate * 100).toFixed(1)}% として ${fmt(tax)} ${cur} が引かれました` : '');
 
   const switchGame = (g: GameKey) => {
-    if (busy || (bj && !bj.finished)) return;
+    if (busy || (bj && !bj.finished) || (hl && !hl.finished)) return;
     setGame(g);
     setOutcome(null);
   };
@@ -344,6 +349,53 @@ export default function Casino({
       }
     });
 
+  // High & Low（めくる・受け取るのアニメーションは HighLow.tsx）
+  const hlStart = () =>
+    run(async () => {
+      const data: HlResponse | null = await post('highlow', { action: 'start', bet });
+      if (!data) return;
+      setHl(data);
+      if (!data.resumed) played(data, data.bet);
+      else {
+        onPlayed({ balance: data.balance });
+        toast('進行中のゲームの続きです');
+      }
+    });
+
+  const hlAction = async (action: 'guess' | 'cashout', guess?: 'high' | 'low'): Promise<HlResponse | null> => {
+    setOutcome(null);
+    try {
+      const data: HlResponse | null = await post('highlow', { action, guess, id: hl?.id });
+      if (!data) {
+        setHl(null);
+        return null;
+      }
+      onPlayed({ balance: data.balance });
+      return data;
+    } catch {
+      toast.error('サーバーに接続できませんでした');
+      return null;
+    }
+  };
+
+  const hlFinished = (data: HlResponse) => {
+    setHl(data);
+    setStatsKey((k) => k + 1);
+    const r = data.result;
+    if (!r) return;
+    if (r.isWin) {
+      setOutcome({
+        tone: 'win',
+        title: `🎉 ${data.streak}連勝で受け取り！ +${fmt(r.payout - data.bet)} ${cur}`,
+        detail: `${fmt(r.payout)} ${cur} を受け取りました${r.reason === 'max' ? '（最大連勝達成）' : ''}${taxNote(r.tax)}`,
+      });
+    } else if (r.isDraw) {
+      setOutcome({ tone: 'draw', title: '🤝 引き分け', detail: `${fmt(r.payout)} ${cur} が戻りました` });
+    } else {
+      setOutcome({ tone: 'lose', title: `💀 ハズレ… ${fmt(data.bet)} ${cur} 没収`, detail: data.streak > 0 ? `${data.streak}連勝で止まりました` : '' });
+    }
+  };
+
   const playChinchiro = () =>
     run(async () => {
       const data = await post('chinchiro', { bet });
@@ -414,7 +466,8 @@ export default function Casino({
 
   // ---------- 画面 ----------
 
-  const inGame = (bj && !bj.finished && game === 'blackjack') || (chin && !chinDone && game === 'chinchiro');
+  const inGame =
+    (bj && !bj.finished && game === 'blackjack') || (chin && !chinDone && game === 'chinchiro') || (hl && !hl.finished && game === 'highlow');
   const m = info.multipliers;
 
   return (
@@ -665,6 +718,20 @@ export default function Casino({
             </div>
             <PlayButton busy={busy} disabled={!canPlay} onClick={playHorse}>🏇 レース開始</PlayButton>
           </>
+        )}
+
+        {game === 'highlow' && (
+          <HighLow
+            session={hl}
+            cur={cur}
+            mul={m.highlow?.mul ?? 1.8}
+            maxStreak={m.highlow?.max_streak ?? 5}
+            canStart={canPlay}
+            busy={busy}
+            onStart={hlStart}
+            onAction={hlAction}
+            onFinished={hlFinished}
+          />
         )}
 
         <ResultBox outcome={outcome} />

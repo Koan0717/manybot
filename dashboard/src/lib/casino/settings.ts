@@ -5,7 +5,7 @@ import type { Pool } from 'pg';
  * 確率・倍率・上限・手数料は Bot（cogs/gambling.py, helpers.py の DEFAULT_SETTINGS）と同じキー・同じ既定値を使う。
  * どのゲームをWebで遊べるかは、管理ダッシュボード「Webアクティビティ設定」の WEB_GAMES_ENABLED で決める。
  */
-export const WEB_GAMES = ['coinflip', 'slot', 'roulette', 'blackjack', 'chinchiro', 'horse'] as const;
+export const WEB_GAMES = ['coinflip', 'slot', 'roulette', 'blackjack', 'chinchiro', 'horse', 'highlow'] as const;
 export type WebGame = (typeof WEB_GAMES)[number];
 
 export const WEB_GAME_LABEL: Record<WebGame, string> = {
@@ -15,6 +15,7 @@ export const WEB_GAME_LABEL: Record<WebGame, string> = {
   blackjack: 'ブラックジャック',
   chinchiro: 'チンチロリン',
   horse: '競馬',
+  highlow: 'High & Low',
 };
 
 export const WEB_GAMES_SETTING_KEY = 'WEB_GAMES_ENABLED';
@@ -63,6 +64,7 @@ export interface CasinoSettings {
     mulPinzoro: number; mulArashi: number; mulShigoro: number; mulHifumi: number; mulNormal: number;
   };
   horse: { rateTan: number; rateFuku: number; mulTan: number; mulFuku: number };
+  highlow: { win: number; draw: number; lose: number; mul: number; maxStreak: number };
 }
 
 export function parseEnabledGames(raw: unknown): Record<WebGame, boolean> {
@@ -153,6 +155,14 @@ export async function loadCasinoSettings(pool: Pool, guildId: string): Promise<C
       rateFuku: orNull(v('GAMBLE_HORSE_RATE_WIN_FUKU'), 0.6),
       mulTan: orNull(v('GAMBLE_HORSE_MUL_TAN'), 4.5),
       mulFuku: orNull(v('GAMBLE_HORSE_MUL_FUKU'), 1.5),
+    },
+    // cogs/gambling.py の highlow_settings と同じ
+    highlow: {
+      win: Math.max(0, orNull(v('GAMBLE_HIGHLOW_RATE_WIN'), 0.45)),
+      draw: Math.max(0, orNull(v('GAMBLE_HIGHLOW_RATE_DRAW'), 0.07)),
+      lose: Math.max(0, orNull(v('GAMBLE_HIGHLOW_RATE_LOSE'), 0.48)),
+      mul: orFalsy(v('GAMBLE_HIGHLOW_MUL'), 1.8),
+      maxStreak: Math.max(1, Math.floor(orNull(v('GAMBLE_HIGHLOW_MAX_STREAK'), 5))),
     },
   };
 }

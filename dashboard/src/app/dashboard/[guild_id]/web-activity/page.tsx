@@ -16,6 +16,7 @@ const GAMES = [
   { key: 'blackjack', label: '🃏 ブラックジャック', desc: 'カードを引いてディーラーと勝負' },
   { key: 'chinchiro', label: '🎲 チンチロリン', desc: 'サイコロの役でBotと勝負' },
   { key: 'horse', label: '🏇 競馬', desc: '単勝・複勝で馬券を買う' },
+  { key: 'highlow', label: '🃏 High & Low', desc: '次のカードが大きいか小さいかを当てて連勝を狙う' },
 ] as const;
 type GameKey = (typeof GAMES)[number]['key'];
 type Enabled = Record<GameKey, boolean>;

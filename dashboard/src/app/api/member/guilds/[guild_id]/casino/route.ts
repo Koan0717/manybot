@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requireGuildMember } from '@/lib/memberAuth';
 import { ensureCasinoTables, getPlayerStatus } from '@/lib/casino/db';
-import { HORSE_LIST, activeBlackjack, settleStaleBlackjack } from '@/lib/casino/games';
+import { HORSE_LIST, activeBlackjack, activeHighLow, settleStaleBlackjack, settleStaleHighLow } from '@/lib/casino/games';
 import { WEB_GAMES, WEB_GAME_LABEL, loadCasinoSettings } from '@/lib/casino/settings';
 import { canUseFeature, getMemberFlags } from '@/lib/webAccess';
 
@@ -26,7 +26,12 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     const allowed = canUseFeature(await getMemberFlags(pool, guildId, member), 'casino');
     const ctx = { pool, s, guildId, userId: session.discord_id };
     await settleStaleBlackjack(ctx);
-    const [status, blackjack] = await Promise.all([getPlayerStatus(pool, guildId, session.discord_id), activeBlackjack(ctx)]);
+    await settleStaleHighLow(ctx);
+    const [status, blackjack, highlow] = await Promise.all([
+      getPlayerStatus(pool, guildId, session.discord_id),
+      activeBlackjack(ctx),
+      activeHighLow(ctx),
+    ]);
 
     return NextResponse.json({
       currency_name: s.currencyName,
@@ -39,10 +44,12 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
         roulette: { two: s.roulette.mul2, three: s.roulette.mul3, number: s.roulette.mul36 },
         blackjack: { normal: s.blackjack.mulNormal, bj: s.blackjack.mulBj },
         horse: { tan: s.horse.mulTan, fuku: s.horse.mulFuku },
+        highlow: { mul: s.highlow.mul, max_streak: s.highlow.maxStreak },
       },
       horses: HORSE_LIST,
       // ゲームがOFFにされても、始めてしまったブラックジャックは最後まで遊べるようにする
       active_blackjack: blackjack,
+      active_highlow: highlow,
     });
   } catch (e) {
     console.error('casino info failed:', e);

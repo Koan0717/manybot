@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Save, AlertCircle, Settings, Dices, Coins, Cherry, Spade, Disc, Trophy, Percent } from 'lucide-react';
+import { Save, AlertCircle, Settings, Dices, Coins, Cherry, Spade, Disc, Trophy, Percent, ArrowUpDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import ChannelSelect from '@/components/ChannelSelect';
@@ -54,6 +54,7 @@ export default function GamblingSettingsPage() {
             GAMBLE_BLACKJACK_SHOW_STATS: data.GAMBLE_BLACKJACK_SHOW_STATS ?? true,
             GAMBLE_ROULETTE_SHOW_STATS: data.GAMBLE_ROULETTE_SHOW_STATS ?? true,
             GAMBLE_HORSE_SHOW_STATS: data.GAMBLE_HORSE_SHOW_STATS ?? true,
+            GAMBLE_HIGHLOW_SHOW_STATS: data.GAMBLE_HIGHLOW_SHOW_STATS ?? true,
             
             GAMBLE_CHINCHIRO_RATE_PINZORO: data.GAMBLE_CHINCHIRO_RATE_PINZORO ?? 0.02,
             GAMBLE_CHINCHIRO_RATE_ARASHI: data.GAMBLE_CHINCHIRO_RATE_ARASHI ?? 0.05,
@@ -98,7 +99,13 @@ export default function GamblingSettingsPage() {
             GAMBLE_HORSE_RATE_WIN_TAN: data.GAMBLE_HORSE_RATE_WIN_TAN ?? 0.20,
             GAMBLE_HORSE_RATE_WIN_FUKU: data.GAMBLE_HORSE_RATE_WIN_FUKU ?? 0.60,
             GAMBLE_HORSE_MUL_TAN: data.GAMBLE_HORSE_MUL_TAN ?? 4.5,
-            GAMBLE_HORSE_MUL_FUKU: data.GAMBLE_HORSE_MUL_FUKU ?? 1.5
+            GAMBLE_HORSE_MUL_FUKU: data.GAMBLE_HORSE_MUL_FUKU ?? 1.5,
+
+            GAMBLE_HIGHLOW_RATE_WIN: data.GAMBLE_HIGHLOW_RATE_WIN ?? 0.45,
+            GAMBLE_HIGHLOW_RATE_DRAW: data.GAMBLE_HIGHLOW_RATE_DRAW ?? 0.07,
+            GAMBLE_HIGHLOW_RATE_LOSE: data.GAMBLE_HIGHLOW_RATE_LOSE ?? 0.48,
+            GAMBLE_HIGHLOW_MUL: data.GAMBLE_HIGHLOW_MUL ?? 1.8,
+            GAMBLE_HIGHLOW_MAX_STREAK: data.GAMBLE_HIGHLOW_MAX_STREAK ?? 5
           });
         }
         if (!channelsData.error && Array.isArray(channelsData)) {
@@ -194,6 +201,7 @@ export default function GamblingSettingsPage() {
     { id: 'blackjack', label: 'ブラックジャック', icon: Spade },
     { id: 'roulette', label: 'ルーレット', icon: Disc },
     { id: 'horse', label: '競馬', icon: Trophy },
+    { id: 'highlow', label: 'High & Low', icon: ArrowUpDown },
   ];
 
   // Pie chart data generation
@@ -257,6 +265,14 @@ export default function GamblingSettingsPage() {
         { name: '不的中', value: Math.max(0, 1 - settings.GAMBLE_HORSE_RATE_WIN_FUKU) },
       ];
     }
+  }
+
+  if (activeTab === 'highlow') {
+    pieData = [
+      { name: '当たり', value: settings.GAMBLE_HIGHLOW_RATE_WIN },
+      { name: '引き分け (同じ数字)', value: settings.GAMBLE_HIGHLOW_RATE_DRAW },
+      { name: 'ハズレ', value: settings.GAMBLE_HIGHLOW_RATE_LOSE },
+    ];
   }
 
   const renderInput = (label: string, key: string, isPercent: boolean = false, step: string = "0.01") => (
@@ -552,6 +568,54 @@ export default function GamblingSettingsPage() {
               </div>
             )}
 
+            {activeTab === 'highlow' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between border-b border-gray-700 pb-2 mb-4">
+                  <h3 className="text-xl font-bold text-white">High & Low 設定</h3>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-300">戦績ボタン表示:</span>
+                    <button
+                      onClick={() => updateSetting('GAMBLE_HIGHLOW_SHOW_STATS', !settings.GAMBLE_HIGHLOW_SHOW_STATS)}
+                      className={`px-3 py-1 text-sm rounded-lg font-bold transition-colors ${settings.GAMBLE_HIGHLOW_SHOW_STATS ? 'bg-green-600 text-white' : 'bg-gray-700 text-gray-400'}`}
+                    >
+                      {settings.GAMBLE_HIGHLOW_SHOW_STATS ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-sm text-gray-400 bg-gray-800/40 border border-gray-700/50 rounded-lg p-4 leading-relaxed">
+                  次のカードが今のカードより大きい（High）か小さい（Low）かを当てるゲームです。A が一番小さく K が一番大きく、同じ数字は引き分け（そのまま続行）です。
+                  当てるたびに受け取れる額が「1回当てるごとの倍率」ずつ増え、いつでも受け取って勝ち逃げできます。外れると賭け金は没収です。
+                </div>
+
+                <h4 className="text-lg font-semibold text-gray-200">確率設定 (%) ※1回めくるごと</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {renderInput('当たり確率', 'GAMBLE_HIGHLOW_RATE_WIN', true)}
+                  {renderInput('引き分け確率 (同じ数字)', 'GAMBLE_HIGHLOW_RATE_DRAW', true)}
+                  {renderInput('ハズレ確率', 'GAMBLE_HIGHLOW_RATE_LOSE', true)}
+                  <div className="text-xs text-gray-500 col-span-2 md:col-span-3">
+                    ※ ありえない結果（K で High を選んだときの当たりなど）はハズレ、A で High のときのハズレは引き分けになります。
+                  </div>
+                </div>
+
+                <h4 className="text-lg font-semibold text-gray-200 mt-8">倍率・連勝設定</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  {renderInput('1回当てるごとの倍率 (倍)', 'GAMBLE_HIGHLOW_MUL', false, '0.1')}
+                  {renderInput('最大連勝数 (到達で自動受け取り)', 'GAMBLE_HIGHLOW_MAX_STREAK', false, '1')}
+                </div>
+                <div className="bg-gray-800/40 border border-gray-700/50 rounded-lg p-4">
+                  <div className="text-sm text-gray-300 font-medium mb-2">連勝ごとの受け取り倍率</div>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from({ length: Math.min(20, Math.max(1, Math.floor(Number(settings.GAMBLE_HIGHLOW_MAX_STREAK) || 1))) }, (_, i) => (
+                      <span key={i} className="px-3 py-1 rounded-full bg-gray-900 border border-gray-700 text-xs text-gray-200">
+                        {i + 1}連勝: <b className="text-amber-300">{Math.pow(Number(settings.GAMBLE_HIGHLOW_MUL) || 0, i + 1).toFixed(2)}倍</b>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
           </motion.div>
         </div>
 
@@ -657,6 +721,7 @@ export default function GamblingSettingsPage() {
               <option value="blackjack">🃏 ブラックジャック</option>
               <option value="roulette">🎡 ルーレット</option>
               <option value="horse">🏇 競馬</option>
+              <option value="highlow">🃏 High & Low</option>
             </select>
           </div>
           <div className="flex-1 w-full">

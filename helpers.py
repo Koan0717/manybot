@@ -263,6 +263,7 @@ DEFAULT_SETTINGS = {
     "GAMBLE_BLACKJACK_SHOW_STATS": True,
     "GAMBLE_ROULETTE_SHOW_STATS": True,
     "GAMBLE_HORSE_SHOW_STATS": True,
+    "GAMBLE_HIGHLOW_SHOW_STATS": True,
     # --- オセロゲーム設定 ---
     "OTHELLO_SHOW_STATS": True,
     "OTHELLO_BET_ENABLED": False,
@@ -1163,6 +1164,7 @@ def create_game_stats_embed(user: discord.User or discord.Member, game_type: str
         "blackjack": {"name": "ブラックジャック", "emoji": "🃏", "color": discord.Color.dark_red()},
         "roulette": {"name": "ルーレット", "emoji": "🎡", "color": discord.Color.red()},
         "horse": {"name": "競馬", "emoji": "🏇", "color": discord.Color.dark_teal()},
+        "highlow": {"name": "High & Low", "emoji": "🃏", "color": discord.Color.dark_green()},
         "othello": {"name": "オセロ", "emoji": "♟️", "color": discord.Color.green()},
     }
 
@@ -1259,6 +1261,14 @@ def create_game_stats_embed(user: discord.User or discord.Member, game_type: str
             f"- **複勝的中 (1〜3着)**: {extra.get('fuku_win', 0):,} 回",
         ]
         embed.add_field(name="🏇 的中履歴", value="\n".join(detail_lines), inline=False)
+
+    elif game_type == "highlow":
+        detail_lines = [
+            f"- **最大連勝で受け取り**: {extra.get('max_streak', 0):,} 回",
+            f"- **途中で受け取り**: {extra.get('cashout', 0):,} 回",
+            f"- **ハズレ**: {extra.get('miss', 0):,} 回",
+        ]
+        embed.add_field(name="🃏 詳細履歴", value="\n".join(detail_lines), inline=False)
 
     elif game_type == "othello":
         pvp_w = extra.get("pvp_wins", 0)
