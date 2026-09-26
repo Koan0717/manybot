@@ -7,6 +7,15 @@ import ChannelSelect from '@/components/ChannelSelect';
 import PageHeader from '@/components/PageHeader';
 import { toast } from 'react-hot-toast';
 
+const AI_MULT_DEFAULT = { 4: 2, 5: 3 } as const;
+
+/** 倍率の入力を保存用の数値にする（1〜100、小数第2位まで。空欄や不正な値は既定値） */
+function toMult(raw: unknown, fallback: number): number {
+  const n = Number(raw);
+  if (raw === '' || !Number.isFinite(n)) return fallback;
+  return Math.round(Math.min(100, Math.max(1, n)) * 100) / 100;
+}
+
 /**
  * オセロ・チェス・将棋の設定画面（中身は同じで、設定キーの頭 (OTHELLO / CHESS / SHOGI) だけが違う）
  */
@@ -23,6 +32,9 @@ export default function BoardGameSettings({ game, name, icon: Icon }: { game: 'o
     [`${P}_VC_CATEGORY_ID`]: data[`${P}_VC_CATEGORY_ID`] ?? '',
     [`${P}_VC_NAME`]: data[`${P}_VC_NAME`] ?? `${name}対戦`,
     [`${P}_GAME_CHANNEL`]: data[`${P}_GAME_CHANNEL`] ?? '',
+    // AI に勝ったときの倍率（賭けられるのはレベル4・5だけ）。入力中は文字列のまま持ち、保存時に数値へ直す
+    [`${P}_AI_MULT_4`]: String(data[`${P}_AI_MULT_4`] ?? AI_MULT_DEFAULT[4]),
+    [`${P}_AI_MULT_5`]: String(data[`${P}_AI_MULT_5`] ?? AI_MULT_DEFAULT[5]),
   });
   const [settings, setSettings] = useState<Record<string, any>>(defaults());
   const [loading, setLoading] = useState(true);
@@ -57,7 +69,11 @@ export default function BoardGameSettings({ game, name, icon: Icon }: { game: 'o
       const res = await fetch(`/api/guilds/${guildId}/games/${game}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({
+          ...settings,
+          [`${P}_AI_MULT_4`]: toMult(settings[`${P}_AI_MULT_4`], AI_MULT_DEFAULT[4]),
+          [`${P}_AI_MULT_5`]: toMult(settings[`${P}_AI_MULT_5`], AI_MULT_DEFAULT[5]),
+        }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -146,6 +162,33 @@ export default function BoardGameSettings({ game, name, icon: Icon }: { game: 'o
           </button>
         </div>
 
+        <div className="bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50 space-y-3">
+          <div>
+            <p className="text-sm font-tech text-zinc-300 font-medium">AI対戦の倍率</p>
+            <p className="text-xs font-tech text-zinc-500 mt-0.5">
+              AI対戦で賭けられるのはレベル4・5だけです。AIに勝つと「賭け金 × 倍率」が戻ります（引き分けは返金、負けは没収）
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {([4, 5] as const).map((lv) => (
+              <label key={lv} className="flex items-center gap-2">
+                <span className="text-sm font-tech text-zinc-300 whitespace-nowrap">レベル{lv}（{lv === 4 ? '難しい' : '最難関'}）</span>
+                <span className="text-zinc-500">×</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  min="1"
+                  max="100"
+                  value={settings[`${P}_AI_MULT_${lv}`]}
+                  onChange={(e) => updateSetting(`${P}_AI_MULT_${lv}`, e.target.value)}
+                  onBlur={() => updateSetting(`${P}_AI_MULT_${lv}`, String(toMult(settings[`${P}_AI_MULT_${lv}`], AI_MULT_DEFAULT[lv])))}
+                  className="w-24 bg-zinc-900 border border-zinc-600 rounded px-3 py-1.5 text-white font-tech focus:outline-none focus:border-cyan-500"
+                />
+              </label>
+            ))}
+          </div>
+        </div>
 
         <div className="flex items-center justify-between bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50">
           <div>

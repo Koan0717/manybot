@@ -17,7 +17,7 @@ import database
 import chess_engine as ce
 import shogi_engine as se
 import board_images
-from helpers import get_setting, create_game_stats_embed
+from helpers import get_setting, create_game_stats_embed, AI_BET_MIN_LEVEL, ai_bet_multiplier, format_mult
 
 _bot_instance = None
 # key: (game, guild_id, channel_id) または (game, "dm", user_id)
@@ -216,7 +216,7 @@ SPECS = {"chess": ChessSpec(), "shogi": ShogiSpec()}
 # セッション
 # ============================================================
 class BoardSession:
-    def __init__(self, spec, first_id, second_id, channel_id, guild_id, bet=0, is_dm=False, is_ai=False, ai_level=1):
+    def __init__(self, spec, first_id, second_id, channel_id, guild_id, bet=0, is_dm=False, is_ai=False, ai_level=1, ai_mult=2.0):
         self.spec = spec
         self.state = spec.new_state()
         self.first_id = first_id      # 白 / 先手
@@ -227,6 +227,7 @@ class BoardSession:
         self.is_dm = is_dm
         self.is_ai = is_ai
         self.ai_level = ai_level
+        self.ai_mult = ai_mult        # AI に勝ったときの倍率（開始時の設定で固定）
         self.board_message_ids = []
         self.history = []             # 棋譜（表示用の文字）
         self.last_move = None
@@ -275,7 +276,7 @@ async def show_board(channel, session: BoardSession, note: str = None):
     embed.add_field(name=spec.side_names[0], value=f"<@{session.first_id}>", inline=True)
     embed.add_field(name=spec.side_names[1], value="🤖 AI" if session.is_ai else f"<@{session.second_id}>", inline=True)
     if session.bet > 0:
-        embed.add_field(name="💰 賭け金", value=f"{session.bet:,} {_currency(session.guild_id)}" + ("" if session.is_ai else "（各自）"), inline=True)
+        embed.add_field(name="💰 賭け金", value=f"{session.bet:,} {_currency(session.guild_id)}" + (f"（勝つと ×{format_mult(session.ai_mult)}）" if session.is_ai else "（各自）"), inline=True)
     if session.history:
         recent = session.history[-8:]
         start = len(session.history) - len(recent) + 1
@@ -364,8 +365,9 @@ async def end_game(channel, session: BoardSession, winner, reason: str):
                 embed.add_field(name="💰 賭け精算", value=f"引き分けのため各 **{session.bet:,} {cur}** 返金", inline=False)
             elif session.is_ai:
                 if winner == 1:
-                    await database.add_balance(session.guild_id, session.first_id, session.bet * 2)
-                    embed.add_field(name="💰 賭け精算", value=f"<@{session.first_id}> 元金 **{session.bet:,}** → **{session.bet * 2:,} {cur}**（+{session.bet:,}）", inline=False)
+                    prize = int(session.bet * session.ai_mult)
+                    await database.add_balance(session.guild_id, session.first_id, prize)
+                    embed.add_field(name="💰 賭け精算", value=f"<@{session.first_id}> 元金 **{session.bet:,}** → **{prize:,} {cur}**（×{format_mult(session.ai_mult)}、+{prize - session.bet:,}）", inline=False)
                 else:
                     embed.add_field(name="💰 賭け精算", value=f"AI の勝ち。**{session.bet:,} {cur}** 没収。", inline=False)
             else:
@@ -384,7 +386,8 @@ async def end_game(channel, session: BoardSession, winner, reason: str):
                 me = idx + 1
                 is_draw = winner is None
                 is_win = winner == me
-                payout = session.bet * 2 if is_win else (session.bet if is_draw else 0)
+                win_payout = int(session.bet * session.ai_mult) if session.is_ai else session.bet * 2
+                payout = win_payout if is_win else (session.bet if is_draw else 0)
                 mode = "ai" if session.is_ai else "pvp"
                 extra = {f"{mode}_{'draws' if is_draw else 'wins' if is_win else 'losses'}": 1}
                 await database.record_game_result(session.guild_id, uid, spec.key, is_win=is_win, is_draw=is_draw,
@@ -583,8 +586,8 @@ class MoveRequestView(discord.ui.View):
 class BetModal(discord.ui.Modal):
     bet_input = discord.ui.TextInput(label="賭ける金額", placeholder="例: 1000", max_length=10, required=True)
 
-    def __init__(self, spec, next_callback):
-        super().__init__(title=f"{spec.name}：賭け金入力")
+    def __init__(self, spec, next_callback, mult: float = 2.0):
+        super().__init__(title=f"{spec.name}：賭け金入力（勝つと×{format_mult(mult)}）")
         self.next_callback = next_callback
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -613,10 +616,12 @@ class DifficultyView(discord.ui.View):
             if interaction.user.id != self.initiator_id:
                 return await interaction.response.send_message("あなた専用の選択ではありません。", ephemeral=True)
             guild_id = interaction.guild.id if interaction.guild else None
-            if _truthy(get_setting(interaction.client, f"{self.spec.prefix}_BET_ENABLED", guild_id)):
+            # AI 対戦で賭けられるのはレベル4以上
+            if level >= AI_BET_MIN_LEVEL and _truthy(get_setting(interaction.client, f"{self.spec.prefix}_BET_ENABLED", guild_id)):
                 async def on_bet(it, bet):
                     await _start_ai(it, self.spec, level, bet)
-                await interaction.response.send_modal(BetModal(self.spec, on_bet))
+                mult = ai_bet_multiplier(interaction.client, self.spec.prefix, guild_id, level)
+                await interaction.response.send_modal(BetModal(self.spec, on_bet, mult))
             else:
                 await interaction.response.defer(ephemeral=True)
                 await _start_ai(interaction, self.spec, level, 0)
@@ -632,6 +637,8 @@ async def _reply(interaction, msg):
 
 async def _start_ai(interaction: discord.Interaction, spec, level: int, bet: int):
     guild_id = interaction.guild.id if interaction.guild else None
+    if level < AI_BET_MIN_LEVEL:
+        bet = 0  # AI 対戦で賭けられるのはレベル4以上
     user = interaction.user
     if (spec.key, "dm", user.id) in sessions:
         return await _reply(interaction, f"DMで{spec.name}のAI対戦がすでに進行中です。先に終わらせてください。")
@@ -645,7 +652,8 @@ async def _start_ai(interaction: discord.Interaction, spec, level: int, bet: int
         if bet > 0 and guild_id:
             await database.add_balance(guild_id, user.id, bet)
         return await _reply(interaction, "DMを送れませんでした。BotからのDMを許可してください。")
-    session = BoardSession(spec, user.id, None, dm.id, guild_id, bet=bet, is_dm=True, is_ai=True, ai_level=level)
+    mult = ai_bet_multiplier(interaction.client, spec.prefix, guild_id, level)
+    session = BoardSession(spec, user.id, None, dm.id, guild_id, bet=bet, is_dm=True, is_ai=True, ai_level=level, ai_mult=mult)
     side = spec.side_names[0]
     await _reply(interaction, f"✅ {spec.name}のAI対戦（レベル{level}: {LEVEL_NAMES[level]}）を始めます！DMを確認してください。\nあなたは {side} です。")
     await start_game(dm, session)

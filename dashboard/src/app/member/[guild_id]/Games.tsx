@@ -36,7 +36,8 @@ export interface BoardGameView {
 export interface GamesInfo {
   enabled: true;
   currency_name: string;
-  games: { key: GameKey; label: string; bet_enabled: boolean }[];
+  /** ai_mult: AI に勝ったときの倍率（キーはレベル。賭けられるのはレベル AI_BET_MIN_LEVEL 以上） */
+  games: { key: GameKey; label: string; bet_enabled: boolean; ai_mult?: Record<string, number> }[];
   mine: BoardGameView[];
   /** アクティビティを通話で開いているとき、その通話にいる人 */
   voice_peers?: Player[];
@@ -48,6 +49,8 @@ const GAME_META: Record<GameKey, { icon: string; label: string; sides: [string, 
   shogi: { icon: '☗', label: '将棋', sides: ['☗ 先手', '☖ 後手'], color: 'from-orange-700/40 to-amber-950/40 border-orange-700/60' },
 };
 const LEVELS = ['簡単', '普通', '中級', '難しい', '最難関'];
+/** AI対戦で賭けられる最低レベル（lib/boardgames/web.ts と同じ） */
+const AI_BET_MIN_LEVEL = 4;
 const fmt = (n: number) => n.toLocaleString('ja-JP');
 
 async function api(path: string, body?: object) {
@@ -292,6 +295,9 @@ export default function Games({
   const g = info.games.find((x) => x.key === game);
   // 空欄・0 は賭けなし（申し込む人が決め、受ける人も同じ額を賭ける）
   const pvpBet = g?.bet_enabled && pvpBetText !== '' ? Number(pvpBetText) : 0;
+  // AI対戦で賭けられるのはレベル4以上。勝つと設定の倍率で戻る
+  const aiBetOk = !!g?.bet_enabled && level >= AI_BET_MIN_LEVEL;
+  const aiMult = g?.ai_mult?.[String(level)] ?? 2;
   // ゲームを切り替えたら賭け金の入力は空に戻す（金額は申し込む人が毎回決める）
   useEffect(() => {
     setBetText('');
@@ -441,7 +447,7 @@ export default function Games({
                 </button>
               ))}
             </div>
-            {g.bet_enabled && (
+            {aiBetOk && (
               <div className="flex items-center gap-2">
                 <input
                   value={betText}
@@ -454,14 +460,21 @@ export default function Games({
               </div>
             )}
             <button
-              onClick={() => create({ action: 'ai', level, bet: g.bet_enabled && betText ? Number(betText) : 0 })}
+              onClick={() => create({ action: 'ai', level, bet: aiBetOk && betText ? Number(betText) : 0 })}
               disabled={busy}
               className="w-full py-3 rounded-xl font-bold bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Swords className="w-4 h-4" />} AI対戦を始める
             </button>
-            {g.bet_enabled && Number(betText) > 0 && (
-              <p className="text-[11px] text-zinc-500 text-center">勝つと {fmt(Number(betText) * 2)}（賭け金の2倍）、引き分けは返金、負けると没収です</p>
+            {aiBetOk && Number(betText) > 0 && (
+              <p className="text-[11px] text-zinc-500 text-center">
+                勝つと {fmt(Math.floor(Number(betText) * aiMult))}（賭け金の{aiMult}倍）、引き分けは返金、負けると没収です
+              </p>
+            )}
+            {g.bet_enabled && !aiBetOk && (
+              <p className="text-[11px] text-zinc-500 text-center">
+                AI対戦で賭けられるのはレベル{AI_BET_MIN_LEVEL}以上です（Lv4 ×{g.ai_mult?.['4'] ?? 2}・Lv5 ×{g.ai_mult?.['5'] ?? 3}）
+              </p>
             )}
           </div>
 
