@@ -270,6 +270,7 @@ class EconomyBot(commands.Bot):
             "cogs.call_board",
             "cogs.gacha",
             "cogs.othello",
+            "cogs.board_games",
             "cogs.invite_link",
             "cogs.role_history",
         ]

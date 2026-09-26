@@ -266,6 +266,13 @@ DEFAULT_SETTINGS = {
     "GAMBLE_HIGHLOW_SHOW_STATS": True,
     # --- オセロゲーム設定 ---
     "OTHELLO_SHOW_STATS": True,
+    # --- チェス・将棋（cogs/board_games.py） ---
+    "CHESS_SHOW_STATS": True,
+    "CHESS_BET_ENABLED": False,
+    "CHESS_DEFAULT_BET": 100,
+    "SHOGI_SHOW_STATS": True,
+    "SHOGI_BET_ENABLED": False,
+    "SHOGI_DEFAULT_BET": 100,
     "OTHELLO_BET_ENABLED": False,
     "OTHELLO_DEFAULT_BET": 100,
     "OTHELLO_PANEL_CHANNEL": "",
@@ -1166,6 +1173,8 @@ def create_game_stats_embed(user: discord.User or discord.Member, game_type: str
         "horse": {"name": "競馬", "emoji": "🏇", "color": discord.Color.dark_teal()},
         "highlow": {"name": "High & Low", "emoji": "🃏", "color": discord.Color.dark_green()},
         "othello": {"name": "オセロ", "emoji": "♟️", "color": discord.Color.green()},
+        "chess": {"name": "チェス", "emoji": "♟️", "color": discord.Color.dark_gold()},
+        "shogi": {"name": "将棋", "emoji": "☗", "color": discord.Color.from_rgb(222, 178, 108)},
     }
 
     meta = game_meta.get(game_type, {"name": game_type, "emoji": "🎮", "color": discord.Color.blurple()})
@@ -1203,7 +1212,7 @@ def create_game_stats_embed(user: discord.User or discord.Member, game_type: str
         embed.set_thumbnail(url=user.display_avatar.url)
 
     embed.add_field(name="🎮 総プレイ回数", value=f"**{plays:,}** 回", inline=True)
-    if game_type == "othello" or draws > 0:
+    if game_type in ("othello", "chess", "shogi") or draws > 0:
         embed.add_field(name="🏆 勝敗", value=f"**{wins:,}** 勝 **{losses:,}** 敗 (**{draws:,}** 分)", inline=True)
     else:
         embed.add_field(name="🏆 勝敗", value=f"**{wins:,}** 勝 **{losses:,}** 敗", inline=True)
@@ -1270,7 +1279,7 @@ def create_game_stats_embed(user: discord.User or discord.Member, game_type: str
         ]
         embed.add_field(name="🃏 詳細履歴", value="\n".join(detail_lines), inline=False)
 
-    elif game_type == "othello":
+    elif game_type in ("othello", "chess", "shogi"):
         pvp_w = extra.get("pvp_wins", 0)
         pvp_l = extra.get("pvp_losses", 0)
         pvp_d = extra.get("pvp_draws", 0)
