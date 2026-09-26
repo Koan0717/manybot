@@ -13,7 +13,7 @@ import io
 from PIL import Image, ImageDraw, ImageFont
 
 import database
-from helpers import get_setting, JST, create_game_stats_embed
+from helpers import get_setting, JST, create_game_stats_embed, AI_BET_MIN_LEVEL, ai_bet_multiplier, format_mult
 
 # ============================================================
 # モジュールレベル変数
@@ -356,7 +356,7 @@ class OthelloSession:
     def __init__(self, black_id: int, white_id,
                  channel_id: int, guild_id,
                  bet: int = 0, is_dm: bool = False,
-                 is_ai: bool = False, ai_level: int = 1):
+                 is_ai: bool = False, ai_level: int = 1, ai_mult: float = 2.0):
         self.board = OthelloBoard()
         self.current_color: int = 1          # 1=黒(先手), 2=白(後手)
         self.black_id: int = black_id        # 黒石プレイヤーのユーザーID
@@ -367,6 +367,7 @@ class OthelloSession:
         self.is_dm: bool = is_dm
         self.is_ai: bool = is_ai
         self.ai_level: int = ai_level
+        self.ai_mult: float = ai_mult        # AI に勝ったときの倍率（開始時の設定で固定）
         self.board_message_ids: list[int] = []  # 進行中盤面メッセージの履歴IDリスト
         self.pending_move = None             # 選択中の手
 
@@ -415,7 +416,10 @@ async def show_game_board(channel, session: OthelloSession):
     bot = _bot_instance
     if session.bet > 0 and bot and session.guild_id:
         currency_name = get_setting(bot, "CURRENCY_NAME", session.guild_id) or "コイン"
-        embed.add_field(name="💰 賭け金 (ポット)", value=f"{session.bet * 2:,} {currency_name}", inline=True)
+        if session.is_ai:
+            embed.add_field(name="💰 賭け金", value=f"{session.bet:,} {currency_name}（勝つと ×{format_mult(session.ai_mult)}）", inline=True)
+        else:
+            embed.add_field(name="💰 賭け金 (ポット)", value=f"{session.bet * 2:,} {currency_name}", inline=True)
 
     embed.set_image(url="attachment://othello_board.png")
 
@@ -571,14 +575,14 @@ async def end_game(channel, session: OthelloSession, winner: int):
                 )
             elif winner == 1:
                 # 黒の勝ち
-                prize = session.bet * 2
+                prize = int(session.bet * session.ai_mult) if session.is_ai else session.bet * 2
                 await database.add_balance(session.guild_id, session.black_id, prize)
                 if not session.is_ai and session.white_id:
                     # 送金履歴に「負けた人 → 勝った人」へ賭け金分を残す
                     await database.log_transfer(session.guild_id, session.white_id, session.black_id, session.bet, "othello")
                 embed.add_field(
                     name="💰 賭け精算",
-                    value=f"⚫ 黒 <@{session.black_id}> 元金 **{session.bet:,}** → **{prize:,} {currency_name}**（+{prize - session.bet:,}）",
+                    value=f"⚫ 黒 <@{session.black_id}> 元金 **{session.bet:,}** → **{prize:,} {currency_name}**（{'×' + format_mult(session.ai_mult) + '、' if session.is_ai else ''}+{prize - session.bet:,}）",
                     inline=False
                 )
             else:
@@ -608,7 +612,8 @@ async def end_game(channel, session: OthelloSession, winner: int):
             is_black_win = (winner == 1)
             is_draw = (winner == 0)
             black_bet = session.bet
-            black_payout = (session.bet * 2) if is_black_win else (session.bet if is_draw else 0)
+            black_win_payout = int(session.bet * session.ai_mult) if session.is_ai else session.bet * 2
+            black_payout = black_win_payout if is_black_win else (session.bet if is_draw else 0)
             
             extra_b = {}
             if session.is_ai:
@@ -942,8 +947,8 @@ class BetInputModal(discord.ui.Modal, title="オセロ：賭け金入力"):
         required=True
     )
 
-    def __init__(self, next_callback):
-        super().__init__()
+    def __init__(self, next_callback, mult: float = 2.0):
+        super().__init__(title=f"オセロ：賭け金入力（勝つと×{format_mult(mult)}）")
         self.next_callback = next_callback  # (interaction, bet) を受け取る非同期関数
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -978,10 +983,11 @@ class DifficultySelectView(discord.ui.View):
         guild_id = interaction.guild.id if interaction.guild else None
         bet_enabled = get_setting(bot, "OTHELLO_BET_ENABLED", guild_id)
 
-        if bet_enabled and (str(bet_enabled).lower() == "true" or bet_enabled is True):
+        # AI 対戦で賭けられるのはレベル4以上
+        if level >= AI_BET_MIN_LEVEL and bet_enabled and (str(bet_enabled).lower() == "true" or bet_enabled is True):
             async def on_bet(it: discord.Interaction, bet: int):
                 await _start_ai_game(it, level, bet)
-            modal = BetInputModal(next_callback=on_bet)
+            modal = BetInputModal(next_callback=on_bet, mult=ai_bet_multiplier(bot, "OTHELLO", guild_id, level))
             await interaction.response.send_modal(modal)
         else:
             await interaction.response.defer(ephemeral=True)
@@ -1012,6 +1018,9 @@ async def _start_ai_game(interaction: discord.Interaction, ai_level: int, bet: i
     """AI対戦を開始する内部関数。DM内でゲームを行う。"""
     bot = interaction.client
     guild_id = interaction.guild.id if interaction.guild else None
+    if ai_level < AI_BET_MIN_LEVEL:
+        bet = 0  # AI 対戦で賭けられるのはレベル4以上
+    ai_mult = ai_bet_multiplier(bot, "OTHELLO", guild_id, ai_level)
 
     # 賭け金チェック
     if bet > 0 and guild_id:
@@ -1053,7 +1062,8 @@ async def _start_ai_game(interaction: discord.Interaction, ai_level: int, bet: i
         bet=bet,
         is_dm=True,
         is_ai=True,
-        ai_level=ai_level
+        ai_level=ai_level,
+        ai_mult=ai_mult
     )
     game_sessions[key] = session
 

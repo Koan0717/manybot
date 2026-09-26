@@ -27,15 +27,25 @@ const INVITE_LIMIT_MIN = 10;
 export interface BoardGameSettings {
   currencyName: string;
   enabled: Record<BoardGame, boolean>;
-  bet: Record<BoardGame, { enabled: boolean }>;
+  /** aiMult: AI に勝ったときの倍率（賭けられるのはレベル AI_BET_MIN_LEVEL 以上だけ） */
+  bet: Record<BoardGame, { enabled: boolean; aiMult: Record<number, number> }>;
 }
+
+/** AI対戦で賭けられる最低レベル */
+export const AI_BET_MIN_LEVEL = 4;
+const AI_MULT_DEFAULT: Record<number, number> = { 4: 2, 5: 3 };
+const multOf = (raw: unknown, fallback: number) => {
+  const n = Number(raw);
+  return raw !== undefined && raw !== null && raw !== '' && Number.isFinite(n) && n >= 1 ? Math.min(100, n) : fallback;
+};
 
 export async function loadBoardGameSettings(pool: Pool, guildId: string): Promise<BoardGameSettings> {
   const s: Record<string, string> = {};
   try {
     const res = await pool.query(
       `SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN
-         ($2, 'CURRENCY_NAME', 'OTHELLO_BET_ENABLED', 'CHESS_BET_ENABLED', 'SHOGI_BET_ENABLED')`,
+         ($2, 'CURRENCY_NAME', 'OTHELLO_BET_ENABLED', 'CHESS_BET_ENABLED', 'SHOGI_BET_ENABLED',
+          'OTHELLO_AI_MULT_4', 'OTHELLO_AI_MULT_5', 'CHESS_AI_MULT_4', 'CHESS_AI_MULT_5', 'SHOGI_AI_MULT_4', 'SHOGI_AI_MULT_5')`,
       [guildId, WEB_BOARDGAMES_KEY]
     );
     for (const r of res.rows) s[r.setting_key] = r.setting_value;
@@ -54,7 +64,8 @@ export async function loadBoardGameSettings(pool: Pool, guildId: string): Promis
     bet: Object.fromEntries(
       BOARD_GAMES.map((g) => {
         const P = g.toUpperCase();
-        return [g, { enabled: t(s[`${P}_BET_ENABLED`]) }];
+        const aiMult: Record<number, number> = { 4: multOf(s[`${P}_AI_MULT_4`], AI_MULT_DEFAULT[4]), 5: multOf(s[`${P}_AI_MULT_5`], AI_MULT_DEFAULT[5]) };
+        return [g, { enabled: t(s[`${P}_BET_ENABLED`]), aiMult }];
       })
     ) as BoardGameSettings['bet'],
   };
@@ -176,6 +187,8 @@ export async function ensureBoardGameTable(pool: Pool) {
   await pool.query('CREATE INDEX IF NOT EXISTS idx_web_board_games_guild ON web_board_games (guild_id, status)');
   // 精算の内容（誰がいくら賭けて、いくら受け取り、所持金がいくらになったか）
   await pool.query('ALTER TABLE web_board_games ADD COLUMN IF NOT EXISTS settlement JSONB');
+  // AI に勝ったときの倍率（対局開始時の設定で固定する）
+  await pool.query('ALTER TABLE web_board_games ADD COLUMN IF NOT EXISTS ai_mult REAL');
   ensured.add(pool);
 }
 
@@ -189,6 +202,7 @@ interface Row {
   second_id: string | null;
   inviter_id: string | null;
   ai_level: number;
+  ai_mult: number | null;
   bet: string;
   state: any;
   history: string[];
@@ -202,7 +216,7 @@ interface Row {
 }
 
 const COLS = `id, guild_id::text AS guild_id, game, mode, status, first_id::text AS first_id, second_id::text AS second_id,
-  inviter_id::text AS inviter_id, ai_level, bet::text AS bet, state, history, last_move, notes, winner, reason, settlement,
+  inviter_id::text AS inviter_id, ai_level, ai_mult, bet::text AS bet, state, history, last_move, notes, winner, reason, settlement,
   updated_at, created_at`;
 
 // ---------------- 名前（表示用。少しの間覚えておく） ----------------
@@ -236,7 +250,9 @@ async function settle(client: PoolClient, row: Row, winner: 0 | 1 | 2, reason: s
     const me = i + 1;
     const isDraw = winner === 0;
     const isWin = winner === me;
-    const payout = bet > 0 ? (isWin ? bet * 2 : isDraw ? bet : 0) : 0;
+    // 勝ち: 対人戦は 2 倍（相手の賭け金をもらう）、AI 戦は設定の倍率。引き分けは返金
+    const winMult = row.mode === 'ai' ? Number(row.ai_mult) || 2 : 2;
+    const payout = bet > 0 ? (isWin ? Math.floor(bet * winMult) : isDraw ? bet : 0) : 0;
     const bal = await client.query(
       'UPDATE users SET balance = balance + $1 WHERE guild_id = $2 AND user_id = $3 RETURNING balance',
       [payout, row.guild_id, uid]
@@ -281,6 +297,7 @@ export async function gameView(row: Row, viewerId: string) {
     mode: row.mode,
     status: row.status,
     ai_level: row.ai_level,
+    ai_mult: row.mode === 'ai' && (Number(row.bet) || 0) > 0 ? Number(row.ai_mult) || 2 : null,
     bet: Number(row.bet) || 0,
     you,
     first,
@@ -356,9 +373,11 @@ export async function createAiGame(pool: Pool, s: BoardGameSettings, guildId: st
   if (!Number.isInteger(lv) || lv < 1 || lv > 5) throw new CasinoError('AIの強さを選んでください');
   let bet = 0;
   if (s.bet[game].enabled && betRaw !== undefined && betRaw !== null && betRaw !== '' && Number(betRaw) !== 0) {
+    if (lv < AI_BET_MIN_LEVEL) throw new CasinoError(`AI対戦で賭けられるのはレベル${AI_BET_MIN_LEVEL}以上です`);
     bet = Number(betRaw);
     if (!Number.isSafeInteger(bet) || bet < 1) throw new CasinoError('賭け金は1以上の整数で入力してください');
   }
+  const aiMult = bet > 0 ? s.bet[game].aiMult[lv] ?? 2 : null;
   const id = randomUUID();
   const row = await withTransaction(pool, async (client) => {
     const active = await client.query(
@@ -368,9 +387,9 @@ export async function createAiGame(pool: Pool, s: BoardGameSettings, guildId: st
     if (active.rows.length) throw new CasinoError(`${BOARD_GAME_LABEL[game]}のAI対戦が進行中です。先に終わらせてください`);
     await takeBet(client, guildId, userId, bet, 'あなた');
     const r = await client.query(
-      `INSERT INTO web_board_games (id, guild_id, game, mode, status, first_id, inviter_id, ai_level, bet, state)
-       VALUES ($1, $2, $3, 'ai', 'active', $4, $4, $5, $6, $7::jsonb) RETURNING ${COLS}`,
-      [id, guildId, game, userId, lv, bet, JSON.stringify(ENGINES[game].init())]
+      `INSERT INTO web_board_games (id, guild_id, game, mode, status, first_id, inviter_id, ai_level, ai_mult, bet, state)
+       VALUES ($1, $2, $3, 'ai', 'active', $4, $4, $5, $6, $7, $8::jsonb) RETURNING ${COLS}`,
+      [id, guildId, game, userId, lv, aiMult, bet, JSON.stringify(ENGINES[game].init())]
     );
     return r.rows[0] as Row;
   });

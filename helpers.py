@@ -274,6 +274,13 @@ DEFAULT_SETTINGS = {
     "SHOGI_BET_ENABLED": False,
     "SHOGI_DEFAULT_BET": 100,
     "OTHELLO_BET_ENABLED": False,
+    # AI に勝ったときの倍率（AI 対戦で賭けられるのはレベル4・5だけ）
+    "OTHELLO_AI_MULT_4": 2,
+    "OTHELLO_AI_MULT_5": 3,
+    "CHESS_AI_MULT_4": 2,
+    "CHESS_AI_MULT_5": 3,
+    "SHOGI_AI_MULT_4": 2,
+    "SHOGI_AI_MULT_5": 3,
     "OTHELLO_DEFAULT_BET": 100,
     "OTHELLO_PANEL_CHANNEL": "",
     "OTHELLO_AUTO_VC_ENABLED": False,
@@ -805,6 +812,24 @@ def format_evaluation_datetime(dt) -> str:
         return dt.strftime(f"%Y年%m月%d日({weekday_ja}) %H:%M")
     except Exception:
         return str(dt)
+
+# AI 対戦で賭けられる最低レベル（ダッシュボードの Web 対局と同じ）
+AI_BET_MIN_LEVEL = 4
+
+
+def ai_bet_multiplier(bot, prefix: str, guild_id, level: int) -> float:
+    """AI に勝ったときの倍率（{prefix}_AI_MULT_{level}）。未設定・不正な値は 2 倍"""
+    raw = get_setting(bot, f"{prefix}_AI_MULT_{level}", guild_id)
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return 2.0
+    return min(100.0, v) if v >= 1 else 2.0
+
+
+def format_mult(v: float) -> str:
+    return f"{v:g}"
+
 
 async def check_and_assign_level_roles(bot, member: discord.Member, level_type: str, new_level: int):
     rewards = await database.get_level_role_rewards(level_type)
