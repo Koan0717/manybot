@@ -5,12 +5,15 @@ import type { Pool, PoolClient } from 'pg';
  * /pay・アクティビティ・Webの送金を記録し、メンバー画面で直近の送金を表示する。
  * Botが新しいスキーマで起動する前でも使えるよう、ダッシュボード側でも作成する。
  */
-export type TransferSource = 'pay' | 'activity' | 'web';
+export type TransferSource = 'pay' | 'activity' | 'web' | 'othello' | 'chess' | 'shogi';
 
 export const TRANSFER_SOURCE_LABEL: Record<string, string> = {
   pay: '/pay',
   activity: 'アクティビティ',
   web: 'Web',
+  othello: 'オセロの対局',
+  chess: 'チェスの対局',
+  shogi: '将棋の対局',
 };
 
 const ensured = new WeakSet<Pool>();

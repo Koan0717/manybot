@@ -45,7 +45,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     return NextResponse.json({
       enabled: true,
       currency_name: s.currencyName,
-      games: games.map((g) => ({ key: g, label: BOARD_GAME_LABEL[g], bet_enabled: s.bet[g].enabled, default_bet: s.bet[g].defaultBet })),
+      games: games.map((g) => ({ key: g, label: BOARD_GAME_LABEL[g], bet_enabled: s.bet[g].enabled})),
       mine,
       voice_peers: peers,
     });

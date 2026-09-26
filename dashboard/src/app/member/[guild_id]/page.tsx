@@ -173,6 +173,8 @@ function LevelBar({ label, stat }: { label: string; stat: LevelStat }) {
 }
 
 const SOURCE_LABEL: Record<string, string> = { pay: '/pay', activity: 'アクティビティ', web: 'Web' };
+/** 対局の賭けの精算（負けた人 → 勝った人）として記録された送金 */
+const GAME_LABEL: Record<string, string> = { othello: 'オセロ', chess: 'チェス', shogi: '将棋' };
 
 /** 自分が関わった送金の直近20件。reloadKey が変わるたび（送金した直後など）に取り直す */
 function TransferHistory({ guildId, currency, reloadKey }: { guildId: string; currency: string; reloadKey: number }) {
@@ -215,6 +217,7 @@ function TransferHistory({ guildId, currency, reloadKey }: { guildId: string; cu
         <ul className="divide-y divide-zinc-800">
           {items.map((t) => {
             const sent = t.direction === 'sent';
+            const game = GAME_LABEL[t.source];
             return (
               <li key={t.id} className="flex items-center gap-3 py-2.5">
                 <span
@@ -227,12 +230,14 @@ function TransferHistory({ guildId, currency, reloadKey }: { guildId: string; cu
                 <div className="min-w-0 flex-1">
                   <div className="text-sm truncate">
                     <span className="font-semibold">{t.counterpart.display_name}</span>
-                    <span className="text-zinc-500">{sent ? ' へ送金' : ' から受け取り'}</span>
+                    <span className="text-zinc-500">
+                      {game ? (sent ? ' に支払い' : ' から受け取り') : sent ? ' へ送金' : ' から受け取り'}
+                    </span>
                   </div>
                   <div className="text-xs text-zinc-500">
                     {new Date(t.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     {' ・ '}
-                    {SOURCE_LABEL[t.source] ?? t.source}
+                    {game ? `${game}の対局で${sent ? '負け' : '勝ち'}` : SOURCE_LABEL[t.source] ?? t.source}
                   </div>
                 </div>
                 <div className={`text-sm font-bold whitespace-nowrap ${sent ? 'text-red-400' : 'text-emerald-400'}`}>

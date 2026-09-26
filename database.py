@@ -2139,6 +2139,19 @@ async def transfer_balance(guild_id: int, sender_id: int, receiver_id: int, amou
 
 
 
+async def log_transfer(guild_id: int, sender_id: int, receiver_id: int, amount: int, source: str) -> None:
+    """残高の移動は済んでいて、送金履歴だけ残したいとき用（対局の賭けで負けた人→勝った人など）。失敗しても例外は出さない"""
+    if not guild_id or not sender_id or not receiver_id or amount <= 0 or sender_id == receiver_id:
+        return
+    try:
+        p = await get_pool(guild_id)
+        async with p.acquire() as conn:
+            await conn.execute('INSERT INTO transfer_logs (guild_id, sender_id, receiver_id, amount, source) VALUES ($1, $2, $3, $4, $5)',
+                               guild_id, sender_id, receiver_id, amount, source)
+    except Exception as e:
+        print(f"[transfer_logs] failed to record {source}: {e}")
+
+
 async def get_event_points(guild_id: int, user_id: int) -> int:
 
     user = await get_user(guild_id, user_id)

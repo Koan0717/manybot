@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import type { Pool, PoolClient } from 'pg';
 import { DiscordGuildMember, botRequest, memberAvatarUrl, memberDisplayName } from '@/lib/discordApi';
 import { CasinoError, recordGameResult, withTransaction } from '@/lib/casino/db';
+import { recordTransfer } from '@/lib/transferLogs';
 import * as O from './othello';
 import * as C from './chess';
 import * as S from './shogi';
@@ -26,7 +27,7 @@ const INVITE_LIMIT_MIN = 10;
 export interface BoardGameSettings {
   currencyName: string;
   enabled: Record<BoardGame, boolean>;
-  bet: Record<BoardGame, { enabled: boolean; defaultBet: number }>;
+  bet: Record<BoardGame, { enabled: boolean }>;
 }
 
 export async function loadBoardGameSettings(pool: Pool, guildId: string): Promise<BoardGameSettings> {
@@ -34,7 +35,7 @@ export async function loadBoardGameSettings(pool: Pool, guildId: string): Promis
   try {
     const res = await pool.query(
       `SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN
-         ($2, 'CURRENCY_NAME', 'OTHELLO_BET_ENABLED', 'OTHELLO_DEFAULT_BET', 'CHESS_BET_ENABLED', 'CHESS_DEFAULT_BET', 'SHOGI_BET_ENABLED', 'SHOGI_DEFAULT_BET')`,
+         ($2, 'CURRENCY_NAME', 'OTHELLO_BET_ENABLED', 'CHESS_BET_ENABLED', 'SHOGI_BET_ENABLED')`,
       [guildId, WEB_BOARDGAMES_KEY]
     );
     for (const r of res.rows) s[r.setting_key] = r.setting_value;
@@ -53,7 +54,7 @@ export async function loadBoardGameSettings(pool: Pool, guildId: string): Promis
     bet: Object.fromEntries(
       BOARD_GAMES.map((g) => {
         const P = g.toUpperCase();
-        return [g, { enabled: t(s[`${P}_BET_ENABLED`]), defaultBet: Math.max(0, Math.floor(Number(s[`${P}_DEFAULT_BET`]) || 100)) }];
+        return [g, { enabled: t(s[`${P}_BET_ENABLED`]) }];
       })
     ) as BoardGameSettings['bet'],
   };
@@ -173,6 +174,8 @@ export async function ensureBoardGameTable(pool: Pool) {
     )
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS idx_web_board_games_guild ON web_board_games (guild_id, status)');
+  // 精算の内容（誰がいくら賭けて、いくら受け取り、所持金がいくらになったか）
+  await pool.query('ALTER TABLE web_board_games ADD COLUMN IF NOT EXISTS settlement JSONB');
   ensured.add(pool);
 }
 
@@ -193,12 +196,13 @@ interface Row {
   notes: string[] | null;
   winner: number | null;
   reason: string | null;
+  settlement: Record<string, { bet: number; payout: number; balance: number }> | null;
   updated_at: string;
   created_at: string;
 }
 
 const COLS = `id, guild_id::text AS guild_id, game, mode, status, first_id::text AS first_id, second_id::text AS second_id,
-  inviter_id::text AS inviter_id, ai_level, bet::text AS bet, state, history, last_move, notes, winner, reason,
+  inviter_id::text AS inviter_id, ai_level, bet::text AS bet, state, history, last_move, notes, winner, reason, settlement,
   updated_at, created_at`;
 
 // ---------------- 名前（表示用。少しの間覚えておく） ----------------
@@ -225,9 +229,7 @@ async function memberInfo(guildId: string, userId: string | null) {
 async function settle(client: PoolClient, row: Row, winner: 0 | 1 | 2, reason: string) {
   const bet = Number(row.bet) || 0;
   const players = [row.first_id, row.mode === 'ai' ? null : row.second_id];
-  const pay = async (uid: string, amount: number) => {
-    if (amount > 0) await client.query('UPDATE users SET balance = balance + $1 WHERE guild_id = $2 AND user_id = $3', [amount, row.guild_id, uid]);
-  };
+  const settlement: NonNullable<Row['settlement']> = {};
   for (let i = 0; i < 2; i++) {
     const uid = players[i];
     if (!uid) continue;
@@ -235,17 +237,33 @@ async function settle(client: PoolClient, row: Row, winner: 0 | 1 | 2, reason: s
     const isDraw = winner === 0;
     const isWin = winner === me;
     const payout = bet > 0 ? (isWin ? bet * 2 : isDraw ? bet : 0) : 0;
-    await pay(uid, payout);
+    const bal = await client.query(
+      'UPDATE users SET balance = balance + $1 WHERE guild_id = $2 AND user_id = $3 RETURNING balance',
+      [payout, row.guild_id, uid]
+    );
+    settlement[uid] = { bet, payout, balance: Number(bal.rows[0]?.balance) || 0 };
     const mode = row.mode === 'ai' ? 'ai' : 'pvp';
     await recordGameResult(client, {
       guildId: row.guild_id, userId: uid, game: row.game, isWin, isDraw, bet, payout,
       kind: `${mode}_${isDraw ? 'draws' : isWin ? 'wins' : 'losses'}`,
     });
   }
-  await client.query(`UPDATE web_board_games SET status = 'finished', winner = $2, reason = $3, updated_at = NOW() WHERE id = $1`, [row.id, winner, reason]);
+  // 送金履歴に「負けた人 → 勝った人」へ賭け金分を残す
+  const firstId = row.first_id;
+  const secondId = row.second_id;
+  if (bet > 0 && row.mode === 'pvp' && winner !== 0 && firstId && secondId) {
+    const winId = winner === 1 ? firstId : secondId;
+    const loseId = winner === 1 ? secondId : firstId;
+    await recordTransfer(client, { guildId: row.guild_id, senderId: loseId, receiverId: winId, amount: bet, source: row.game });
+  }
+  await client.query(
+    `UPDATE web_board_games SET status = 'finished', winner = $2, reason = $3, settlement = $4::jsonb, updated_at = NOW() WHERE id = $1`,
+    [row.id, winner, reason, JSON.stringify(settlement)]
+  );
   row.status = 'finished';
   row.winner = winner;
   row.reason = reason;
+  row.settlement = settlement;
 }
 
 // ---------------- 表示 ----------------
@@ -277,6 +295,8 @@ export async function gameView(row: Row, viewerId: string) {
     notes: row.notes ?? [],
     winner: row.winner,
     reason: row.reason,
+    // 自分の精算（賭けがあったときだけ）
+    settlement: row.settlement?.[viewerId] && (Number(row.bet) || 0) > 0 ? row.settlement[viewerId] : null,
     updated_at: row.updated_at,
   };
 }
@@ -367,10 +387,11 @@ export async function createInvite(pool: Pool, s: BoardGameSettings, guildId: st
     throw new CasinoError('相手がこのサーバーにいません', 404);
   }
   if (opp.user.bot) throw new CasinoError('Botとは対戦できません。AI対戦を選んでください');
-  // 賭けがONなら、申し込む人が金額を決める（空欄なら既定の金額、0 なら賭けなし）
+  // 賭けがONなら、申し込む人が金額を決める
   let bet = 0;
   if (s.bet[game].enabled) {
-    bet = betRaw === undefined || betRaw === null || betRaw === '' ? s.bet[game].defaultBet : Number(betRaw);
+    // 申し込む人が決めた金額（空欄・0 は賭けなし）。受けた人も同じ額を賭ける
+    bet = betRaw === undefined || betRaw === null || betRaw === '' ? 0 : Number(betRaw);
     if (!Number.isSafeInteger(bet) || bet < 0) throw new CasinoError('賭け金は0以上の整数で入力してください');
   }
   if (bet > 0) {

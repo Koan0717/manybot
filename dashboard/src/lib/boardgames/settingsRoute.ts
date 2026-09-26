@@ -5,7 +5,7 @@ import { getPool } from '@/lib/db';
  * 管理ダッシュボードの「ゲーム設定」（オセロ・チェス・将棋）の保存と、Discord パネル送信。
  * 設定キーは OTHELLO_ / CHESS_ / SHOGI_ で始まる同じ8項目。
  */
-const KEYS = ['BET_ENABLED', 'DEFAULT_BET', 'SHOW_STATS', 'PANEL_CHANNEL', 'AUTO_VC_ENABLED', 'VC_CATEGORY_ID', 'VC_NAME', 'GAME_CHANNEL'];
+const KEYS = ['BET_ENABLED', 'SHOW_STATS', 'PANEL_CHANNEL', 'AUTO_VC_ENABLED', 'VC_CATEGORY_ID', 'VC_NAME', 'GAME_CHANNEL'];
 
 export function boardGameSettingsHandlers(game: 'othello' | 'chess' | 'shogi') {
   const prefix = game.toUpperCase();
