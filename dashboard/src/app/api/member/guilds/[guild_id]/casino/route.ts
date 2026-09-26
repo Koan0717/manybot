@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requireGuildMember } from '@/lib/memberAuth';
 import { ensureCasinoTables, getPlayerStatus } from '@/lib/casino/db';
-import { HORSE_LIST, activeBlackjack, activeHighLow, settleStaleBlackjack, settleStaleHighLow } from '@/lib/casino/games';
+import { HORSE_LIST, activeBlackjack, activeHighLow, highLowMuls, settleStaleBlackjack, settleStaleHighLow } from '@/lib/casino/games';
 import { WEB_GAMES, WEB_GAME_LABEL, loadCasinoSettings } from '@/lib/casino/settings';
 import { canUseFeature, getMemberFlags } from '@/lib/webAccess';
 
@@ -44,7 +44,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
         roulette: { two: s.roulette.mul2, three: s.roulette.mul3, number: s.roulette.mul36 },
         blackjack: { normal: s.blackjack.mulNormal, bj: s.blackjack.mulBj },
         horse: { tan: s.horse.mulTan, fuku: s.horse.mulFuku },
-        highlow: { mul: s.highlow.mul, max_streak: s.highlow.maxStreak },
+        highlow: { mul: s.highlow.mul, max_streak: s.highlow.maxStreak, muls: highLowMuls(s) },
       },
       horses: HORSE_LIST,
       // ゲームがOFFにされても、始めてしまったブラックジャックは最後まで遊べるようにする

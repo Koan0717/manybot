@@ -21,7 +21,7 @@ export interface CasinoInfo {
     roulette: { two: number; three: number; number: number };
     blackjack: { normal: number; bj: number };
     horse: { tan: number; fuku: number };
-    highlow?: { mul: number; max_streak: number };
+    highlow?: { mul: number; max_streak: number; muls?: number[] };
   };
   horses: { num: number; name: string; emoji: string }[];
   active_blackjack: BjView | null;
@@ -725,6 +725,7 @@ export default function Casino({
             session={hl}
             cur={cur}
             mul={m.highlow?.mul ?? 1.8}
+            muls={m.highlow?.muls ?? []}
             maxStreak={m.highlow?.max_streak ?? 5}
             canStart={canPlay}
             busy={busy}

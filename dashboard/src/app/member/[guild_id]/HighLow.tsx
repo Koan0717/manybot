@@ -17,6 +17,7 @@ export interface HlView {
   streak: number;
   max_streak: number;
   mul: number;
+  muls?: number[];
   revealed: boolean;
   amount: number;
   next_amount: number | null;
@@ -75,6 +76,7 @@ export default function HighLow({
   session,
   cur,
   mul,
+  muls,
   maxStreak,
   canStart,
   busy,
@@ -85,6 +87,7 @@ export default function HighLow({
   session: HlView | null;
   cur: string;
   mul: number;
+  muls: number[];
   maxStreak: number;
   canStart: boolean;
   busy: boolean;
@@ -108,6 +111,9 @@ export default function HighLow({
   }, [session]);
 
   const view = shown;
+  // 連勝ごとの受け取り倍率（管理者が連勝ごとに決めた倍率。ゲーム中はそのゲームの値）
+  const table = view?.muls?.length ? view.muls : muls.length ? muls : Array.from({ length: maxStreak }, (_, i) => Math.pow(mul, i + 1));
+  const stepMul = (streak: number) => (streak <= 0 ? 1 : table[streak - 1] ?? Math.pow(mul, streak));
   const inGame = !!view && !view.finished;
   const animating = phase !== 'idle';
 
@@ -180,7 +186,7 @@ export default function HighLow({
       >
         {/* 連勝メーター */}
         <div className="flex items-center justify-center gap-1 mb-3 flex-wrap">
-          {Array.from({ length: maxStreak }, (_, i) => {
+          {Array.from({ length: view?.max_streak ?? maxStreak }, (_, i) => {
             const reached = !!view && view.streak > i;
             const nextStep = !!view && view.streak === i && inGame;
             return (
@@ -190,7 +196,7 @@ export default function HighLow({
                   reached ? 'bg-amber-400 text-zinc-900 border-amber-300' : nextStep ? 'bg-emerald-950/70 text-amber-200 border-amber-400/70' : 'bg-black/30 text-emerald-200/60 border-emerald-800'
                 }`}
               >
-                {i + 1}連 ×{Math.pow(mul, i + 1).toFixed(2)}
+                {i + 1}連 ×{Number(stepMul(i + 1).toFixed(2))}
               </div>
             );
           })}
@@ -265,7 +271,7 @@ export default function HighLow({
         )}
         {pop > 0 && phase === 'result' && outcome === 'win' && (
           <div key={pop} className="absolute left-1/2 top-10 text-amber-300 font-black text-lg pointer-events-none" style={{ animation: 'hl-pop 0.9s ease-out forwards' }}>
-            ×{mul} UP!
+            ×{Number(stepMul(view ? view.streak + 1 : 1).toFixed(2))}！
           </div>
         )}
 
@@ -341,7 +347,7 @@ export default function HighLow({
             🃏 カードを配る
           </button>
           <p className="text-xs text-zinc-500 text-center">
-            当てるたびに {mul}倍ずつ増え、最大 {maxStreak}連勝（×{Math.pow(mul, maxStreak).toFixed(2)}）。いつでも受け取れます
+            連勝するほど倍率アップ！ 最大 {maxStreak}連勝で ×{Number(stepMul(maxStreak).toFixed(2))}。いつでも受け取れます
           </p>
         </>
       )}

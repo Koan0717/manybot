@@ -36,7 +36,7 @@ import {
   playRoulette,
   playSlot,
 } from './engine';
-import { CasinoSettings, applyTax } from './settings';
+import { CasinoSettings, applyTax, highLowTotalMul } from './settings';
 
 /**
  * Web・アクティビティのカジノ。各ゲームの流れ（賭け金の受付→抽選→払い戻し→ログ→戦績）は cogs/gambling.py と同じ。
@@ -488,7 +488,7 @@ interface HlSessionRow {
 }
 
 const hlText = (c: HlCard) => `${c.suit}${HL_RANKS[c.value - 1]}`;
-const hlAmount = (ctx: PlayContext, bet: number, streak: number) => Math.trunc(bet * Math.pow(ctx.s.highlow.mul, streak));
+const hlAmount = (ctx: PlayContext, bet: number, streak: number) => Math.trunc(bet * highLowTotalMul(ctx.s.highlow, streak));
 
 async function loadHlSession(client: PoolClient | Pool, ctx: PlayContext, lock: boolean): Promise<HlSessionRow | null> {
   const res = await client.query(
@@ -546,10 +546,16 @@ function hlView(ctx: PlayContext, id: string | null, bet: number, playNumber: nu
     streak: state.streak,
     max_streak: max,
     mul: ctx.s.highlow.mul,
+    muls: highLowMuls(ctx.s),
     revealed: state.revealed,
     amount: hlAmount(ctx, bet, state.streak),
     next_amount: state.streak < max ? hlAmount(ctx, bet, state.streak + 1) : null,
   };
+}
+
+/** 1連勝〜最大連勝の受け取り倍率（画面の連勝メーター用） */
+export function highLowMuls(s: CasinoSettings): number[] {
+  return Array.from({ length: s.highlow.maxStreak }, (_, i) => Math.round(highLowTotalMul(s.highlow, i + 1) * 100) / 100);
 }
 
 /** 進行中の High & Low（あれば）。画面を開き直したときに続きから遊べるようにする */

@@ -1868,7 +1868,37 @@ def highlow_settings(bot, guild_id):
         "lose": max(0.0, num("GAMBLE_HIGHLOW_RATE_LOSE", 0.48)),
         "mul": num("GAMBLE_HIGHLOW_MUL", 1.8) or 1.8,
         "max_streak": max(1, int(num("GAMBLE_HIGHLOW_MAX_STREAK", 5))),
+        "table": parse_highlow_table(get_setting(bot, "GAMBLE_HIGHLOW_STREAK_MULS", guild_id)),
     }
+
+
+def parse_highlow_table(raw) -> list:
+    """連勝ごとの受け取り倍率（"1.8,3.2,6,..." のようなカンマ区切り）。未設定なら空（1回ごとの倍率を掛けていく）。"""
+    if raw is None or raw == "":
+        return []
+    items = raw if isinstance(raw, list) else [raw] if isinstance(raw, (int, float)) else str(raw).split(",")
+    table = []
+    for x in items:
+        try:
+            v = float(str(x).strip())
+        except ValueError:
+            break
+        if v <= 0:
+            break
+        table.append(v)
+    return table
+
+
+def highlow_total_mul(s: dict, streak: int) -> float:
+    """streak 連勝したときの受け取り倍率。表に無い連勝数は、表の最後から1回ごとの倍率を掛けて伸ばす。"""
+    if streak <= 0:
+        return 1.0
+    table = s.get("table") or []
+    if streak <= len(table):
+        return table[streak - 1]
+    if table:
+        return table[-1] * (s["mul"] ** (streak - len(table)))
+    return s["mul"] ** streak
 
 
 def highlow_next_card(current: int, guess: str, s: dict):
@@ -1970,7 +2000,7 @@ class HighLowGameView(discord.ui.View):
         self.cashout_btn.disabled = True
 
     def current_amount(self) -> int:
-        return int(self.bet * (self.s["mul"] ** self.streak))
+        return int(self.bet * highlow_total_mul(self.s, self.streak))
 
     def build_embed(self, description: str, color=discord.Color.dark_green()) -> discord.Embed:
         embed = discord.Embed(title="🃏 High & Low", description=description, color=color)
@@ -1978,8 +2008,9 @@ class HighLowGameView(discord.ui.View):
         embed.add_field(name="🔥 連勝", value=f"{self.streak} / {self.s['max_streak']}", inline=True)
         embed.add_field(name="💰 受け取れる額", value=f"{self.current_amount():,} {self.currency_name}", inline=True)
         if not self.finished and self.streak < self.s["max_streak"]:
-            nxt = int(self.bet * (self.s["mul"] ** (self.streak + 1)))
-            embed.add_field(name="次に当てると", value=f"{nxt:,} {self.currency_name}（{self.s['mul']}倍ずつ増える）", inline=False)
+            nxt_mul = highlow_total_mul(self.s, self.streak + 1)
+            nxt = int(self.bet * nxt_mul)
+            embed.add_field(name="次に当てると", value=f"{nxt:,} {self.currency_name}（{self.streak + 1}連勝: ×{nxt_mul:g}）", inline=False)
         embed.add_field(name="これまでのカード", value=" → ".join(hl_card_text(c) for c in self.history[-8:]), inline=False)
         return embed
 
