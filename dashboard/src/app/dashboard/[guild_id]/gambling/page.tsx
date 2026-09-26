@@ -8,6 +8,42 @@ import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveCont
 import ChannelSelect from '@/components/ChannelSelect';
 import { toast } from 'react-hot-toast';
 
+/**
+ * 数字の入力欄。入力中の文字（空欄や「0.」など）はそのまま見せ、打つたびに onChange で親に知らせる。
+ * 親の値で毎回書き換えると、消したり打ち直したりできなくなるため。
+ */
+function NumberField({ value, onChange, className, step, min, max }: {
+  value: string | number;
+  onChange: (text: string) => void;
+  className?: string;
+  step?: string;
+  min?: string;
+  max?: string;
+}) {
+  const [text, setText] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setText(String(value));
+  }, [value, focused]);
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      step={step}
+      min={min}
+      max={max}
+      value={text}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onChange={(e) => {
+        setText(e.target.value);
+        onChange(e.target.value);
+      }}
+      className={className}
+    />
+  );
+}
+
 const COLORS = ['#8b5cf6', '#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1'];
 
 export default function GamblingSettingsPage() {
@@ -123,6 +159,32 @@ export default function GamblingSettingsPage() {
       .finally(() => setLoading(false));
   }, [guildId]);
 
+  // High & Low の連勝ごとの表は、空欄を今の計算値で埋めてから保存する（Bot は先頭から数字が続くところまでを使うため）
+  const settingsForSave = () => {
+    const out = { ...settings };
+    const max = Math.min(30, Math.max(1, Math.floor(Number(settings.GAMBLE_HIGHLOW_MAX_STREAK) || 1)));
+    const step = Number(settings.GAMBLE_HIGHLOW_MUL) || 0;
+    const split = (v: unknown) => (v === undefined || v === null || v === '' ? [] : String(v).split(',').map((x) => x.trim()));
+    const muls = split(settings.GAMBLE_HIGHLOW_STREAK_MULS);
+    if (muls.some((x) => Number(x) > 0)) {
+      let v = 1;
+      out.GAMBLE_HIGHLOW_STREAK_MULS = Array.from({ length: max }, (_, i) => {
+        const n = Number(muls[i]);
+        v = muls[i] && n > 0 ? n : v * step;
+        return String(Math.round(v * 100) / 100);
+      }).join(',');
+    } else out.GAMBLE_HIGHLOW_STREAK_MULS = '';
+    const wins = split(settings.GAMBLE_HIGHLOW_STREAK_WIN_RATES);
+    const baseWin = Number(settings.GAMBLE_HIGHLOW_RATE_WIN) || 0;
+    if (wins.some((x) => x !== '' && Number.isFinite(Number(x)))) {
+      out.GAMBLE_HIGHLOW_STREAK_WIN_RATES = Array.from({ length: max }, (_, i) => {
+        const n = Number(wins[i]);
+        return String(wins[i] !== undefined && wins[i] !== '' && Number.isFinite(n) && n >= 0 ? Math.min(1, n) : baseWin);
+      }).join(',');
+    } else out.GAMBLE_HIGHLOW_STREAK_WIN_RATES = '';
+    return out;
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError(null);
@@ -130,7 +192,7 @@ export default function GamblingSettingsPage() {
       const res = await fetch(`/api/guilds/${guildId}/gambling`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(settingsForSave()),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -279,58 +341,50 @@ export default function GamblingSettingsPage() {
     ];
   }
 
-  // High & Low の連勝ごとの受け取り倍率
+  // High & Low の連勝ごとの受け取り倍率（空欄の連勝数は、前の連勝の倍率に「1回当てるごとの倍率」を掛けた値）
   const hlMaxStreak = Math.min(30, Math.max(1, Math.floor(Number(settings.GAMBLE_HIGHLOW_MAX_STREAK) || 1)));
   const hlStep = Number(settings.GAMBLE_HIGHLOW_MUL) || 0;
-  const hlRaw = String(settings.GAMBLE_HIGHLOW_STREAK_MULS ?? '').split(',').map((x) => x.trim());
-  // Bot と同じく、先頭から数字が続くところまでを表として使う
-  const hlTable: number[] = [];
-  for (const x of hlRaw) {
-    const n = Number(x);
-    if (x === '' || !Number.isFinite(n) || n <= 0) break;
-    hlTable.push(n);
-  }
-  const hlAuto = (n: number) => Math.round(Math.pow(hlStep, n) * 100) / 100;
-  // 表に無い連勝数は、表の最後から「1回当てるごとの倍率」を掛けて伸ばす（Bot と同じ）
-  const hlMulAt = (n: number) => {
-    const t = hlTable;
-    if (n <= t.length) return t[n - 1];
-    if (t.length) return Math.round(t[t.length - 1] * Math.pow(hlStep, n - t.length) * 100) / 100;
-    return hlAuto(n);
+  const splitRaw = (v: unknown) => (v === undefined || v === null || v === '' ? [] : String(v).split(',').map((x) => x.trim()));
+  const hlRaw = splitRaw(settings.GAMBLE_HIGHLOW_STREAK_MULS);
+  const hlMulCustom = (i: number) => {
+    const n = Number(hlRaw[i]);
+    return hlRaw[i] !== undefined && hlRaw[i] !== '' && Number.isFinite(n) && n > 0 ? n : null;
   };
-  const setHlMulAt = (n: number, value: string) => {
-    const next = Array.from({ length: hlMaxStreak }, (_, i) => (i < hlTable.length ? hlRaw[i] : String(hlMulAt(i + 1))));
-    next[n - 1] = value;
-    updateSetting('GAMBLE_HIGHLOW_STREAK_MULS', next.join(','));
+  const hlMulAt = (n: number) => {
+    let v = 1;
+    for (let k = 1; k <= n; k++) v = hlMulCustom(k - 1) ?? v * hlStep;
+    return Math.round(v * 100) / 100;
+  };
+  const hlAnyMulCustom = Array.from({ length: hlMaxStreak }, (_, i) => hlMulCustom(i) !== null).some(Boolean);
+  const setHlMulAt = (n: number, text: string) => {
+    const next = Array.from({ length: hlMaxStreak }, (_, i) => hlRaw[i] ?? '');
+    next[n - 1] = text.trim();
+    updateSetting('GAMBLE_HIGHLOW_STREAK_MULS', next.every((x) => x === '') ? '' : next.join(','));
   };
 
-  // High & Low の連勝ごとの当たり確率（i 番目 = i 連勝中にめくって当てる確率）
-  const hlWinRaw = String(settings.GAMBLE_HIGHLOW_STREAK_WIN_RATES ?? '').split(',').map((x) => x.trim());
-  const hlWinTable: number[] = [];
-  for (const x of hlWinRaw) {
-    const n = Number(x);
-    if (x === '' || !Number.isFinite(n) || n < 0) break;
-    hlWinTable.push(Math.min(1, n));
-  }
+  // High & Low の連勝ごとの当たり確率（i 番目 = i 連勝中にめくって当てる確率。空欄は共通の当たり確率）
+  const hlWinRaw = splitRaw(settings.GAMBLE_HIGHLOW_STREAK_WIN_RATES);
   const hlBaseWin = Number(settings.GAMBLE_HIGHLOW_RATE_WIN) || 0;
   const hlBaseDraw = Number(settings.GAMBLE_HIGHLOW_RATE_DRAW) || 0;
   const hlBaseLose = Number(settings.GAMBLE_HIGHLOW_RATE_LOSE) || 0;
+  const hlWinCustom = (i: number) => {
+    const n = Number(hlWinRaw[i]);
+    return hlWinRaw[i] !== undefined && hlWinRaw[i] !== '' && Number.isFinite(n) && n >= 0 ? Math.min(1, n) : null;
+  };
   // Bot の highlow_rates と同じ
   const hlRatesAt = (streak: number) => {
-    if (streak < hlWinTable.length) {
-      const win = hlWinTable[streak];
+    const win = hlWinCustom(streak);
+    if (win !== null) {
       const draw = Math.min(hlBaseDraw, Math.max(0, 1 - win));
       return { win, draw, lose: Math.max(0, 1 - win - draw) };
     }
     return { win: hlBaseWin, draw: hlBaseDraw, lose: hlBaseLose };
   };
   const setHlWinAt = (streak: number, percent: string) => {
-    const next = Array.from({ length: hlMaxStreak }, (_, i) =>
-      i < hlWinTable.length ? String(hlWinTable[i]) : String(Math.round(hlBaseWin * 10000) / 10000)
-    );
+    const next = Array.from({ length: hlMaxStreak }, (_, i) => hlWinRaw[i] ?? '');
     const v = parseFloat(percent);
-    next[streak] = isNaN(v) ? '' : String(Math.round((v / 100) * 10000) / 10000);
-    updateSetting('GAMBLE_HIGHLOW_STREAK_WIN_RATES', next.join(','));
+    next[streak] = isNaN(v) ? '' : String(Math.round((Math.min(100, Math.max(0, v)) / 100) * 10000) / 10000);
+    updateSetting('GAMBLE_HIGHLOW_STREAK_WIN_RATES', next.every((x) => x === '') ? '' : next.join(','));
   };
   // n 連勝までたどり着く確率（引き分けはやり直しなので、当たり ÷ (当たり + ハズレ) を掛けていく）
   const hlReach = (n: number) => {
@@ -346,11 +400,10 @@ export default function GamblingSettingsPage() {
     <div className="flex flex-col space-y-2 bg-gray-800/40 p-4 rounded-lg border border-gray-700/50 hover:border-purple-500/30 transition-colors">
       <label className="text-sm text-gray-300 font-medium">{label}</label>
       <div className="relative">
-        <input
-          type="number"
+        <NumberField
           step={step}
-          value={isPercent ? (settings[key] * 100).toFixed(2) : settings[key]}
-          onChange={(e) => isPercent ? updateRate(key, e.target.value) : updateSetting(key, parseFloat(e.target.value) || 0)}
+          value={isPercent ? Number(((Number(settings[key]) || 0) * 100).toFixed(4)) : settings[key]}
+          onChange={(text) => (isPercent ? updateRate(key, text) : updateSetting(key, parseFloat(text) || 0))}
           className="w-full bg-gray-900 border border-gray-600 rounded px-3 py-2 pr-8 text-white focus:outline-none focus:border-purple-500 transition-colors"
         />
         {isPercent && <Percent size={14} className="absolute right-3 top-3 text-gray-400 pointer-events-none" />}
@@ -689,18 +742,17 @@ export default function GamblingSettingsPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {Array.from({ length: hlMaxStreak }, (_, i) => {
                       const r = hlRatesAt(i);
-                      const custom = i < hlWinTable.length;
+                      const custom = hlWinCustom(i) !== null;
                       return (
                         <label key={i} className="flex flex-col gap-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2">
                           <span className="text-xs text-gray-400">{i + 1}連勝目を当てる</span>
                           <div className="flex items-center gap-1">
-                            <input
-                              type="number"
+                            <NumberField
                               step="0.1"
                               min="0"
                               max="100"
-                              value={custom ? Number((hlWinTable[i] * 100).toFixed(2)) : Number((hlBaseWin * 100).toFixed(2))}
-                              onChange={(e) => setHlWinAt(i, e.target.value)}
+                              value={Number((r.win * 100).toFixed(2))}
+                              onChange={(text) => setHlWinAt(i, text)}
                               className={`w-full min-w-0 bg-transparent text-base font-bold focus:outline-none ${custom ? 'text-emerald-300' : 'text-gray-300'}`}
                             />
                             <span className="text-xs text-gray-500">%</span>
@@ -763,19 +815,18 @@ export default function GamblingSettingsPage() {
                     {Array.from({ length: hlMaxStreak }, (_, i) => (
                       <label key={i} className="flex flex-col gap-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2">
                         <span className="text-xs text-gray-400">{i + 1}連勝で ×</span>
-                        <input
-                          type="number"
+                        <NumberField
                           step="0.1"
                           min="0"
-                          value={hlRaw[i] !== undefined && hlRaw[i] !== '' && i <= hlTable.length ? hlRaw[i] : hlMulAt(i + 1)}
-                          onChange={(e) => setHlMulAt(i + 1, e.target.value)}
-                          className={`w-full min-w-0 bg-transparent text-base font-bold focus:outline-none ${i < hlTable.length ? 'text-amber-300' : 'text-gray-300'}`}
+                          value={hlMulAt(i + 1)}
+                          onChange={(text) => setHlMulAt(i + 1, text)}
+                          className={`w-full min-w-0 bg-transparent text-base font-bold focus:outline-none ${hlMulCustom(i) !== null ? 'text-amber-300' : 'text-gray-300'}`}
                         />
                       </label>
                     ))}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {hlTable.length ? '黄色の数字が設定した倍率です。' : '今は自動（1回当てるごとの倍率を掛けていく）です。数字を変えるとその値で保存されます。'}
+                    {hlAnyMulCustom ? '黄色の数字が設定した倍率です（白は自動）。' : '今は自動（1回当てるごとの倍率を掛けていく）です。数字を変えるとその値で保存されます。'}
                     賭け金 1,000 で {hlMaxStreak}連勝すると {Math.trunc(1000 * (hlMulAt(hlMaxStreak) || 0)).toLocaleString()} を受け取れます。
                   </div>
                 </div>
