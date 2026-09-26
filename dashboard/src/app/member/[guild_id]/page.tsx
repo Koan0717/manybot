@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Coins, Crown, Dices, Gift, History, Loader2, Search, Send, ShoppingBag, User, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowLeft, ArrowUpRight, Coins, Crown, Dices, Gamepad2, Gift, History, Loader2, Search, Send, ShoppingBag, User, X } from 'lucide-react';
 import Casino, { CasinoInfo } from './Casino';
 import Shop, { ShopInfo } from './Shop';
 import Gacha, { GachaInfo } from './Gacha';
-import { guildIconUrl, isDiscordActivity, keepMemberSessionAlive, loadMemberState, memberFetch } from '@/lib/memberClient';
+import Games, { GamesInfo } from './Games';
+import { guildIconUrl, isDiscordActivity, keepMemberSessionAlive, loadMemberState, memberFetch, getActivityContext } from '@/lib/memberClient';
 
 interface LevelStat { level: number; xp: number; next_xp: number }
 interface Profile {
@@ -140,13 +141,14 @@ const BotBadge = () => (
   <span className="text-[10px] font-bold bg-[#5865F2] text-white rounded px-1.5 py-0.5 flex-shrink-0">BOT</span>
 );
 
-type Tab = 'profile' | 'transfer' | 'casino' | 'shop' | 'gacha' | 'roles';
+type Tab = 'profile' | 'transfer' | 'casino' | 'shop' | 'gacha' | 'games' | 'roles';
 const TABS: { key: Tab; label: string; icon: typeof User }[] = [
   { key: 'profile', label: 'プロフィール', icon: User },
   { key: 'transfer', label: '送金', icon: Send },
   { key: 'casino', label: 'カジノ', icon: Dices },
   { key: 'shop', label: 'ショップ', icon: ShoppingBag },
   { key: 'gacha', label: 'ガチャ', icon: Gift },
+  { key: 'games', label: 'ゲーム', icon: Gamepad2 },
   { key: 'roles', label: '役職', icon: Crown },
 ];
 
@@ -456,6 +458,12 @@ export default function MemberGuildPage() {
   const [shop, setShop] = useState<ShopInfo | null>(null);
   // Webアクティビティ設定でガチャがOFFなら「ガチャ」タブは出さない
   const [gacha, setGacha] = useState<GachaInfo | null>(null);
+  // Webアクティビティ設定でボードゲームがどれもOFFなら「ゲーム」タブは出さない
+  const [games, setGames] = useState<GamesInfo | null>(null);
+  // 招待から来たとき・招待が届いたときに開く対局
+  const [openGameId, setOpenGameId] = useState<string | null>(null);
+  const [inviteBanner, setInviteBanner] = useState<{ id: string; text: string } | null>(null);
+  const seenInvites = useRef<Set<string>>(new Set());
 
   // サーバーを切り替えたときに前のサーバーの表示が残らないよう、guildId ごとに取り直す
   useEffect(() => {
@@ -469,7 +477,35 @@ export default function MemberGuildPage() {
     setCasino(null);
     setShop(null);
     setGacha(null);
+    setGames(null);
     setError('');
+    (async () => {
+      try {
+        const ctx = getActivityContext();
+        const q = ctx?.channelId ? `?channel_id=${ctx.channelId}` : '';
+        const res = await memberFetch(`/api/member/guilds/${guildId}/boardgames${q}`);
+        const data = await res.json().catch(() => null);
+        if (cancelled || !res.ok || !data?.enabled) return;
+        setGames(data);
+        for (const g of data.mine ?? []) seenInvites.current.add(g.id);
+        // 招待の「アクティビティで参加」から来たなら、その対局をすぐ開く
+        let target = new URLSearchParams(window.location.search).get('game');
+        if (target) window.history.replaceState(null, '', window.location.pathname);
+        else if (ctx) {
+          const j = await memberFetch(`/api/member/guilds/${guildId}/boardgames/join`).then((r) => r.json()).catch(() => null);
+          target = j?.game_id ?? null;
+        }
+        if (!target && ctx) {
+          // アクティビティで開いたときに、自分宛ての招待が届いていればそれを開く
+          const invite = (data.mine ?? []).find((g: any) => g.status === 'invited' && g.inviter_id !== (g.you === 1 ? g.first?.id : g.second?.id));
+          target = invite?.id ?? null;
+        }
+        if (!cancelled && target) {
+          setOpenGameId(target);
+          setTab('games');
+        }
+      } catch {}
+    })();
     (async () => {
       try {
         const res = await memberFetch(`/api/member/guilds/${guildId}/gacha`);
@@ -514,7 +550,40 @@ export default function MemberGuildPage() {
   const guildName = profile?.guild.name ?? cachedGuild?.name ?? '';
   const icon = profile ? guildIconUrl(profile.guild) : cachedGuild ? guildIconUrl(cachedGuild) : null;
 
-  const visibleTabs = TABS.filter((t) => (t.key !== 'casino' || casino) && (t.key !== 'shop' || shop) && (t.key !== 'gacha' || gacha));
+  const visibleTabs = TABS.filter(
+    (t) => (t.key !== 'casino' || casino) && (t.key !== 'shop' || shop) && (t.key !== 'gacha' || gacha) && (t.key !== 'games' || games)
+  );
+
+  // ゲームタブ以外を見ているあいだに対局の申し込みが届いたら、上にお知らせを出す
+  useEffect(() => {
+    if (!games || tab === 'games') return;
+    const timer = setInterval(async () => {
+      try {
+        const res = await memberFetch(`/api/member/guilds/${guildId}/boardgames`);
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.enabled) return;
+        const fresh = (data.mine ?? []).find(
+          (g: any) => g.status === 'invited' && g.inviter_id !== (g.you === 1 ? g.first?.id : g.second?.id) && !seenInvites.current.has(g.id)
+        );
+        for (const g of data.mine ?? []) seenInvites.current.add(g.id);
+        if (fresh) {
+          const from = (fresh.you === 1 ? fresh.second : fresh.first)?.name ?? 'メンバー';
+          const label = ({ othello: 'オセロ', chess: 'チェス', shogi: '将棋' } as Record<string, string>)[fresh.game] ?? fresh.game;
+          setInviteBanner({ id: fresh.id, text: `${from} さんから${label}の対局の申し込み！` });
+        }
+      } catch {}
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [games, tab, guildId]);
+
+  // 賭けの精算などで残高が変わったときに取り直す
+  const refreshProfile = async () => {
+    try {
+      const res = await memberFetch(`/api/member/guilds/${guildId}/profile`);
+      const data = await res.json().catch(() => null);
+      if (res.ok && data) setProfile(data);
+    } catch {}
+  };
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white p-4 md:p-8">
@@ -537,24 +606,43 @@ export default function MemberGuildPage() {
           <h1 className="text-xl font-bold truncate">{guildName || '読み込み中...'}</h1>
         </header>
 
-        <nav
-          className="grid gap-2 mb-6"
-          style={{ gridTemplateColumns: `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}
-        >
+        {/* タブ: 数が増えても押しやすいよう、1行4つまでの大きなボタンで折り返す */}
+        <nav className="grid grid-cols-4 gap-2 mb-6">
           {visibleTabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-sm font-semibold border transition-all whitespace-nowrap ${
+              className={`min-h-[60px] flex flex-col items-center justify-center gap-1 px-1 py-2.5 rounded-2xl text-xs sm:text-sm font-bold border transition-all active:scale-95 ${
                 tab === key
-                  ? 'bg-red-600/20 border-red-700/60 text-white'
-                  : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white'
+                  ? 'bg-red-600/25 border-red-600/70 text-white shadow-[0_0_12px_rgba(220,38,38,0.25)]'
+                  : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
               }`}
             >
-              <Icon className="w-4 h-4" /> {label}
+              <Icon className="w-5 h-5" />
+              <span className="leading-tight">{label}</span>
             </button>
           ))}
         </nav>
+
+        {inviteBanner && tab !== 'games' && (
+          <div className="mb-4 flex items-center gap-3 bg-amber-950/60 border border-amber-500/70 rounded-2xl px-4 py-3 shadow-[0_0_16px_rgba(245,158,11,0.3)]">
+            <Gamepad2 className="w-5 h-5 text-amber-300 flex-shrink-0" />
+            <span className="flex-1 text-sm font-bold">{inviteBanner.text}</span>
+            <button
+              onClick={() => {
+                setOpenGameId(inviteBanner.id);
+                setInviteBanner(null);
+                setTab('games');
+              }}
+              className="px-3 py-1.5 rounded-lg bg-amber-500 text-zinc-900 text-xs font-black"
+            >
+              参加する
+            </button>
+            <button onClick={() => setInviteBanner(null)} className="text-zinc-400 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {error ? (
           <div className="bg-red-950/50 border border-red-900/60 text-red-200 rounded-2xl p-5 text-sm">{error}</div>
@@ -625,6 +713,8 @@ export default function MemberGuildPage() {
               setGacha((g) => (g ? { ...g, history: [entry, ...g.history].slice(0, 10) } : g));
             }}
           />
+        ) : tab === 'games' && games ? (
+          <Games key={guildId} guildId={guildId} info={games} onChanged={refreshProfile} openGameId={openGameId} onOpened={() => setOpenGameId(null)} />
         ) : tab === 'casino' && casino ? (
           <Casino
             key={guildId}

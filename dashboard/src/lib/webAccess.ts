@@ -7,7 +7,7 @@ import type { DiscordGuildMember } from '@/lib/discordApi';
  * 評価落ち・違反者の判定は「基本・評価設定」の評価落ちロール・違反者ロールで行う。
  */
 export const WEB_ROLE_ACCESS_KEY = 'WEB_ROLE_ACCESS';
-export type WebFeature = 'casino' | 'shop' | 'gacha';
+export type WebFeature = 'casino' | 'shop' | 'gacha' | 'games';
 export type RoleAccess = Record<'downgrade' | 'violator', Record<WebFeature, boolean>>;
 
 export function parseRoleAccess(raw: unknown): RoleAccess {
@@ -21,8 +21,8 @@ export function parseRoleAccess(raw: unknown): RoleAccess {
   }
   const pick = (group: string, feature: WebFeature) => v?.[group]?.[feature] !== false; // 明示的にOFFのときだけ使えない
   return {
-    downgrade: { casino: pick('downgrade', 'casino'), shop: pick('downgrade', 'shop'), gacha: pick('downgrade', 'gacha') },
-    violator: { casino: pick('violator', 'casino'), shop: pick('violator', 'shop'), gacha: pick('violator', 'gacha') },
+    downgrade: { casino: pick('downgrade', 'casino'), shop: pick('downgrade', 'shop'), gacha: pick('downgrade', 'gacha'), games: pick('downgrade', 'games') },
+    violator: { casino: pick('violator', 'casino'), shop: pick('violator', 'shop'), gacha: pick('violator', 'gacha'), games: pick('violator', 'games') },
   };
 }
 

@@ -357,6 +357,12 @@ class IPC(commands.Cog):
                             color=discord.Color.green()
                         )
                         view = OthelloPanelView(show_stats=(show_stats is not False))
+                    elif panel_type in ("chess", "shogi"):
+                        from cogs.board_games import make_panel_view, panel_embed
+                        from helpers import get_setting
+                        show_stats = get_setting(self.bot, f"{panel_type.upper()}_SHOW_STATS", guild_id)
+                        embed = panel_embed(panel_type)
+                        view = make_panel_view(panel_type, show_stats=(show_stats is not False))
                     elif panel_type == "gacha":
                         from cogs.gacha import GachaPanelView, create_gacha_panel_embed
                         embed = await create_gacha_panel_embed(self.bot, guild_id)

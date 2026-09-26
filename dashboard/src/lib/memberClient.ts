@@ -423,6 +423,16 @@ export async function finishDiscordWebLogin(params: URLSearchParams): Promise<Me
   return verifyCode({ code, redirect_uri: saved.redirectUri });
 }
 
+/** アクティビティとして開かれているとき、起動したサーバーとチャンネル（通話）。DMなどでは guildId が無い */
+export function getActivityContext(): { guildId: string | null; channelId: string | null } | null {
+  if (typeof window === 'undefined') return null;
+  const current = new URLSearchParams(window.location.search);
+  const query = current.get('frame_id') ? window.location.search : readStashedActivityQuery();
+  if (!query) return null;
+  const params = new URLSearchParams(query);
+  return { guildId: params.get('guild_id'), channelId: params.get('channel_id') };
+}
+
 /** Discordアクティビティとして開かれているか（起動パラメータ frame_id があるか） */
 export function isDiscordActivity(): boolean {
   return restoreActivityParams();

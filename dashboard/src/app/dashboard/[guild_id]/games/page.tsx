@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { Gamepad2, Disc3, ChevronRight } from 'lucide-react';
+import { Gamepad2, Disc3, ChevronRight, Crown, Swords } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 
 const games = [
@@ -16,6 +16,30 @@ const games = [
     badgeBg: 'bg-cyan-900/40 border-cyan-700/50 text-cyan-300',
     cardBorder: 'border-zinc-700/60 hover:border-cyan-600/50',
     chevronColor: 'text-cyan-400',
+  },
+  {
+    id: 'chess',
+    name: 'チェス',
+    description: 'PvP・AI対戦（5段階）のチェス。盤面画像で対局し、賭けにも対応。',
+    icon: Crown,
+    iconBg: 'bg-amber-600/15',
+    iconBorder: 'border-amber-700/50',
+    iconText: 'text-amber-300',
+    badgeBg: 'bg-amber-900/40 border-amber-700/50 text-amber-300',
+    cardBorder: 'border-zinc-700/60 hover:border-amber-600/50',
+    chevronColor: 'text-amber-400',
+  },
+  {
+    id: 'shogi',
+    name: '将棋',
+    description: 'PvP・AI対戦（5段階）の将棋。持ち駒・成り・打ち歩詰めなどのルールに対応。',
+    icon: Swords,
+    iconBg: 'bg-orange-600/15',
+    iconBorder: 'border-orange-700/50',
+    iconText: 'text-orange-300',
+    badgeBg: 'bg-orange-900/40 border-orange-700/50 text-orange-300',
+    cardBorder: 'border-zinc-700/60 hover:border-orange-600/50',
+    chevronColor: 'text-orange-400',
   },
 ];
 
