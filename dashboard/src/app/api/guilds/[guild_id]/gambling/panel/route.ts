@@ -125,7 +125,7 @@ export async function POST(
       const mul = Number(raw('GAMBLE_HIGHLOW_MUL')) || 1.8;
       const maxStreak = Math.max(1, Math.floor(Number(raw('GAMBLE_HIGHLOW_MAX_STREAK')) || 5));
       const table = parseHighLowTable(raw('GAMBLE_HIGHLOW_STREAK_MULS'));
-      const settingsLike = { win: 0, draw: 0, lose: 0, mul, maxStreak, table };
+      const settingsLike = { win: 0, draw: 0, lose: 0, mul, maxStreak, table, winTable: [] };
       const lines = Array.from({ length: maxStreak }, (_, i) => `${i + 1}連勝: \`×${Math.round(highLowTotalMul(settingsLike, i + 1) * 100) / 100}\``);
       description = description
         .replace('`5連勝`', `\`${maxStreak}連勝\``)
