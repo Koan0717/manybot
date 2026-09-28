@@ -26,6 +26,8 @@ class EconomyBot(commands.Bot):
         self.tc_xp_cooldowns = {}   # {user_id: timestamp} (経験値用)
         self.vc_sessions = {}       # {user_id: join_timestamp}
         self.eval_vc_sessions = {}  # {user_id: join_timestamp}
+        self.vc_duration_sessions = {}  # {user_id: join_timestamp}（カテゴリ別のVC滞在時間の記録用）
+        self.vc_coin_carry = {}     # {(guild_id, user_id): 端数}（VC通貨の1分あたりの端数）
         self.empty_custom_vcs = {}  # {channel_id: empty_since_timestamp}
         self.auto_vc_triggers = set()
         self.auto_vc_configs = {}  # {channel_id: config_dict}
@@ -383,6 +385,16 @@ async def on_ready():
         return
     bot._all_guilds_synced = True
 
+    # VC通貨の付与ループと、起動時点で通話にいる人の滞在時間の記録開始
+    if not vc_coin_loop.is_running():
+        vc_coin_loop.start()
+    now = datetime.datetime.now(JST)
+    for guild in bot.guilds:
+        for vc in list(guild.voice_channels) + list(guild.stage_channels):
+            for m in vc.members:
+                if not m.bot:
+                    bot.vc_duration_sessions.setdefault(m.id, now)
+
     print(f"[OK] Bot is ready! Logged in as {bot.user} (ID: {bot.user.id})")
 
     # setup_hook時点では未参加guildの一覧が取得できないため、
@@ -408,57 +420,60 @@ async def on_message(message):
         return
     await bot.process_commands(message)
 
+# VC滞在で通貨を付与する（1分ごと）。
+# 以前は「参加時刻を覚えておき、退出時にまとめて付与」だったが、
+# ・ranking.py の VC経験値ループが同じ bot.vc_sessions の時刻を毎分進めるため、退出時の滞在時間がほぼ0分になる
+# ・退出時に ranking.py 側が先にセッションを取り出すと、こちらは何も付与しない
+# ・Botを再起動すると通話中の人のセッションが消える
+# という理由でほとんど付与されていなかった。いま通話にいる人へ毎分付与する方式にする。
+@tasks.loop(minutes=1)
+async def vc_coin_loop():
+    for guild in bot.guilds:
+        try:
+            enabled = get_setting(bot, "ENABLE_VC_COINS", guild.id)
+            if enabled is False or str(enabled).lower() == "false":
+                continue
+            channels = list(guild.voice_channels) + list(guild.stage_channels)
+            for vc in channels:
+                for member in vc.members:
+                    if member.bot:
+                        continue
+                    rate = get_effective_vc_coins_rate(bot, member, vc)
+                    if rate <= 0:
+                        continue
+                    # 1分あたりが小数（例: 10分で25 → 2.5/分）のときは端数を持ち越す
+                    key = (guild.id, member.id)
+                    total = bot.vc_coin_carry.get(key, 0.0) + rate
+                    whole = int(total)
+                    bot.vc_coin_carry[key] = total - whole
+                    if whole > 0:
+                        await database.add_balance(guild.id, member.id, whole)
+        except Exception as e:
+            print(f"[ERROR] vc_coin_loop ({guild.id}): {e}")
+
+@vc_coin_loop.before_loop
+async def before_vc_coin_loop():
+    await bot.wait_until_ready()
+
 @bot.event
 async def on_voice_state_update(member, before, after):
+    """カテゴリ別のVC滞在時間を記録する（経験値は cogs/ranking.py、通貨は vc_coin_loop が担当）"""
     try:
         if member.bot: return
         user_id = member.id
         now_aware = datetime.datetime.now(JST)
 
-        # 参加・移動時
-        if after.channel is not None:
-            is_join = before.channel is None or before.channel.id != after.channel.id
-            if is_join:
-                in_correct_category = is_rank_eligible(bot, after.channel)
-                eval_category_id = get_setting(bot, "EVALUATION_CATEGORY_ID")
-                is_eval_category = (after.channel.category and after.channel.category.id == eval_category_id)
-                
-                enable_vc_coins = get_setting(bot, "ENABLE_VC_COINS")
-                if enable_vc_coins is None: enable_vc_coins = True
-                # 役職ごとの対象カテゴリ/VC指定など、正確な金額判定は退出時に行うため、
-                # 参加時点では機能が有効かどうかだけで大まかにセッション追跡を開始する
-                in_coins_eligible = enable_vc_coins
-
-                if in_correct_category or is_eval_category or in_coins_eligible:
-                    print(f"[VC XP/Coins] Started session for {member.display_name} (rank={in_correct_category}, eval={is_eval_category}, coins={in_coins_eligible})")
-                    bot.vc_sessions[user_id] = now_aware
-        
-        # 退出・移動時
+        # 退出・移動時: 直前にいたVCのカテゴリへ滞在時間を記録
         if before.channel is not None and (after.channel is None or before.channel != after.channel):
-            join_time = bot.vc_sessions.pop(user_id, None)
-            if join_time:
+            join_time = bot.vc_duration_sessions.pop(user_id, None)
+            if join_time and before.channel.category:
                 duration_seconds = int((now_aware - join_time).total_seconds())
-                if before.channel.category:
+                if duration_seconds > 0:
                     await database.add_vc_duration(member.guild.id, user_id, before.channel.category.id, duration_seconds)
-                
-                duration_minutes = duration_seconds // 60
-                if duration_minutes > 0:
-                    if is_rank_eligible(bot, before.channel):
-                        xp_reward = duration_minutes * (get_setting(bot, "VC_XP_PER_MIN", member.guild.id) or 15)
-                        new_lv = await database.add_xp(member.guild.id, user_id, xp_reward, "vc")
-                        if new_lv:
-                            lv_channel = bot.get_channel(get_setting(bot, "LEVEL_UP_CHANNEL_ID", member.guild.id))
-                            if lv_channel:
-                                await lv_channel.send(f"🎊 {member.mention} が **VCレベルアップ！** (Lv.{new_lv-1} ➔ **{new_lv}**)")
-                            await config.check_and_assign_level_roles(bot, member, "vc", new_lv)
-                            
-                    enable_vc_coins = get_setting(bot, "ENABLE_VC_COINS")
-                    if enable_vc_coins is None: enable_vc_coins = True
-                    if enable_vc_coins:
-                        coins_per_min = get_effective_vc_coins_rate(bot, member, before.channel)
-                        coins_reward = int(duration_minutes * coins_per_min)
-                        if coins_reward > 0:
-                            await database.add_balance(member.guild.id, user_id, coins_reward)
+
+        # 参加・移動時
+        if after.channel is not None and (before.channel is None or before.channel.id != after.channel.id):
+            bot.vc_duration_sessions[user_id] = now_aware
     except Exception as global_e:
         print(f"CRITICAL ERROR in on_voice_state_update: {global_e}")
 
