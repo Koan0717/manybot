@@ -748,14 +748,14 @@ def get_effective_vc_coins_rate(bot, member, channel) -> float:
     guild_id = channel.guild.id
     cfg = bot.get_vc_coins_config(guild_id)
 
-    if cfg.get("is_enabled", False):
-        global_eligible = _channel_in_scope(
-            channel,
-            cfg.get("whitelist", set()), cfg.get("categories", set()),
-            cfg.get("blacklist", set()), cfg.get("blacklist_categories", set()),
-        )
-    else:
-        global_eligible = True
+    # ダッシュボードの「VCコイン獲得機能」が全体OFFなら付与しない
+    if not cfg.get("is_enabled", False):
+        return 0.0
+    global_eligible = _channel_in_scope(
+        channel,
+        cfg.get("whitelist", set()), cfg.get("categories", set()),
+        cfg.get("blacklist", set()), cfg.get("blacklist_categories", set()),
+    )
 
     interval = cfg.get("common_reward_interval") or 10
     amount = cfg.get("common_reward_amount", 100)

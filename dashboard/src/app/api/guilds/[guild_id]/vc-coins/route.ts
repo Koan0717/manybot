@@ -49,7 +49,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
 
     if (res.rows.length > 0) {
       const row = res.rows[0];
-      const is_enabled = row.is_enabled !== false;
+      const is_enabled = row.is_enabled === true;
       const wl_channels = cleanIds(row.whitelist_channel_ids?.length ? row.whitelist_channel_ids : row.whitelist_channels);
       const bl_channels = cleanIds(row.blacklist_channel_ids?.length ? row.blacklist_channel_ids : row.blacklist_channels);
       const wl_categories = cleanIds(row.whitelist_category_ids?.length ? row.whitelist_category_ids : row.whitelist_categories);
