@@ -591,7 +591,8 @@ class VCRenamePanelView(discord.ui.View):
         await interaction.response.send_modal(LimitModal(interaction.user.voice.channel))
 
 # --- 購入用Views & Modals ---
-async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
+async def panel_denial_reason(bot, guild, member, panel_id: str):
+    """パネルを使えない理由（使えるなら None）。ボタンを押した人に理由を伝えるため"""
     # --- 評価落ちロールによるアクセス制御 ---
     # ROOM_ACCESS_LOW_EVAL_{panel_id} が False のとき、評価落ちロール保持者は弾く
     setting_key = f"ROOM_ACCESS_LOW_EVAL_{panel_id}"
@@ -604,7 +605,7 @@ async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
                 downgrade_role_id = int(downgrade_role_id)
                 member_role_ids = [r.id for r in member.roles]
                 if downgrade_role_id in member_role_ids:
-                    return False  # 評価落ちロール保持者は利用不可
+                    return "評価落ちロールを持っているため"
             except (ValueError, TypeError):
                 pass
 
@@ -618,13 +619,13 @@ async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
         if violator_role_ids:
             member_role_ids = [r.id for r in member.roles]
             if any(rid in member_role_ids for rid in violator_role_ids):
-                return False  # 違反者ロール保持者は利用不可
+                return "違反者ロールを持っているため"
 
     # --- 本準メン専用の宿パネル(main_inn)が設置されている場合、一般宿パネル系は本準メン利用不可 ---
     if panel_id in ["inn", "inn_combined", "inn_temp"] and is_main_or_sub_member(bot, member):
         try:
             if await database.has_panel_type(guild.id, "main_inn"):
-                return False
+                return "本・準メンバーは専用の宿パネルを使うため"
         except Exception:
             pass
 
@@ -632,14 +633,14 @@ async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
     if panel_id in ["luxury_inn", "luxury_inn_single", "inn_combined"] and is_main_or_sub_member(bot, member):
         try:
             if await database.has_panel_type(guild.id, "main_luxury_inn"):
-                return False
+                return "本・準メンバーは専用の高級宿パネルを使うため"
         except Exception:
             pass
 
     # --- 既存のパネル別設定チェック ---
     configs = get_setting(bot, "ROOM_PANEL_CONFIGS", guild.id)
     if not configs or not isinstance(configs, dict) or panel_id not in configs:
-        return True # 設定がなければ全員許可
+        return None  # 設定がなければ全員許可
     
     config = configs[panel_id]
     allow_temp = config.get("allowTemp", True)
@@ -647,14 +648,18 @@ async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
     
     # 仮メン判定
     if is_new_member(bot, member):
-        if not allow_temp: return False
+        if not allow_temp: return "このパネルは仮メンバーが使えない設定のため"
         
     # 本・準メン判定
     if is_main_or_sub_member(bot, member):
-        if not allow_main_sub: return False
-        
-    return True
+        if not allow_main_sub: return "このパネルは本・準メンバーが使えない設定のため"
 
+    return None
+
+
+
+async def check_panel_permission(bot, guild, member, panel_id: str) -> bool:
+    return await panel_denial_reason(bot, guild, member, panel_id) is None
 
 
 async def resolve_room_channel(bot, channel_id: int):
@@ -972,7 +977,15 @@ async def _process_room_purchase_inner(bot, interaction: discord.Interaction, ro
                 embed_log.add_field(name="返金額", value=f"{price:,} {currency_name}", inline=True)
                 embed_log.add_field(name="エラー内容", value=str(e), inline=False)
                 await send_log(bot, interaction.guild, "currency", embed_log)
-            await interaction.edit_original_response(content=f"エラー: {e}")
+            msg = f"エラー: {e}"
+            # よくある原因は分かる言葉で伝える
+            if "Maximum number of channels in category" in str(e) or "50035" in str(e) and "category" in str(e).lower():
+                msg = "❌ 作成先カテゴリのチャンネル数が上限（50個）に達しているため作成できません。運営にご連絡ください。"
+            elif isinstance(e, discord.Forbidden):
+                msg = "❌ Botに作成先カテゴリでチャンネルを作る権限がないため作成できません。運営にご連絡ください。"
+            if price > 0:
+                msg += "\n（支払った金額は返金しました）"
+            await interaction.edit_original_response(content=msg)
 
 class GameVCDurationSelectView(discord.ui.View):
     def __init__(self, bot, member=None):
@@ -1194,8 +1207,8 @@ class RoomView(discord.ui.View):
         # 本準メン専用の宿パネルが設置されている場合、本準メンは一般宿パネル系を利用不可
         if is_main_or_sub_member(it.client, it.user) and await database.has_panel_type(it.guild.id, "main_inn"):
             return await it.followup.send("本・準メンバーの方は専用のパネルをご利用ください。", ephemeral=True)
-        if not await check_panel_permission(it.client, it.guild, it.user, "inn"):
-            return await it.followup.send("こちらの宿はご利用になれません。", ephemeral=True)
+        if (deny_reason := await panel_denial_reason(it.client, it.guild, it.user, "inn")):
+            return await it.followup.send(f"こちらの宿はご利用になれません（{deny_reason}）。", ephemeral=True)
         is_free = is_free_inn_member(it.client, it.user)
         if is_free:
             msg = "「一般宿」を作成しますか？\nあなたは対象ロールのため **無料** で作成可能です。"
@@ -1215,8 +1228,8 @@ class LuxuryRoomView(discord.ui.View):
         # 本準メン専用の高級宿パネルが設置されている場合、本準メンは一般高級宿パネル系を利用不可
         if is_main_or_sub_member(bot, member) and await database.has_panel_type(it.guild.id, "main_luxury_inn"):
             return await it.followup.send("本・準メンバーの方は専用の高級宿パネルをご利用ください。", ephemeral=True)
-        if not await check_panel_permission(bot, it.guild, member, "luxury_inn_single"):
-            return await it.followup.send("こちらの宿はご利用になれません。", ephemeral=True)
+        if (deny_reason := await panel_denial_reason(bot, it.guild, member, "luxury_inn_single")):
+            return await it.followup.send(f"こちらの宿はご利用になれません（{deny_reason}）。", ephemeral=True)
         if not (has_admin_role(bot, member) or is_main_or_sub_member(bot, member) or is_new_member(bot, member) or is_downgrade_member(bot, member)):
             return await it.followup.send("ロールがありません。", ephemeral=True)
         await it.followup.send("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user, "luxury_inn_single"), ephemeral=True)
@@ -1231,8 +1244,8 @@ class InnCombinedView(discord.ui.View):
         # 本準メン専用の宿パネルが設置されている場合、本準メンは一般宿パネル系を利用不可
         if is_main_or_sub_member(it.client, it.user) and await database.has_panel_type(it.guild.id, "main_inn"):
             return await it.followup.send("本・準メンバーの方は専用のパネルをご利用ください。", ephemeral=True)
-        if not await check_panel_permission(it.client, it.guild, it.user, "inn_combined"):
-            return await it.followup.send("こちらの宿はご利用になれません。", ephemeral=True)
+        if (deny_reason := await panel_denial_reason(it.client, it.guild, it.user, "inn_combined")):
+            return await it.followup.send(f"こちらの宿はご利用になれません（{deny_reason}）。", ephemeral=True)
         is_free = is_free_inn_member(it.client, it.user)
         if is_free:
             msg = "「一般宿」を作成しますか？\nあなたは対象ロールのため **無料** で作成可能です。"
@@ -1248,8 +1261,8 @@ class InnCombinedView(discord.ui.View):
         # 本準メン専用の高級宿パネルが設置されている場合、本準メンは一般高級宿パネル系を利用不可
         if is_main_or_sub_member(bot, member) and await database.has_panel_type(it.guild.id, "main_luxury_inn"):
             return await it.followup.send("本・準メンバーの方は専用の高級宿パネルをご利用ください。", ephemeral=True)
-        if not await check_panel_permission(bot, it.guild, member, "inn_combined"):
-            return await it.followup.send("こちらの宿はご利用になれません。", ephemeral=True)
+        if (deny_reason := await panel_denial_reason(bot, it.guild, member, "inn_combined")):
+            return await it.followup.send(f"こちらの宿はご利用になれません（{deny_reason}）。", ephemeral=True)
         if not (has_admin_role(bot, member) or is_main_or_sub_member(bot, member) or is_new_member(bot, member) or is_downgrade_member(bot, member)):
             return await it.followup.send("ロールがありません。", ephemeral=True)
         await it.followup.send("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user, "inn_combined"), ephemeral=True)
@@ -1308,8 +1321,8 @@ class MainInnPanelView(discord.ui.View):
         
     @discord.ui.button(label="一般宿を作成 (無料・無制限)", style=discord.ButtonStyle.primary, emoji="🛖", custom_id="persistent_inn_main_btn")
     async def inn_main(self, it, btn):
-        if not await check_panel_permission(it.client, it.guild, it.user, "main_inn"):
-            return await it.response.send_message("こちらの宿はご利用になれません。", ephemeral=True)
+        if (deny_reason := await panel_denial_reason(it.client, it.guild, it.user, "main_inn")):
+            return await it.response.send_message(f"こちらの宿はご利用になれません（{deny_reason}）。", ephemeral=True)
         if not (is_main_or_sub_member(it.client, it.user) or has_admin_role(it.client, it.user)):
             return await it.response.send_message("このパネルは対象ロール(本・準メンバー)をお持ちの方のみ利用可能です。仮メンバーの方は有料の一般宿をご利用ください。", ephemeral=True)
         await it.response.send_message("「一般宿」を無料・時間無制限で作成しますか？", view=MainInnConfirmView(it.client), ephemeral=True)
@@ -1322,8 +1335,8 @@ class TempInnPanelView(discord.ui.View):
     async def inn_temp(self, it, btn):
         if is_main_or_sub_member(it.client, it.user) and await database.has_panel_type(it.guild.id, "main_inn"):
             return await it.response.send_message("本・準メンバーの方は専用のパネルをご利用ください。", ephemeral=True)
-        if not await check_panel_permission(it.client, it.guild, it.user, "inn_temp"):
-            return await it.response.send_message("こちらの宿はご利用になれません。", ephemeral=True)
+        if (deny_reason := await panel_denial_reason(it.client, it.guild, it.user, "inn_temp")):
+            return await it.response.send_message(f"こちらの宿はご利用になれません（{deny_reason}）。", ephemeral=True)
         if is_main_or_sub_member(it.client, it.user):
             return await it.response.send_message("本・準メンバーの方は専用のパネルをご利用ください。", ephemeral=True)
         await it.response.send_message("「一般宿」の利用期間を選択してください。", view=TempInnDurationSelectView(it.client, it.user, "inn_temp"), ephemeral=True)
@@ -1339,8 +1352,8 @@ class LuxuryInnPanelView(discord.ui.View):
         # 本準メン専用の高級宿パネルが設置されている場合、本準メンは一般高級宿パネル系を利用不可
         if is_main_or_sub_member(bot, member) and await database.has_panel_type(it.guild.id, "main_luxury_inn"):
             return await it.response.send_message("本・準メンバーの方は専用の高級宿パネルをご利用ください。", ephemeral=True)
-        if not await check_panel_permission(bot, it.guild, member, "luxury_inn_single"):
-            return await it.response.send_message("こちらの宿はご利用になれません。", ephemeral=True)
+        if (deny_reason := await panel_denial_reason(bot, it.guild, member, "luxury_inn_single")):
+            return await it.response.send_message(f"こちらの宿はご利用になれません（{deny_reason}）。", ephemeral=True)
         if not (has_admin_role(bot, member) or is_main_or_sub_member(bot, member) or is_new_member(bot, member) or is_downgrade_member(bot, member)):
             return await it.response.send_message("ロールがありません。", ephemeral=True)
         await it.response.send_message("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user, "luxury_inn_single"), ephemeral=True)
@@ -1353,8 +1366,8 @@ class MainLuxuryInnPanelView(discord.ui.View):
     async def main_luxury(self, it, btn):
         bot = it.client
         member = it.user
-        if not await check_panel_permission(bot, it.guild, member, "main_luxury_inn"):
-            return await it.response.send_message("こちらの宿はご利用になれません。", ephemeral=True)
+        if (deny_reason := await panel_denial_reason(bot, it.guild, member, "main_luxury_inn")):
+            return await it.response.send_message(f"こちらの宿はご利用になれません（{deny_reason}）。", ephemeral=True)
         if not (is_main_or_sub_member(bot, member) or has_admin_role(bot, member)):
             return await it.response.send_message("このパネルは対象ロール(本・準メンバー)をお持ちの方のみ利用可能です。", ephemeral=True)
         await it.response.send_message("「高級宿」の利用期間を選択してください。", view=LuxuryInnDurationSelectView(it.client, it.user, "main_luxury_inn"), ephemeral=True)
