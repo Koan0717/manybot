@@ -7,13 +7,14 @@ const COOKIE_NAME = 'dashboard_session';
 
 // Routes that don't require authentication
 // /member 配下のページは中身のないクライアント側の殻で、データは /api/member/* から
-// Authorization ヘッダー付きで取得する（そちらはトークン必須）。
+// Authorization ヘッダー付きで取得する。/api/member/* はそれぞれのルートがメンバーのトークンを
+// 確認する（requireGuildMember / getMemberSession）ので、ここでは管理用の Cookie で弾かない
+// （運営として管理ダッシュボードに入ったあと、その Cookie が切れてもメンバー画面を使えるように）。
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth/login',
   '/member',
-  '/api/member/discord-login',
-  '/api/member/discord-config',
+  '/api/member',
 ];
 
 /**
