@@ -15,6 +15,8 @@ export interface SessionPayload {
   role: 'admin' | 'shop' | 'gambling' | 'subadmin' | 'botadmin';
   guild_id?: string;
   bot_id?: string;
+  /** Discordログインから運営ロールで入ったサブアドミン（そのときのDiscord ID） */
+  discord_id?: string;
   iat?: number;
   exp?: number;
 }
@@ -74,11 +76,11 @@ export async function validateCredentials(username: string, password: string): P
 /**
  * Create a new session and return the JWT token
  */
-export async function createSession(payload: SessionPayload): Promise<string> {
+export async function createSession(payload: SessionPayload, expiresIn: string = '7d'): Promise<string> {
   const jwt = await new jose.SignJWT(payload as any)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('7d')
+    .setExpirationTime(expiresIn)
     .sign(jwtSecret);
   
   return jwt;

@@ -69,12 +69,18 @@ export default function DashboardLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [isSubAccount, setIsSubAccount] = useState(false);
+  // Discordログインから運営ロールで入ったか（それならメンバー画面へ戻れるようにする）
+  const [fromDiscord, setFromDiscord] = useState(false);
   const router = useRouter();
 
   const [isActivity, setIsActivity] = useState(false);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
+    // 保存済みのトークンも消す（残っていると TokenProvider が付け続けてログアウトにならない）
+    try {
+      localStorage.removeItem('dashboard_session');
+    } catch {}
     router.push('/login');
     router.refresh();
   };
@@ -92,6 +98,7 @@ export default function DashboardLayout({
         if (authData.authenticated && authData.user) {
           setUserRole(authData.user.role);
           setIsSubAccount(!!authData.user.guild_id);
+          setFromDiscord(!!authData.user.discord_id);
         }
       })
       .finally(() => setLoading(false));
@@ -345,6 +352,12 @@ export default function DashboardLayout({
           </nav>
 
           <div className="pt-4 border-t border-zinc-800/80 mt-auto flex-shrink-0 space-y-2">
+            {fromDiscord && (
+              <Link href={`/member/${guildId}`} className="font-tech text-xs text-zinc-500 hover:text-cyan-400 flex items-center gap-2 transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+                プロフィールに戻る
+              </Link>
+            )}
             {!isSubAccount && (
               <Link href="/" className="font-tech text-xs text-zinc-500 hover:text-cyan-400 flex items-center gap-2 transition-colors">
                 <ChevronLeft className="w-4 h-4" />
