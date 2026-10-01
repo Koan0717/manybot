@@ -17,7 +17,7 @@ import database
 import chess_engine as ce
 import shogi_engine as se
 import board_images
-from helpers import get_setting, create_game_stats_embed, AI_BET_MIN_LEVEL, ai_bet_multiplier, format_mult
+from helpers import get_setting, create_game_stats_embed, AI_BET_MIN_LEVEL, ai_bet_multiplier, ai_bet_max, ai_bet_over_max_message, format_mult
 
 _bot_instance = None
 # key: (game, guild_id, channel_id) または (game, "dm", user_id)
@@ -586,9 +586,11 @@ class MoveRequestView(discord.ui.View):
 class BetModal(discord.ui.Modal):
     bet_input = discord.ui.TextInput(label="賭ける金額", placeholder="例: 1000", max_length=10, required=True)
 
-    def __init__(self, spec, next_callback, mult: float = 2.0):
+    def __init__(self, spec, next_callback, mult: float = 2.0, max_bet: int = 0):
         super().__init__(title=f"{spec.name}：賭け金入力（勝つと×{format_mult(mult)}）")
         self.next_callback = next_callback
+        if max_bet:
+            self.bet_input.label = f"賭ける金額（上限 {max_bet:,}）"
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -621,7 +623,8 @@ class DifficultyView(discord.ui.View):
                 async def on_bet(it, bet):
                     await _start_ai(it, self.spec, level, bet)
                 mult = ai_bet_multiplier(interaction.client, self.spec.prefix, guild_id, level)
-                await interaction.response.send_modal(BetModal(self.spec, on_bet, mult))
+                max_bet = ai_bet_max(interaction.client, self.spec.prefix, guild_id, level)
+                await interaction.response.send_modal(BetModal(self.spec, on_bet, mult, max_bet))
             else:
                 await interaction.response.defer(ephemeral=True)
                 await _start_ai(interaction, self.spec, level, 0)
@@ -642,6 +645,10 @@ async def _start_ai(interaction: discord.Interaction, spec, level: int, bet: int
     user = interaction.user
     if (spec.key, "dm", user.id) in sessions:
         return await _reply(interaction, f"DMで{spec.name}のAI対戦がすでに進行中です。先に終わらせてください。")
+    # 賭け金の上限チェック（ダッシュボードで設定）
+    over = ai_bet_over_max_message(interaction.client, spec.prefix, guild_id, level, bet)
+    if over:
+        return await _reply(interaction, over)
     if bet > 0 and guild_id:
         if not await database.remove_balance(guild_id, user.id, bet):
             bal = await database.get_balance(guild_id, user.id)

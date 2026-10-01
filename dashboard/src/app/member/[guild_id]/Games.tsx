@@ -37,7 +37,8 @@ export interface GamesInfo {
   enabled: true;
   currency_name: string;
   /** ai_mult: AI に勝ったときの倍率（キーはレベル。賭けられるのはレベル AI_BET_MIN_LEVEL 以上） */
-  games: { key: GameKey; label: string; bet_enabled: boolean; ai_mult?: Record<string, number> }[];
+  /** ai_max_bet: AI対戦の賭け金上限（キーはレベル。0 は上限なし） */
+  games: { key: GameKey; label: string; bet_enabled: boolean; ai_mult?: Record<string, number>; ai_max_bet?: Record<string, number> }[];
   mine: BoardGameView[];
   /** アクティビティを通話で開いているとき、その通話にいる人 */
   voice_peers?: Player[];
@@ -298,6 +299,7 @@ export default function Games({
   // AI対戦で賭けられるのはレベル4以上。勝つと設定の倍率で戻る
   const aiBetOk = !!g?.bet_enabled && level >= AI_BET_MIN_LEVEL;
   const aiMult = g?.ai_mult?.[String(level)] ?? 2;
+  const aiMaxBet = g?.ai_max_bet?.[String(level)] ?? 0;
   // ゲームを切り替えたら賭け金の入力は空に戻す（金額は申し込む人が毎回決める）
   useEffect(() => {
     setBetText('');
@@ -453,7 +455,7 @@ export default function Games({
                   value={betText}
                   onChange={(e) => setBetText(e.target.value.replace(/[^\d]/g, ''))}
                   inputMode="numeric"
-                  placeholder="賭け金（空欄・0 で賭けなし）"
+                  placeholder={aiMaxBet > 0 ? `賭け金（上限 ${fmt(aiMaxBet)}・空欄で賭けなし）` : '賭け金（空欄・0 で賭けなし）'}
                   className="flex-1 min-w-0 px-3 py-2.5 bg-zinc-800/60 border border-zinc-700/60 rounded-xl text-sm"
                 />
                 <span className="text-xs text-zinc-400">{info.currency_name}</span>
@@ -466,7 +468,10 @@ export default function Games({
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Swords className="w-4 h-4" />} AI対戦を始める
             </button>
-            {aiBetOk && Number(betText) > 0 && (
+            {aiBetOk && aiMaxBet > 0 && Number(betText) > aiMaxBet && (
+              <p className="text-[11px] text-red-400 text-center">レベル{level}の賭け金の上限は {fmt(aiMaxBet)} です</p>
+            )}
+            {aiBetOk && Number(betText) > 0 && (Number(betText) <= aiMaxBet || aiMaxBet === 0) && (
               <p className="text-[11px] text-zinc-500 text-center">
                 勝つと {fmt(Math.floor(Number(betText) * aiMult))}（賭け金の{aiMult}倍）、引き分けは返金、負けると没収です
               </p>
