@@ -281,6 +281,13 @@ DEFAULT_SETTINGS = {
     "CHESS_AI_MULT_5": 3,
     "SHOGI_AI_MULT_4": 2,
     "SHOGI_AI_MULT_5": 3,
+    # AI 対戦（レベル4・5）の賭け金上限。0 は上限なし
+    "OTHELLO_AI_MAX_BET_4": 0,
+    "OTHELLO_AI_MAX_BET_5": 0,
+    "CHESS_AI_MAX_BET_4": 0,
+    "CHESS_AI_MAX_BET_5": 0,
+    "SHOGI_AI_MAX_BET_4": 0,
+    "SHOGI_AI_MAX_BET_5": 0,
     "OTHELLO_DEFAULT_BET": 100,
     "OTHELLO_PANEL_CHANNEL": "",
     "OTHELLO_AUTO_VC_ENABLED": False,
@@ -825,6 +832,25 @@ def ai_bet_multiplier(bot, prefix: str, guild_id, level: int) -> float:
     except (TypeError, ValueError):
         return 2.0
     return min(100.0, v) if v >= 1 else 2.0
+
+
+def ai_bet_max(bot, prefix: str, guild_id, level: int) -> int:
+    """AI 対戦の賭け金上限（{prefix}_AI_MAX_BET_{level}）。0・未設定・不正な値は上限なし (0)"""
+    raw = get_setting(bot, f"{prefix}_AI_MAX_BET_{level}", guild_id)
+    try:
+        v = int(float(raw))
+    except (TypeError, ValueError):
+        return 0
+    return v if v > 0 else 0
+
+
+def ai_bet_over_max_message(bot, prefix: str, guild_id, level: int, bet: int):
+    """賭け金が上限を超えていればエラーメッセージ、問題なければ None"""
+    limit = ai_bet_max(bot, prefix, guild_id, level)
+    if bet > 0 and limit and bet > limit:
+        currency = get_setting(bot, "CURRENCY_NAME", guild_id) or "コイン"
+        return f"レベル{level}の賭け金の上限は {limit:,} {currency} です。"
+    return None
 
 
 def format_mult(v: float) -> str:

@@ -16,6 +16,12 @@ function toMult(raw: unknown, fallback: number): number {
   return Math.round(Math.min(100, Math.max(1, n)) * 100) / 100;
 }
 
+/** 賭け金上限の入力を保存用の数値にする（0 以上の整数。0・空欄・不正な値は上限なし = 0） */
+function toMaxBet(raw: unknown): number {
+  const n = Math.floor(Number(raw));
+  return raw === '' || !Number.isSafeInteger(n) || n < 0 ? 0 : n;
+}
+
 /**
  * オセロ・チェス・将棋の設定画面（中身は同じで、設定キーの頭 (OTHELLO / CHESS / SHOGI) だけが違う）
  */
@@ -35,6 +41,9 @@ export default function BoardGameSettings({ game, name, icon: Icon }: { game: 'o
     // AI に勝ったときの倍率（賭けられるのはレベル4・5だけ）。入力中は文字列のまま持ち、保存時に数値へ直す
     [`${P}_AI_MULT_4`]: String(data[`${P}_AI_MULT_4`] ?? AI_MULT_DEFAULT[4]),
     [`${P}_AI_MULT_5`]: String(data[`${P}_AI_MULT_5`] ?? AI_MULT_DEFAULT[5]),
+    // AI対戦（レベル4・5）の賭け金上限。0 は上限なし
+    [`${P}_AI_MAX_BET_4`]: String(data[`${P}_AI_MAX_BET_4`] ?? 0),
+    [`${P}_AI_MAX_BET_5`]: String(data[`${P}_AI_MAX_BET_5`] ?? 0),
   });
   const [settings, setSettings] = useState<Record<string, any>>(defaults());
   const [loading, setLoading] = useState(true);
@@ -73,6 +82,8 @@ export default function BoardGameSettings({ game, name, icon: Icon }: { game: 'o
           ...settings,
           [`${P}_AI_MULT_4`]: toMult(settings[`${P}_AI_MULT_4`], AI_MULT_DEFAULT[4]),
           [`${P}_AI_MULT_5`]: toMult(settings[`${P}_AI_MULT_5`], AI_MULT_DEFAULT[5]),
+          [`${P}_AI_MAX_BET_4`]: toMaxBet(settings[`${P}_AI_MAX_BET_4`]),
+          [`${P}_AI_MAX_BET_5`]: toMaxBet(settings[`${P}_AI_MAX_BET_5`]),
         }),
       });
       const data = await res.json();
@@ -184,6 +195,32 @@ export default function BoardGameSettings({ game, name, icon: Icon }: { game: 'o
                   onChange={(e) => updateSetting(`${P}_AI_MULT_${lv}`, e.target.value)}
                   onBlur={() => updateSetting(`${P}_AI_MULT_${lv}`, String(toMult(settings[`${P}_AI_MULT_${lv}`], AI_MULT_DEFAULT[lv])))}
                   className="w-24 bg-zinc-900 border border-zinc-600 rounded px-3 py-1.5 text-white font-tech focus:outline-none focus:border-cyan-500"
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50 space-y-3">
+          <div>
+            <p className="text-sm font-tech text-zinc-300 font-medium">AI対戦の賭け金上限</p>
+            <p className="text-xs font-tech text-zinc-500 mt-0.5">
+              レベルごとに1回で賭けられる金額の上限です（0 で上限なし）。Discord とアクティビティ・Web の両方に適用されます
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {([4, 5] as const).map((lv) => (
+              <label key={lv} className="flex items-center gap-2">
+                <span className="text-sm font-tech text-zinc-300 whitespace-nowrap">レベル{lv}（{lv === 4 ? '難しい' : '最難関'}）</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  step="1"
+                  min="0"
+                  value={settings[`${P}_AI_MAX_BET_${lv}`]}
+                  onChange={(e) => updateSetting(`${P}_AI_MAX_BET_${lv}`, e.target.value)}
+                  onBlur={() => updateSetting(`${P}_AI_MAX_BET_${lv}`, String(toMaxBet(settings[`${P}_AI_MAX_BET_${lv}`])))}
+                  className="w-32 bg-zinc-900 border border-zinc-600 rounded px-3 py-1.5 text-white font-tech focus:outline-none focus:border-cyan-500"
                 />
               </label>
             ))}

@@ -28,7 +28,8 @@ export interface BoardGameSettings {
   currencyName: string;
   enabled: Record<BoardGame, boolean>;
   /** aiMult: AI に勝ったときの倍率（賭けられるのはレベル AI_BET_MIN_LEVEL 以上だけ） */
-  bet: Record<BoardGame, { enabled: boolean; aiMult: Record<number, number> }>;
+  /** aiMaxBet: AI対戦の賭け金上限（キーはレベル。0 は上限なし） */
+  bet: Record<BoardGame, { enabled: boolean; aiMult: Record<number, number>; aiMaxBet: Record<number, number> }>;
 }
 
 /** AI対戦で賭けられる最低レベル */
@@ -38,6 +39,10 @@ const multOf = (raw: unknown, fallback: number) => {
   const n = Number(raw);
   return raw !== undefined && raw !== null && raw !== '' && Number.isFinite(n) && n >= 1 ? Math.min(100, n) : fallback;
 };
+const maxBetOf = (raw: unknown) => {
+  const n = Math.floor(Number(raw));
+  return Number.isSafeInteger(n) && n > 0 ? n : 0;
+};
 
 export async function loadBoardGameSettings(pool: Pool, guildId: string): Promise<BoardGameSettings> {
   const s: Record<string, string> = {};
@@ -45,7 +50,8 @@ export async function loadBoardGameSettings(pool: Pool, guildId: string): Promis
     const res = await pool.query(
       `SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key IN
          ($2, 'CURRENCY_NAME', 'OTHELLO_BET_ENABLED', 'CHESS_BET_ENABLED', 'SHOGI_BET_ENABLED',
-          'OTHELLO_AI_MULT_4', 'OTHELLO_AI_MULT_5', 'CHESS_AI_MULT_4', 'CHESS_AI_MULT_5', 'SHOGI_AI_MULT_4', 'SHOGI_AI_MULT_5')`,
+          'OTHELLO_AI_MULT_4', 'OTHELLO_AI_MULT_5', 'CHESS_AI_MULT_4', 'CHESS_AI_MULT_5', 'SHOGI_AI_MULT_4', 'SHOGI_AI_MULT_5',
+          'OTHELLO_AI_MAX_BET_4', 'OTHELLO_AI_MAX_BET_5', 'CHESS_AI_MAX_BET_4', 'CHESS_AI_MAX_BET_5', 'SHOGI_AI_MAX_BET_4', 'SHOGI_AI_MAX_BET_5')`,
       [guildId, WEB_BOARDGAMES_KEY]
     );
     for (const r of res.rows) s[r.setting_key] = r.setting_value;
@@ -65,7 +71,8 @@ export async function loadBoardGameSettings(pool: Pool, guildId: string): Promis
       BOARD_GAMES.map((g) => {
         const P = g.toUpperCase();
         const aiMult: Record<number, number> = { 4: multOf(s[`${P}_AI_MULT_4`], AI_MULT_DEFAULT[4]), 5: multOf(s[`${P}_AI_MULT_5`], AI_MULT_DEFAULT[5]) };
-        return [g, { enabled: t(s[`${P}_BET_ENABLED`]), aiMult }];
+        const aiMaxBet: Record<number, number> = { 4: maxBetOf(s[`${P}_AI_MAX_BET_4`]), 5: maxBetOf(s[`${P}_AI_MAX_BET_5`]) };
+        return [g, { enabled: t(s[`${P}_BET_ENABLED`]), aiMult, aiMaxBet }];
       })
     ) as BoardGameSettings['bet'],
   };
@@ -376,6 +383,8 @@ export async function createAiGame(pool: Pool, s: BoardGameSettings, guildId: st
     if (lv < AI_BET_MIN_LEVEL) throw new CasinoError(`AI対戦で賭けられるのはレベル${AI_BET_MIN_LEVEL}以上です`);
     bet = Number(betRaw);
     if (!Number.isSafeInteger(bet) || bet < 1) throw new CasinoError('賭け金は1以上の整数で入力してください');
+    const maxBet = s.bet[game].aiMaxBet[lv] ?? 0;
+    if (maxBet > 0 && bet > maxBet) throw new CasinoError(`レベル${lv}の賭け金の上限は ${maxBet.toLocaleString()} ${s.currencyName} です`);
   }
   const aiMult = bet > 0 ? s.bet[game].aiMult[lv] ?? 2 : null;
   const id = randomUUID();

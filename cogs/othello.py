@@ -13,7 +13,7 @@ import io
 from PIL import Image, ImageDraw, ImageFont
 
 import database
-from helpers import get_setting, JST, create_game_stats_embed, AI_BET_MIN_LEVEL, ai_bet_multiplier, format_mult
+from helpers import get_setting, JST, create_game_stats_embed, AI_BET_MIN_LEVEL, ai_bet_multiplier, ai_bet_max, ai_bet_over_max_message, format_mult
 
 # ============================================================
 # モジュールレベル変数
@@ -947,9 +947,11 @@ class BetInputModal(discord.ui.Modal, title="オセロ：賭け金入力"):
         required=True
     )
 
-    def __init__(self, next_callback, mult: float = 2.0):
+    def __init__(self, next_callback, mult: float = 2.0, max_bet: int = 0):
         super().__init__(title=f"オセロ：賭け金入力（勝つと×{format_mult(mult)}）")
         self.next_callback = next_callback  # (interaction, bet) を受け取る非同期関数
+        if max_bet:
+            self.bet_input.label = f"賭ける金額（上限 {max_bet:,}）"
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -987,7 +989,8 @@ class DifficultySelectView(discord.ui.View):
         if level >= AI_BET_MIN_LEVEL and bet_enabled and (str(bet_enabled).lower() == "true" or bet_enabled is True):
             async def on_bet(it: discord.Interaction, bet: int):
                 await _start_ai_game(it, level, bet)
-            modal = BetInputModal(next_callback=on_bet, mult=ai_bet_multiplier(bot, "OTHELLO", guild_id, level))
+            modal = BetInputModal(next_callback=on_bet, mult=ai_bet_multiplier(bot, "OTHELLO", guild_id, level),
+                                  max_bet=ai_bet_max(bot, "OTHELLO", guild_id, level))
             await interaction.response.send_modal(modal)
         else:
             await interaction.response.defer(ephemeral=True)
@@ -1021,6 +1024,14 @@ async def _start_ai_game(interaction: discord.Interaction, ai_level: int, bet: i
     if ai_level < AI_BET_MIN_LEVEL:
         bet = 0  # AI 対戦で賭けられるのはレベル4以上
     ai_mult = ai_bet_multiplier(bot, "OTHELLO", guild_id, ai_level)
+
+    # 賭け金の上限チェック（ダッシュボードで設定）
+    over = ai_bet_over_max_message(bot, "OTHELLO", guild_id, ai_level, bet)
+    if over:
+        if not interaction.response.is_done():
+            return await interaction.response.send_message(over, ephemeral=True)
+        else:
+            return await interaction.followup.send(over, ephemeral=True)
 
     # 賭け金チェック
     if bet > 0 and guild_id:
