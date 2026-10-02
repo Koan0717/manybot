@@ -6,6 +6,7 @@ import asyncio
 import database
 import json
 import os
+import re
 from helpers import (
     JST, get_setting, get_role_by_setting, has_admin_role, has_event_manager_role,
     EMBLEM_MANAGER_ROLE_NAME, EMBLEM_MASTER_ROLE_NAME, CONFESSION_PRIEST_ROLE_NAME,
@@ -13,15 +14,104 @@ from helpers import (
 )
 
 # --- チケット管理 (共通) ---
-class TicketCloseConfirmView(discord.ui.View):
+_TICKET_STAFF_PATTERN = re.compile(r"\*\*担当者:\*\*\s*<@!?(\d+)>")
+
+async def _find_ticket_staff_ids(channel: discord.TextChannel) -> set[int]:
+    """チケット冒頭のBotメッセージの埋め込みから「担当者」のユーザーIDを取得する。"""
+    staff_ids = set()
+    async for msg in channel.history(limit=10, oldest_first=True):
+        if msg.author.id != channel.guild.me.id:
+            continue
+        for embed in msg.embeds:
+            for m in _TICKET_STAFF_PATTERN.finditer(embed.description or ""):
+                staff_ids.add(int(m.group(1)))
+        if staff_ids:
+            break
+    return staff_ids
+
+async def close_ticket_channel(channel: discord.TextChannel) -> list[str]:
+    """チケットを「閉じた」状態にする。
+    ロールの権限（管理者・メンションロール等）とBot・担当者はそのまま残し、
+    それ以外の個別メンバー（チケット発行者・同行プレイヤー）の閲覧権限を外す。
+    閲覧できなくなったメンバーのメンション一覧を返す。"""
+    guild = channel.guild
+    staff_ids = await _find_ticket_staff_ids(channel)
+    hidden = []
+    for target, overwrite in list(channel.overwrites.items()):
+        if isinstance(target, discord.Role):
+            continue
+        if isinstance(target, discord.Object):
+            if getattr(target, "type", None) is discord.Role:
+                continue
+            try:
+                target = await guild.fetch_member(target.id)
+            except Exception:
+                continue
+        if target.bot or target.id in staff_ids:
+            continue
+        if overwrite.read_messages is False:
+            continue
+        await channel.set_permissions(
+            target,
+            overwrite=discord.PermissionOverwrite(read_messages=False, send_messages=False),
+            reason="チケットのクローズ"
+        )
+        hidden.append(target.mention)
+    return hidden
+
+class TicketDeleteView(discord.ui.View):
+    """閉じたチケットに表示する削除ボタン。"""
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="チケットを削除", style=discord.ButtonStyle.danger, emoji="🗑️", custom_id="persistent_delete_ticket_btn")
+    async def delete_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(title="確認", description="このチケットを完全に削除してもよろしいですか？\nこの操作は取り消せません。", color=discord.Color.red())
+        await interaction.response.send_message(embed=embed, view=TicketDeleteConfirmView(), ephemeral=True)
+
+class TicketDeleteConfirmView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
 
-    @discord.ui.button(label="閉じる", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="削除する", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("チケットを削除します...")
         await asyncio.sleep(2)
         await interaction.channel.delete()
+
+    @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="キャンセルしました。", embed=None, view=None)
+
+class TicketCloseConfirmView(discord.ui.View):
+    def __init__(self, control_message: discord.Message = None):
+        super().__init__(timeout=60)
+        self.control_message = control_message
+
+    @discord.ui.button(label="閉じる", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="チケットを閉じています...", embed=None, view=None)
+        channel = interaction.channel
+        try:
+            hidden = await close_ticket_channel(channel)
+        except discord.Forbidden:
+            return await interaction.followup.send("❌ エラー: Botにチャンネルの権限を編集する権限（ロールの管理）がありません。", ephemeral=True)
+        except Exception as e:
+            return await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
+
+        # 閉じるボタンを外して二重クローズを防ぐ
+        if self.control_message:
+            try:
+                await self.control_message.edit(view=None)
+            except Exception:
+                pass
+
+        desc = f"{interaction.user.mention} がチケットを閉じました。\n"
+        if hidden:
+            desc += f"{'、'.join(hidden)} はこのチケットを閲覧できなくなりました。\n"
+        desc += "\n管理者・担当者は引き続き閲覧できます。不要になったら下のボタンで削除してください。"
+        embed = discord.Embed(title="🔒 チケットをクローズしました", description=desc, color=discord.Color.dark_grey())
+        await channel.send(embed=embed, view=TicketDeleteView())
 
     @discord.ui.button(label="キャンセル", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -33,8 +123,12 @@ class TicketControlView(discord.ui.View):
 
     @discord.ui.button(label="チケットを閉じる", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="persistent_close_ticket_btn")
     async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(title="確認", description="このチケットを閉じてもよろしいですか？", color=discord.Color.red())
-        await interaction.response.send_message(embed=embed, view=TicketCloseConfirmView(), ephemeral=True)
+        embed = discord.Embed(
+            title="確認",
+            description="このチケットを閉じてもよろしいですか？\n閉じるとチケット発行者は閲覧できなくなります（管理者・担当者は削除するまで閲覧可能）。",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, view=TicketCloseConfirmView(interaction.message), ephemeral=True)
 
 # --- スタンプ依頼 ---
 # --- スタンプ依頼 ---
@@ -1224,6 +1318,7 @@ class Utility(commands.Cog):
         self.bot.add_view(EmblemRequestPanelView())
         self.bot.add_view(ConfessionRequestPanelView())
         self.bot.add_view(TicketControlView())
+        self.bot.add_view(TicketDeleteView())
         self.bot.add_view(InquiryRequestPanelView())
         self.bot.add_view(AnonymousChatPanelView())
         self.bot.add_view(CustomTicketPanelView())
