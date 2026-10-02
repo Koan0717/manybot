@@ -5,7 +5,7 @@ import type { Pool } from 'pg';
  * 確率・倍率・上限・手数料は Bot（cogs/gambling.py, helpers.py の DEFAULT_SETTINGS）と同じキー・同じ既定値を使う。
  * どのゲームをWebで遊べるかは、管理ダッシュボード「Webアクティビティ設定」の WEB_GAMES_ENABLED で決める。
  */
-export const WEB_GAMES = ['coinflip', 'slot', 'roulette', 'blackjack', 'chinchiro', 'horse', 'highlow'] as const;
+export const WEB_GAMES = ['coinflip', 'slot', 'roulette', 'blackjack', 'chinchiro', 'horse', 'highlow', 'poker'] as const;
 export type WebGame = (typeof WEB_GAMES)[number];
 
 export const WEB_GAME_LABEL: Record<WebGame, string> = {
@@ -16,6 +16,7 @@ export const WEB_GAME_LABEL: Record<WebGame, string> = {
   chinchiro: 'チンチロリン',
   horse: '競馬',
   highlow: 'High & Low',
+  poker: 'ポーカー',
 };
 
 export const WEB_GAMES_SETTING_KEY = 'WEB_GAMES_ENABLED';
@@ -65,7 +66,16 @@ export interface CasinoSettings {
   };
   horse: { rateTan: number; rateFuku: number; mulTan: number; mulFuku: number };
   highlow: { win: number; draw: number; lose: number; mul: number; maxStreak: number; table: number[]; winTable: number[] };
+  /** ポーカー（AI対戦）。Bot と同じく「ゲーム設定 → ポーカー」の POKER_ の値を使う（cogs/poker.py の table_config） */
+  poker: {
+    startChips: number; sb: number; bb: number; blindUp: number; maxHands: number;
+    betEnabled: boolean; aiMult: Record<number, number>; aiMaxBet: Record<number, number>;
+  };
 }
+
+/** AI対戦で賭けられる最低レベルと、勝ったときの倍率の初期値（helpers.py と同じ） */
+export const POKER_AI_BET_MIN_LEVEL = 4;
+const POKER_AI_MULT_DEFAULT: Record<number, number> = { 4: 2, 5: 3, 6: 5 };
 
 export function parseEnabledGames(raw: unknown): Record<WebGame, boolean> {
   const value = parseValue(raw);
@@ -78,7 +88,7 @@ export async function loadCasinoSettings(pool: Pool, guildId: string): Promise<C
   const s: Record<string, unknown> = {};
   try {
     const res = await pool.query(
-      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND (setting_key LIKE 'GAMBLE\\_%' OR setting_key IN ('CURRENCY_NAME', $2))",
+      "SELECT setting_key, setting_value FROM bot_settings WHERE guild_id = $1 AND (setting_key LIKE 'GAMBLE\\_%' OR setting_key LIKE 'POKER\\_%' OR setting_key IN ('CURRENCY_NAME', $2))",
       [guildId, WEB_GAMES_SETTING_KEY]
     );
     for (const row of res.rows) s[row.setting_key] = row.setting_value;
@@ -99,7 +109,11 @@ export async function loadCasinoSettings(pool: Pool, guildId: string): Promise<C
     currencyName: typeof currency === 'string' || typeof currency === 'number' ? String(currency) || 'コイン' : 'コイン',
     enabled: parseEnabledGames(s[WEB_GAMES_SETTING_KEY]),
     showStats: Object.fromEntries(
-      WEB_GAMES.map((g) => [g, !isOff(v('GAMBLE_SHOW_STATS')) && !isOff(v(`GAMBLE_${g.toUpperCase()}_SHOW_STATS`))])
+      WEB_GAMES.map((g) => [
+        g,
+        // ポーカーは「ゲーム設定 → ポーカー」の戦績ボタン設定（POKER_SHOW_STATS）に従う
+        g === 'poker' ? !isOff(v('POKER_SHOW_STATS')) : !isOff(v('GAMBLE_SHOW_STATS')) && !isOff(v(`GAMBLE_${g.toUpperCase()}_SHOW_STATS`)),
+      ])
     ) as Record<WebGame, boolean>,
     maxBet: Math.floor(orFalsy(v('GAMBLE_MAX_BET'), 100000)),
     maxPlays: Math.floor(orNull(v('GAMBLE_MAX_PLAYS'), 10)),
@@ -167,6 +181,37 @@ export async function loadCasinoSettings(pool: Pool, guildId: string): Promise<C
       // 連勝ごとの当たり確率（0〜1 のカンマ区切り。1つ目は「0連勝から1連勝目を当てる確率」）
       winTable: parseHighLowTable(s['GAMBLE_HIGHLOW_STREAK_WIN_RATES'], true, 1),
     },
+    poker: pokerSettings(v),
+  };
+}
+
+/** cogs/poker.py の table_config・helpers.py の ai_bet_multiplier / ai_bet_max と同じ */
+function pokerSettings(v: (key: string) => unknown): CasinoSettings['poker'] {
+  const int = (key: string, d: number, lo: number, hi: number) => {
+    const n = Math.trunc(Number(v(`POKER_${key}`)));
+    const raw = v(`POKER_${key}`);
+    if (raw === null || raw === undefined || raw === '' || !Number.isFinite(n)) return d;
+    return Math.max(lo, Math.min(hi, n));
+  };
+  const bb = int('BIG_BLIND', 20, 2, 1_000_000);
+  const aiMult: Record<number, number> = {};
+  const aiMaxBet: Record<number, number> = {};
+  for (const lv of [4, 5, 6]) {
+    const m = toNumber(v(`POKER_AI_MULT_${lv}`));
+    aiMult[lv] = m !== null && m >= 1 ? Math.min(100, m) : POKER_AI_MULT_DEFAULT[lv];
+    const mb = Math.trunc(toNumber(v(`POKER_AI_MAX_BET_${lv}`)) ?? 0);
+    aiMaxBet[lv] = mb > 0 ? mb : 0;
+  }
+  const betRaw = v('POKER_BET_ENABLED');
+  return {
+    startChips: int('START_CHIPS', 1000, 10, 100_000_000),
+    sb: int('SMALL_BLIND', Math.max(1, Math.floor(bb / 2)), 1, bb),
+    bb,
+    blindUp: int('BLIND_UP_HANDS', 0, 0, 1000),
+    maxHands: int('AI_MAX_HANDS', 30, 0, 1000),
+    betEnabled: betRaw === true || String(betRaw).toLowerCase() === 'true',
+    aiMult,
+    aiMaxBet,
   };
 }
 

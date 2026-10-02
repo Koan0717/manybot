@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
 import { memberFetch } from '@/lib/memberClient';
@@ -8,6 +8,7 @@ import RouletteWheel, { RouletteWheelHandle } from './RouletteWheel';
 import DiceBowl from './DiceBowl';
 import HorseRace, { RaceData } from './HorseRace';
 import HighLow, { HlResponse, HlView } from './HighLow';
+import Poker, { PokerInfo, PokerView } from './Poker';
 
 /** GET /api/member/guilds/[guild_id]/casino の中身 */
 export interface CasinoInfo {
@@ -26,8 +27,10 @@ export interface CasinoInfo {
   horses: { num: number; name: string; emoji: string }[];
   active_blackjack: BjView | null;
   active_highlow?: HlView | null;
+  poker?: PokerInfo;
+  active_poker?: PokerView | null;
 }
-type GameKey = 'coinflip' | 'slot' | 'roulette' | 'blackjack' | 'chinchiro' | 'horse' | 'highlow';
+type GameKey = 'coinflip' | 'slot' | 'roulette' | 'blackjack' | 'chinchiro' | 'horse' | 'highlow' | 'poker';
 
 interface Card { suit: string; value: string }
 interface BjView {
@@ -44,7 +47,7 @@ interface BjView {
 }
 
 const GAME_ICON: Record<GameKey, string> = {
-  coinflip: '🪙', slot: '🎰', roulette: '🎡', blackjack: '🃏', chinchiro: '🎲', horse: '🏇', highlow: '🔼',
+  coinflip: '🪙', slot: '🎰', roulette: '🎡', blackjack: '🃏', chinchiro: '🎲', horse: '🏇', highlow: '🔼', poker: '♠️',
 };
 const fmt = (n: number) => n.toLocaleString('ja-JP');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -107,6 +110,10 @@ const STAT_DETAILS: Partial<Record<GameKey, { title: string; rows: [string, stri
   roulette: { title: '🎡 当選履歴', rows: [['win_36x', '数字1点的中'], ['win_3x', 'ダズン的中'], ['win_2x', '赤黒/偶奇等的中']] },
   horse: { title: '🏇 的中履歴', rows: [['tan_win', '単勝的中 (1着)'], ['fuku_win', '複勝的中 (1〜3着)']] },
   highlow: { title: '🔼 詳細履歴', rows: [['max_streak', '最大連勝で受け取り'], ['cashout', '途中で受け取り'], ['miss', 'ハズレ']] },
+  poker: {
+    title: '♟️ モード別成績',
+    rows: [['ai_wins', 'AI対戦 勝ち'], ['pvp_wins', 'PvP対戦 勝ち'], ['ai_losses', 'AI対戦 負け'], ['pvp_losses', 'PvP対戦 負け'], ['ai_draws', 'AI対戦 引き分け'], ['pvp_draws', 'PvP対戦 引き分け']],
+  },
 };
 
 function StatsCard({ game, label, stat, cur }: { game: GameKey; label: string; stat: GameStat; cur: string }) {
@@ -164,7 +171,17 @@ export default function Casino({
   info: CasinoInfo;
   onPlayed: (next: { balance: number; plays_today?: number; bet_delta?: number }) => void;
 }) {
-  const [game, setGame] = useState<GameKey>(info.active_blackjack ? 'blackjack' : info.active_highlow ? 'highlow' : info.games[0].key);
+  const [game, setGame] = useState<GameKey>(
+    info.active_blackjack ? 'blackjack' : info.active_highlow ? 'highlow' : info.active_poker ? 'poker' : info.games[0].key
+  );
+  // ポーカーの対戦中は他のゲームに切り替えられないようにする
+  const [pokerLock, setPokerLock] = useState(false);
+  // 開いたときに進行中だった対戦。終わったら、別のゲームから戻ってきたときに古い卓を出さないよう消す
+  const [pokerResume, setPokerResume] = useState<PokerView | null>(info.active_poker ?? null);
+  const onPokerLock = useCallback((locked: boolean) => {
+    setPokerLock(locked);
+    if (!locked) setPokerResume(null);
+  }, []);
   const [betText, setBetText] = useState('');
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -220,7 +237,7 @@ export default function Casino({
   const taxNote = (tax: number | undefined) => (tax ? `\n※ カジノ手数料 ${(tax_rate * 100).toFixed(1)}% として ${fmt(tax)} ${cur} が引かれました` : '');
 
   const switchGame = (g: GameKey) => {
-    if (busy || (bj && !bj.finished) || (hl && !hl.finished)) return;
+    if (busy || pokerLock || (bj && !bj.finished) || (hl && !hl.finished)) return;
     setGame(g);
     setOutcome(null);
   };
@@ -502,7 +519,7 @@ export default function Casino({
       </div>
 
       <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-4">
-        {!inGame && (
+        {!inGame && game !== 'poker' && (
           <div>
             <label className="block text-sm text-zinc-400 mb-2">賭け金（1〜{fmt(max_bet)}）</label>
             <div className="flex items-center gap-2">
@@ -732,6 +749,19 @@ export default function Casino({
             onStart={hlStart}
             onAction={hlAction}
             onFinished={hlFinished}
+          />
+        )}
+
+        {game === 'poker' && info.poker && (
+          <Poker
+            guildId={guildId}
+            info={info.poker}
+            initial={pokerResume}
+            cur={cur}
+            balance={balance}
+            onBalance={(b) => onPlayed({ balance: b })}
+            onFinished={() => setStatsKey((k) => k + 1)}
+            onLock={onPokerLock}
           />
         )}
 
