@@ -17,6 +17,7 @@ const GAMES = [
   { key: 'chinchiro', label: '🎲 チンチロリン', desc: 'サイコロの役でBotと勝負' },
   { key: 'horse', label: '🏇 競馬', desc: '単勝・複勝で馬券を買う' },
   { key: 'highlow', label: '🃏 High & Low', desc: '次のカードが大きいか小さいかを当てて連勝を狙う' },
+  { key: 'poker', label: '♠️ ポーカー', desc: 'テキサスホールデムでAIと1対1（レベル1〜6）。チップ・ブラインド・賭けは「ゲーム設定 → ポーカー」の設定を使う' },
 ] as const;
 type GameKey = (typeof GAMES)[number]['key'];
 type Enabled = Record<GameKey, boolean>;
@@ -352,6 +353,9 @@ export default function WebActivitySettingsPage() {
         <Link href={`/dashboard/${guildId}/gambling`} className="text-cyan-400 hover:underline mx-1">ギャンブル設定</Link>
         の値を使います。1日の回数と賭け金の上限は、パネルで遊んだ分と合算されます。
         結果は「ログ出力設定」の「賭博・カジノ機能の利用」のチャンネルに送られます。
+        ポーカーだけは
+        <Link href={`/dashboard/${guildId}/games/poker`} className="text-cyan-400 hover:underline mx-1">ゲーム設定 → ポーカー</Link>
+        のチップ・ブラインド・ハンド数・賭けの有無・レベルごとの倍率と上限を使い、Discordのポーカーと戦績が共通です（Webで遊べるのはAI対戦のみ）。
       </div>
     </div>
   );
