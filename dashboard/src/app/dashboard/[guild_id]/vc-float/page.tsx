@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Save, AlertCircle, Gift, ListFilter, Clock, Plus, Trash2, Hash } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'react-hot-toast';
 import { useSyncStatus, SyncBadge, SyncStatusCards } from '@/lib/useSyncStatus';
 import ChannelSelect from '@/components/ChannelSelect';
@@ -42,6 +43,10 @@ const REWARD_TYPE_LABELS: Record<RewardType, string> = {
   none: 'ハズレ（何もなし）',
 };
 
+// ガチャ設定の円グラフと同じ色。ハズレは灰色
+const COLORS = ['#8b5cf6', '#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#14b8a6', '#a3e635'];
+const NONE_COLOR = '#71717a';
+
 const newReward = (reward_type: RewardType): Reward => ({
   reward_type,
   label: reward_type === 'none' ? 'ハズレ' : '',
@@ -66,6 +71,7 @@ export default function VCFloatSettingsPage() {
     rewards: [],
   });
   const [discordChannels, setDiscordChannels] = useState<DiscordChannel[]>([]);
+  const [currencyName, setCurrencyName] = useState('通貨');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +81,9 @@ export default function VCFloatSettingsPage() {
     Promise.all([
       fetch(`/api/guilds/${guildId}/vc-float`).then(res => res.ok ? res.json() : {}),
       fetch(`/api/guilds/${guildId}/channels`).then(res => res.ok ? res.json() : []),
-    ]).then(([data, channelsData]: [any, any]) => {
+      fetch(`/api/guilds/${guildId}/settings`).then(res => res.ok ? res.json() : {}).catch(() => ({})),
+    ]).then(([data, channelsData, settingsData]: [any, any, any]) => {
+      if (settingsData?.CURRENCY_NAME) setCurrencyName(String(settingsData.CURRENCY_NAME));
       setSettings({
         is_enabled: data.is_enabled ?? false,
         is_whitelist_mode: data.is_whitelist_mode ?? true,
@@ -99,6 +107,17 @@ export default function VCFloatSettingsPage() {
 
   const totalWeight = settings.rewards.reduce((s, r) => s + (Number(r.weight) || 0), 0);
   const percentOf = (w: number) => (totalWeight > 0 ? ((Number(w) || 0) / totalWeight) * 100 : 0);
+  // 報酬ごとの色（一覧の印と円グラフで同じ色にする）
+  const colorOf = (index: number) => {
+    if (settings.rewards[index]?.reward_type === 'none') return NONE_COLOR;
+    const n = settings.rewards.slice(0, index).filter(r => r.reward_type !== 'none').length;
+    return COLORS[n % COLORS.length];
+  };
+  const rewardName = (r: Reward) =>
+    r.label.trim() || (r.reward_type === 'coin' ? `${(Number(r.amount) || 0).toLocaleString()} ${currencyName}` : 'ハズレ');
+  const pieData = settings.rewards
+    .map((r, i) => ({ name: rewardName(r), value: percentOf(r.weight), color: colorOf(i) }))
+    .filter(d => d.value > 0);
 
   const handleSave = async () => {
     if (settings.is_enabled && totalWeight <= 0) {
@@ -365,7 +384,8 @@ export default function VCFloatSettingsPage() {
             「割合」は重みです。各報酬の当選確率は「その報酬の割合 ÷ 割合の合計」で計算されます（合計を100にすると、そのまま%になります）。
           </p>
 
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-3">
             {settings.rewards.length === 0 && (
               <div className="text-center text-gray-500 py-8 border border-dashed border-gray-700 rounded-xl text-sm">
                 報酬がありません。下のボタンから追加してください。
@@ -373,72 +393,76 @@ export default function VCFloatSettingsPage() {
             )}
 
             {settings.rewards.map((reward, index) => (
-              <div key={index} className="bg-gray-900/50 border border-gray-700/60 rounded-xl p-4 flex flex-col sm:flex-row gap-4 sm:items-end">
-                <div className="w-full sm:w-44 space-y-1">
-                  <label className="block text-xs font-semibold text-gray-400">種類</label>
-                  <select
-                    value={reward.reward_type}
-                    onChange={(e) => {
-                      const t = e.target.value as RewardType;
-                      updateReward(index, { reward_type: t, amount: t === 'coin' ? (reward.amount || 100) : 0 });
-                    }}
-                    className="w-full bg-[#111827] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-500"
+              <div key={index} className="bg-gray-900/50 border border-gray-700/60 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-400 flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colorOf(index) }} />
+                    報酬 #{index + 1}
+                    <span className="text-yellow-300 font-bold ml-2">{percentOf(reward.weight).toFixed(1)}%</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeReward(index)}
+                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                    title="この報酬を削除"
                   >
-                    {(Object.keys(REWARD_TYPE_LABELS) as RewardType[]).map(t => (
-                      <option key={t} value={t}>{REWARD_TYPE_LABELS[t]}</option>
-                    ))}
-                  </select>
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-gray-400">種類</label>
+                    <select
+                      value={reward.reward_type}
+                      onChange={(e) => {
+                        const t = e.target.value as RewardType;
+                        updateReward(index, { reward_type: t, amount: t === 'coin' ? (reward.amount || 100) : 0 });
+                      }}
+                      className="w-full bg-[#111827] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-500"
+                    >
+                      {(Object.keys(REWARD_TYPE_LABELS) as RewardType[]).map(t => (
+                        <option key={t} value={t}>{REWARD_TYPE_LABELS[t]}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                <div className="flex-1 min-w-0 space-y-1">
-                  <label className="block text-xs font-semibold text-gray-400">表示名（任意）</label>
-                  <input
-                    type="text"
-                    maxLength={100}
-                    value={reward.label}
-                    placeholder={reward.reward_type === 'coin' ? '例: 大当たり' : '例: ハズレ'}
-                    onChange={(e) => updateReward(index, { label: e.target.value })}
-                    className="w-full bg-[#111827] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-500"
-                  />
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-gray-400">表示名（任意）</label>
+                    <input
+                      type="text"
+                      maxLength={100}
+                      value={reward.label}
+                      placeholder={reward.reward_type === 'coin' ? '例: 大当たり' : '例: ハズレ'}
+                      onChange={(e) => updateReward(index, { label: e.target.value })}
+                      className="w-full bg-[#111827] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-gray-400">金額</label>
+                    <input
+                      type="number"
+                      min={0}
+                      disabled={reward.reward_type !== 'coin'}
+                      value={reward.reward_type === 'coin' ? reward.amount : ''}
+                      placeholder="—"
+                      onChange={(e) => updateReward(index, { amount: Math.max(0, parseInt(e.target.value) || 0) })}
+                      className="w-full bg-[#111827] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-500 disabled:opacity-40"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-gray-400">割合</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={reward.weight}
+                      onChange={(e) => updateReward(index, { weight: Math.max(0, parseFloat(e.target.value) || 0) })}
+                      className="w-full bg-[#111827] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-500"
+                    />
+                  </div>
                 </div>
-
-                <div className="w-full sm:w-32 space-y-1">
-                  <label className="block text-xs font-semibold text-gray-400">金額</label>
-                  <input
-                    type="number"
-                    min={0}
-                    disabled={reward.reward_type !== 'coin'}
-                    value={reward.reward_type === 'coin' ? reward.amount : ''}
-                    placeholder="—"
-                    onChange={(e) => updateReward(index, { amount: Math.max(0, parseInt(e.target.value) || 0) })}
-                    className="w-full bg-[#111827] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-500 disabled:opacity-40"
-                  />
-                </div>
-
-                <div className="w-full sm:w-28 space-y-1">
-                  <label className="block text-xs font-semibold text-gray-400">割合</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={reward.weight}
-                    onChange={(e) => updateReward(index, { weight: Math.max(0, parseFloat(e.target.value) || 0) })}
-                    className="w-full bg-[#111827] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-yellow-500"
-                  />
-                </div>
-
-                <div className="w-full sm:w-20 text-right sm:pb-2">
-                  <span className="text-yellow-300 font-bold">{percentOf(reward.weight).toFixed(1)}%</span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => removeReward(index)}
-                  className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors flex-shrink-0"
-                  title="この報酬を削除"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
               </div>
             ))}
 
@@ -460,6 +484,57 @@ export default function VCFloatSettingsPage() {
                 ハズレを追加
               </button>
             </div>
+          </div>
+
+          {/* 円グラフ */}
+          <div className="lg:col-span-1">
+            <div className="bg-gray-900/60 border border-gray-700/60 rounded-xl p-4 lg:sticky lg:top-28">
+              <h3 className="text-center text-sm font-bold text-yellow-300 mb-1">現在の当選確率</h3>
+              <p className="text-center text-[11px] text-gray-500 mb-2">割合が0の報酬はグラフに出ません</p>
+              {pieData.length > 0 ? (
+                <>
+                <div className="h-[220px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={95}
+                        paddingAngle={2}
+                        dataKey="value"
+                        stroke="none"
+                        animationDuration={800}
+                      >
+                        {pieData.map((entry, i) => (
+                          <Cell key={`cell-${i}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip
+                        formatter={(value: any) => [`${Number(value).toFixed(1)}%`, '確率']}
+                        contentStyle={{ backgroundColor: '#18181b', border: '1px solid #3f3f46', borderRadius: '8px', color: '#fff' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-1 mt-2">
+                  {pieData.map((d, i) => (
+                    <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="flex items-center gap-1.5 min-w-0 text-gray-300">
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+                        <span className="truncate">{d.name}</span>
+                      </span>
+                      <span className="text-yellow-300 font-bold flex-shrink-0">{d.value.toFixed(1)}%</span>
+                    </div>
+                  ))}
+                </div>
+                </>
+              ) : (
+                <div className="h-[220px] flex items-center justify-center text-gray-600 text-sm">報酬を追加すると表示されます</div>
+              )}
+            </div>
+          </div>
           </div>
         </motion.div>
       </div>
