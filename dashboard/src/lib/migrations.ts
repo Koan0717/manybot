@@ -168,6 +168,53 @@ export async function ensureVcCoinsSettingsSchema(pool: any) {
 }
 
 /**
+ * VC浮上報酬（vc_float_*）テーブルを保証する。Bot側 cogs/vc_float.py と同じ定義。
+ */
+export async function ensureVcFloatSchema(pool: any) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vc_float_settings (
+        guild_id BIGINT PRIMARY KEY,
+        is_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        is_whitelist_mode BOOLEAN NOT NULL DEFAULT TRUE,
+        channel_ids BIGINT[] NOT NULL DEFAULT '{}',
+        category_ids BIGINT[] NOT NULL DEFAULT '{}',
+        required_minutes INT NOT NULL DEFAULT 30,
+        daily_limit INT NOT NULL DEFAULT 1,
+        reset_on_leave BOOLEAN NOT NULL DEFAULT FALSE,
+        exclude_muted BOOLEAN NOT NULL DEFAULT FALSE,
+        exclude_deafened BOOLEAN NOT NULL DEFAULT FALSE
+      )
+    `);
+    for (const col of ['exclude_muted', 'exclude_deafened']) {
+      await pool.query(`ALTER TABLE vc_float_settings ADD COLUMN IF NOT EXISTS ${col} BOOLEAN NOT NULL DEFAULT FALSE`);
+    }
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vc_float_rewards (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        reward_type TEXT NOT NULL DEFAULT 'coin',
+        label TEXT NOT NULL DEFAULT '',
+        amount INT NOT NULL DEFAULT 0,
+        weight DOUBLE PRECISION NOT NULL DEFAULT 1
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vc_float_users (
+        guild_id BIGINT NOT NULL,
+        user_id BIGINT NOT NULL,
+        progress_minutes INT NOT NULL DEFAULT 0,
+        claim_date DATE,
+        claim_count INT NOT NULL DEFAULT 0,
+        PRIMARY KEY (guild_id, user_id)
+      )
+    `);
+  } catch (e) {
+    console.error('Failed to ensure vc_float schema:', e);
+  }
+}
+
+/**
  * evaluation_periods テーブルの全カラムを保証する
  */
 export async function ensureEvaluationPeriodsSchema(pool: any) {
@@ -269,6 +316,7 @@ export async function ensureAllSchemas(pool: any) {
     ensureEvaluationPeriodsSchema(pool),
     ensureAntigriefSettingsSchema(pool),
     ensureVcCoinsSettingsSchema(pool),
+    ensureVcFloatSchema(pool),
     ensureRoomPanelsSchema(pool),
     ensureRoleSalarySettingsSchema(pool),
   ]);
