@@ -2,7 +2,7 @@
 """
 cogs/board_games.py
 チェス・将棋の Cog（オセロ cogs/othello.py と同じ流れ）
-パネル → PvP（相手を選んで招待）/ AI対戦（DM・5段階）→ 盤面画像 → 手を選ぶ → 終局・賭け精算・戦績
+パネル → PvP（相手を選んで招待）/ AI対戦（DM・6段階）→ 盤面画像 → 手を選ぶ → 終局・賭け精算・戦績
 """
 import asyncio
 import datetime
@@ -23,7 +23,7 @@ _bot_instance = None
 # key: (game, guild_id, channel_id) または (game, "dm", user_id)
 sessions: dict = {}
 
-LEVEL_NAMES = {1: "簡単", 2: "普通", 3: "中級", 4: "難しい", 5: "最難関"}
+LEVEL_NAMES = {1: "簡単", 2: "普通", 3: "中級", 4: "難しい", 5: "最難関", 6: "超難関"}
 IDLE_LIMIT_SEC = 10 * 60  # これだけ手が進まなければ、手番の人の時間切れ負け
 
 
@@ -607,7 +607,7 @@ class DifficultyView(discord.ui.View):
         super().__init__(timeout=60)
         self.spec = spec
         self.initiator_id = initiator_id
-        for lv in range(1, 6):
+        for lv in range(1, 7):
             style = discord.ButtonStyle.secondary if lv <= 2 else discord.ButtonStyle.primary if lv <= 4 else discord.ButtonStyle.danger
             btn = discord.ui.Button(label=f"レベル{lv}（{LEVEL_NAMES[lv]}）", style=style, row=(lv - 1) // 2)
             btn.callback = self._make(lv)
@@ -819,7 +819,7 @@ def panel_embed(game: str) -> discord.Embed:
     spec = SPECS[game]
     return discord.Embed(
         title=f"{spec.emoji} {spec.name}対戦",
-        description=f"{spec.name}で対戦しましょう！\n「PvP対戦」でメンバーと、「AI対戦」でAI（5段階）と対戦できます。\n"
+        description=f"{spec.name}で対戦しましょう！\n「PvP対戦」でメンバーと、「AI対戦」でAI（6段階）と対戦できます。\n"
                     f"盤面の「♟️ 手を選ぶ」から、動かす駒 → 移動先 の順に選んで指します。",
         color=spec.color,
     )

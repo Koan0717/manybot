@@ -49,7 +49,7 @@ const GAME_META: Record<GameKey, { icon: string; label: string; sides: [string, 
   chess: { icon: '♟️', label: 'チェス', sides: ['⚪ 白', '⚫ 黒'], color: 'from-amber-700/40 to-stone-900/40 border-amber-700/60' },
   shogi: { icon: '☗', label: '将棋', sides: ['☗ 先手', '☖ 後手'], color: 'from-orange-700/40 to-amber-950/40 border-orange-700/60' },
 };
-const LEVELS = ['簡単', '普通', '中級', '難しい', '最難関'];
+const LEVELS = ['簡単', '普通', '中級', '難しい', '最難関', '超難関'];
 /** AI対戦で賭けられる最低レベル（lib/boardgames/web.ts と同じ） */
 const AI_BET_MIN_LEVEL = 4;
 const fmt = (n: number) => n.toLocaleString('ja-JP');
@@ -437,7 +437,7 @@ export default function Games({
           {/* AI対戦 */}
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
             <div className="font-semibold flex items-center gap-2"><Bot className="w-4 h-4" /> AIと対戦</div>
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
               {LEVELS.map((name, i) => (
                 <button
                   key={name}
@@ -478,7 +478,7 @@ export default function Games({
             )}
             {g.bet_enabled && !aiBetOk && (
               <p className="text-[11px] text-zinc-500 text-center">
-                AI対戦で賭けられるのはレベル{AI_BET_MIN_LEVEL}以上です（Lv4 ×{g.ai_mult?.['4'] ?? 2}・Lv5 ×{g.ai_mult?.['5'] ?? 3}）
+                AI対戦で賭けられるのはレベル{AI_BET_MIN_LEVEL}以上です（Lv4 ×{g.ai_mult?.['4'] ?? 2}・Lv5 ×{g.ai_mult?.['5'] ?? 3}・Lv6 ×{g.ai_mult?.['6'] ?? 5}）
               </p>
             )}
           </div>

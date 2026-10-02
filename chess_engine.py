@@ -8,6 +8,8 @@
 """
 import random
 
+import ai_search
+
 WHITE, BLACK = "w", "b"
 FILES = "abcdefgh"
 
@@ -412,7 +414,7 @@ def _search(state, depth, alpha, beta, use_pst):
     return best
 
 
-AI_LEVEL_NAMES = {1: "簡単", 2: "普通", 3: "中級", 4: "難しい", 5: "最難関"}
+AI_LEVEL_NAMES = {1: "簡単", 2: "普通", 3: "中級", 4: "難しい", 5: "最難関", 6: "超難関"}
 
 
 def ai_move(state: ChessState, level: int):
@@ -421,6 +423,8 @@ def ai_move(state: ChessState, level: int):
         return None
     if level <= 1:
         return random.choice(legal)
+    if level >= 6:
+        return ai_search.best_move(_STRONG, state, legal, LEVEL6_TIME_LIMIT)
     depth, use_pst, noise = {2: (1, False, 30), 3: (2, True, 10), 4: (3, True, 0), 5: (4, True, 0)}.get(level, (4, True, 0))
     best_score, best = -MATE * 3, []
     alpha = -MATE * 3
@@ -434,3 +438,164 @@ def ai_move(state: ChessState, level: int):
         if best_score > alpha:
             alpha = best_score
     return random.choice(best)
+
+
+# ============================================================
+# レベル6（超難関）: ai_search の反復深化＋静止探索で、時間いっぱい読む
+# ============================================================
+LEVEL6_TIME_LIMIT = 7.0  # 1手あたりの思考時間（秒）
+
+# 終盤のキング（中央に出るほど良い）
+KING_END = [-50, -40, -30, -20, -20, -30, -40, -50, -30, -20, -10, 0, 0, -10, -20, -30, -30, -10, 20, 30, 30, 20, -10, -30,
+            -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 20, 30, 30, 20, -10, -30,
+            -30, -30, 0, 0, 0, 0, -30, -30, -50, -30, -30, -30, -30, -30, -30, -50]
+PASSED_BONUS = [0, 10, 15, 25, 40, 65, 100, 0]  # 何段進んだか（0〜7）
+
+
+def evaluate_strong(board) -> int:
+    """白から見た点数（駒の価値・位置・終盤のキング・ビショップペア・ポーンの形・ルークの筋）"""
+    score = 0
+    npm = 0
+    wb = bb = 0
+    wk = bk = -1
+    wp = [[] for _ in range(8)]
+    bp = [[] for _ in range(8)]
+    rooks = []
+    for sq, p in enumerate(board):
+        if p == ".":
+            continue
+        kind = p.lower()
+        white = p.isupper()
+        if kind == "k":
+            if white:
+                wk = sq
+            else:
+                bk = sq
+            continue
+        idx = sq if white else (7 - sq // 8) * 8 + sq % 8
+        v = VALUES[kind] + PST[kind][idx]
+        score += v if white else -v
+        if kind == "p":
+            (wp if white else bp)[sq % 8].append(sq // 8)
+        else:
+            npm += VALUES[kind]
+            if kind == "b":
+                if white:
+                    wb += 1
+                else:
+                    bb += 1
+            elif kind == "r":
+                rooks.append((sq % 8, white))
+    # キングは中盤は囲いの中、終盤は中央が良い（残りの駒の量で混ぜる）
+    phase = min(npm, 6200) / 6200
+    for ksq, white in ((wk, True), (bk, False)):
+        if ksq < 0:
+            continue
+        idx = ksq if white else (7 - ksq // 8) * 8 + ksq % 8
+        v = int(PST["k"][idx] * phase + KING_END[idx] * (1 - phase))
+        score += v if white else -v
+    if wb >= 2:
+        score += 30
+    if bb >= 2:
+        score -= 30
+    # ポーンの形
+    for f in range(8):
+        for mine, theirs, white in ((wp, bp, True), (bp, wp, False)):
+            rows = mine[f]
+            if not rows:
+                continue
+            sign = 1 if white else -1
+            if len(rows) > 1:
+                score -= sign * 15 * (len(rows) - 1)
+            if not (f > 0 and mine[f - 1]) and not (f < 7 and mine[f + 1]):
+                score -= sign * 12 * len(rows)
+            for r in rows:
+                blocked = False
+                for ff in (f - 1, f, f + 1):
+                    if 0 <= ff < 8:
+                        for rr in theirs[ff]:
+                            if (rr < r) if white else (rr > r):
+                                blocked = True
+                                break
+                    if blocked:
+                        break
+                if not blocked:
+                    advance = (6 - r) if white else (r - 1)
+                    score += sign * int(PASSED_BONUS[max(0, min(7, advance + 1))] * (1.5 - phase))
+    # ルークは開いた筋が良い
+    for f, white in rooks:
+        own, opp = (wp, bp) if white else (bp, wp)
+        if not own[f]:
+            score += (15 if not opp[f] else 8) * (1 if white else -1)
+    # 終盤で大きく勝っているときは、相手キングを端へ追い詰め、自分のキングを近づける（勝ちきれずに50手ルールで引き分けになるのを防ぐ）
+    if phase < 0.5 and abs(score) > 250 and wk >= 0 and bk >= 0:
+        win_white = score > 0
+        loser = bk if win_white else wk
+        lr, lc = divmod(loser, 8)
+        center = max(3 - lr, lr - 4) + max(3 - lc, lc - 4)
+        dist = abs(wk // 8 - bk // 8) + abs(wk % 8 - bk % 8)
+        mop = int((center * 10 + (14 - dist) * 4) * (1 - phase))
+        score += mop if win_white else -mop
+    return score
+
+
+class _ChessGame:
+    check_extension = True
+
+    def moves(self, s):
+        return pseudo_moves(s)
+
+    def noisy(self, s):
+        out = pseudo_moves(s, captures_only=True)
+        # ポーンの昇格（取らない手）も読む
+        me = s.turn
+        pawn, row = ("P", 1) if me == WHITE else ("p", 6)
+        d = -8 if me == WHITE else 8
+        for c in range(8):
+            f = row * 8 + c
+            if s.board[f] == pawn and s.board[f + d] == ".":
+                out.append((f, f + d, "q"))
+        return out
+
+    def apply(self, s, m):
+        return apply_move(s, m)
+
+    def leaves_in_check(self, s, nxt):
+        return in_check(nxt, s.turn)
+
+    def in_check(self, s):
+        return in_check(s)
+
+    def evaluate(self, s):
+        v = evaluate_strong(s.board)
+        return v if s.turn == WHITE else -v
+
+    def key(self, s):
+        return ("".join(s.board), s.turn, s.castling, s.ep)
+
+    def order_score(self, s, m):
+        cap = s.board[m[1]]
+        sc = 0
+        if cap != ".":
+            sc += 10 * VALUES[cap.lower()] - VALUES[s.board[m[0]].lower()] // 10
+        elif m[1] == s.ep and s.board[m[0]].lower() == "p":
+            sc += 900
+        if m[2]:
+            sc += VALUES[m[2]]
+        return sc
+
+    def no_moves_score(self, s, chk, ply):
+        return -ai_search.MATE + ply if chk else 0
+
+    def can_null(self, s):
+        own = "NBRQ" if s.turn == WHITE else "nbrq"
+        return any(p in own for p in s.board)
+
+    def null(self, s):
+        n = s.copy()
+        n.turn = BLACK if s.turn == WHITE else WHITE
+        n.ep = -1
+        return n
+
+
+_STRONG = _ChessGame()

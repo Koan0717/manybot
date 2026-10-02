@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { Gamepad2, Disc3, ChevronRight, Crown, Swords } from 'lucide-react';
+import { Gamepad2, Disc3, ChevronRight, Crown, Swords, Club } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 
 const games = [
@@ -20,7 +20,7 @@ const games = [
   {
     id: 'chess',
     name: 'チェス',
-    description: 'PvP・AI対戦（5段階）のチェス。盤面画像で対局し、賭けにも対応。',
+    description: 'PvP・AI対戦（6段階）のチェス。盤面画像で対局し、賭けにも対応。',
     icon: Crown,
     iconBg: 'bg-amber-600/15',
     iconBorder: 'border-amber-700/50',
@@ -32,7 +32,7 @@ const games = [
   {
     id: 'shogi',
     name: '将棋',
-    description: 'PvP・AI対戦（5段階）の将棋。持ち駒・成り・打ち歩詰めなどのルールに対応。',
+    description: 'PvP・AI対戦（6段階）の将棋。持ち駒・成り・打ち歩詰めなどのルールに対応。',
     icon: Swords,
     iconBg: 'bg-orange-600/15',
     iconBorder: 'border-orange-700/50',
@@ -40,6 +40,18 @@ const games = [
     badgeBg: 'bg-orange-900/40 border-orange-700/50 text-orange-300',
     cardBorder: 'border-zinc-700/60 hover:border-orange-600/50',
     chevronColor: 'text-orange-400',
+  },
+  {
+    id: 'poker',
+    name: 'ポーカー',
+    description: 'テキサスホールデム。最大10人で対戦、またはAI（6段階）と1対1。参加費・賭けにも対応。',
+    icon: Club,
+    iconBg: 'bg-emerald-600/15',
+    iconBorder: 'border-emerald-700/50',
+    iconText: 'text-emerald-300',
+    badgeBg: 'bg-emerald-900/40 border-emerald-700/50 text-emerald-300',
+    cardBorder: 'border-zinc-700/60 hover:border-emerald-600/50',
+    chevronColor: 'text-emerald-400',
   },
 ];
 

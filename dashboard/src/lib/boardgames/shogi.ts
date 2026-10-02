@@ -5,6 +5,8 @@
  * 手番: 'b' = 先手、'w' = 後手
  */
 
+import { bestMove, MATE as SEARCH_MATE, SearchGame } from './search';
+
 export type Side = 'b' | 'w';
 export type Hand = Record<string, number>;
 export interface ShogiState {
@@ -344,6 +346,7 @@ export function aiMove(s: ShogiState, level: number): ShogiMove | null {
   const legal = legalMoves(s);
   if (!legal.length) return null;
   if (level <= 1) return legal[Math.floor(Math.random() * legal.length)];
+  if (level >= 6) return bestMove(STRONG, s, legal, LEVEL6_TIME_MS);
   const [depth, noise] = ({ 2: [1, 60], 3: [1, 15], 4: [2, 5], 5: [3, 0] } as Record<number, [number, number]>)[level] ?? [3, 0];
   let bestScore = -MATE * 3;
   let best: ShogiMove[] = [];
@@ -358,3 +361,55 @@ export function aiMove(s: ShogiState, level: number): ShogiMove | null {
   }
   return best[Math.floor(Math.random() * best.length)];
 }
+
+// ============================================================
+// レベル6（超難関）: search.ts の反復深化＋静止探索で、時間いっぱい読む（Bot の shogi_engine.py と対応）
+// ============================================================
+const LEVEL6_TIME_MS = 4000;
+
+/** 先手から見た点数。evaluate に「相手玉の近くにいる自分の駒」（攻め）を足したもの */
+function evaluateStrong(s: ShogiState) {
+  let score = evaluate(s);
+  const ksq: Record<Side, number> = { b: kingSquare(s.board, 'b'), w: kingSquare(s.board, 'w') };
+  for (let sq = 0; sq < 81; sq++) {
+    const p = s.board[sq];
+    if (p === null) continue;
+    const k = kindOf(p);
+    if (k === 'K' || k === 'P') continue;
+    const side = sideOf(p)!;
+    const ek = ksq[other(side)];
+    if (ek < 0) continue;
+    const d = Math.max(Math.abs(Math.floor(sq / 9) - Math.floor(ek / 9)), Math.abs((sq % 9) - (ek % 9)));
+    if (d <= 2) score += side === 'b' ? (3 - d) * 12 : -(3 - d) * 12;
+  }
+  return score;
+}
+
+const handKey = (h: Hand) => HAND_ORDER.map((k) => h[k] ?? 0).join('');
+
+const STRONG: SearchGame<ShogiState, ShogiMove> = {
+  checkExtension: true,
+  moves: (s) => pseudoMoves(s),
+  noisy: (s) => pseudoMoves(s, false).filter((m) => s.board[m[1]] !== null || m[2]),
+  apply: (s, m) => applyMove(s, m),
+  leavesInCheck: (s, next) => inCheck(next, s.turn),
+  inCheck: (s) => inCheck(s),
+  evaluate(s) {
+    const v = evaluateStrong(s);
+    return s.turn === 'b' ? v : -v;
+  },
+  key: (s) => `${s.board.map((p) => p ?? '.').join(',')}${s.turn}${handKey(s.hands.b)}${handKey(s.hands.w)}`,
+  orderScore(s, m) {
+    let sc = 0;
+    if (!m[3]) {
+      const cap = s.board[m[1]];
+      if (cap !== null) sc += 10 * VALUES[kindOf(cap)] + 50 - Math.floor(VALUES[kindOf(s.board[m[0]]!)] / 20);
+      if (m[2]) sc += 300;
+    }
+    return sc;
+  },
+  moveKey: (m) => `${m[0]},${m[1]},${m[2] ? 1 : 0},${m[3] ?? ''}`,
+  noMovesScore: (_s, _chk, ply) => -SEARCH_MATE + ply,
+  canNull: () => true,
+  nullMove: (s) => ({ ...copy(s), turn: other(s.turn) }),
+};
