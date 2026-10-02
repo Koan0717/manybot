@@ -31,9 +31,9 @@ const allAllowed = (): RoleAccess => ({
 });
 // lib/boardgames/web.ts の BOARD_GAMES と同じ
 const BOARD_GAMES = [
-  { key: 'othello', label: '⚫ オセロ', desc: 'AI対戦（5段階）・メンバー同士の対戦' },
-  { key: 'chess', label: '♟️ チェス', desc: 'AI対戦（5段階）・メンバー同士の対戦' },
-  { key: 'shogi', label: '☗ 将棋', desc: 'AI対戦（5段階）・メンバー同士の対戦' },
+  { key: 'othello', label: '⚫ オセロ', desc: 'AI対戦（6段階）・メンバー同士の対戦' },
+  { key: 'chess', label: '♟️ チェス', desc: 'AI対戦（6段階）・メンバー同士の対戦' },
+  { key: 'shogi', label: '☗ 将棋', desc: 'AI対戦（6段階）・メンバー同士の対戦' },
 ] as const;
 type BoardGameKey = (typeof BOARD_GAMES)[number]['key'];
 const ROLE_GROUPS = [

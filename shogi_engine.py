@@ -11,6 +11,8 @@
 """
 import random
 
+import ai_search
+
 SENTE, GOTE = "b", "w"
 HAND_ORDER = ["R", "B", "G", "S", "N", "L", "P"]
 KANJI = {
@@ -406,7 +408,7 @@ def _search(state, depth, alpha, beta):
     return best
 
 
-AI_LEVEL_NAMES = {1: "簡単", 2: "普通", 3: "中級", 4: "難しい", 5: "最難関"}
+AI_LEVEL_NAMES = {1: "簡単", 2: "普通", 3: "中級", 4: "難しい", 5: "最難関", 6: "超難関"}
 
 
 def ai_move(state: ShogiState, level: int):
@@ -415,6 +417,8 @@ def ai_move(state: ShogiState, level: int):
         return None
     if level <= 1:
         return random.choice(legal)
+    if level >= 6:
+        return ai_search.best_move(_STRONG, state, legal, LEVEL6_TIME_LIMIT)
     depth, noise = {2: (1, 60), 3: (1, 15), 4: (2, 5), 5: (3, 0)}.get(level, (3, 0))
     best_score, best = -MATE * 3, []
     alpha = -MATE * 3
@@ -428,3 +432,81 @@ def ai_move(state: ShogiState, level: int):
         if best_score > alpha:
             alpha = best_score
     return random.choice(best)
+
+
+# ============================================================
+# レベル6（超難関）: ai_search の反復深化＋静止探索で、時間いっぱい読む
+# ============================================================
+LEVEL6_TIME_LIMIT = 9.0  # 1手あたりの思考時間（秒）
+
+
+def evaluate_strong(state: ShogiState) -> int:
+    """先手から見た点数。evaluate に「相手玉の近くにいる自分の駒」（攻め）を足したもの"""
+    score = evaluate(state)
+    board = state.board
+    ksq = {SENTE: king_square(board, SENTE), GOTE: king_square(board, GOTE)}
+    for sq, p in enumerate(board):
+        if p is None:
+            continue
+        k = kind_of(p)
+        if k in ("K", "P"):
+            continue
+        side = side_of(p)
+        enemy_k = ksq[GOTE if side == SENTE else SENTE]
+        if enemy_k < 0:
+            continue
+        d = max(abs(sq // 9 - enemy_k // 9), abs(sq % 9 - enemy_k % 9))
+        if d <= 2:
+            score += (3 - d) * 12 if side == SENTE else -(3 - d) * 12
+    return score
+
+
+class _ShogiGame:
+    check_extension = True
+
+    def moves(self, s):
+        return pseudo_moves(s)
+
+    def noisy(self, s):
+        board = s.board
+        return [m for m in pseudo_moves(s, include_drops=False) if board[m[1]] is not None or m[2]]
+
+    def apply(self, s, m):
+        return apply_move(s, m)
+
+    def leaves_in_check(self, s, nxt):
+        return in_check(nxt, s.turn)
+
+    def in_check(self, s):
+        return in_check(s)
+
+    def evaluate(self, s):
+        v = evaluate_strong(s)
+        return v if s.turn == SENTE else -v
+
+    def key(self, s):
+        return (tuple(s.board), s.turn, tuple(sorted(s.hands[SENTE].items())), tuple(sorted(s.hands[GOTE].items())))
+
+    def order_score(self, s, m):
+        sc = 0
+        if m[3] is None:
+            cap = s.board[m[1]]
+            if cap is not None:
+                sc += 10 * VALUES[kind_of(cap)] + 50 - VALUES[kind_of(s.board[m[0]])] // 20
+            if m[2]:
+                sc += 300
+        return sc
+
+    def no_moves_score(self, s, chk, ply):
+        return -ai_search.MATE + ply  # 将棋は指せる手がなければ負け
+
+    def can_null(self, s):
+        return True
+
+    def null(self, s):
+        n = s.copy()
+        n.turn = GOTE if s.turn == SENTE else SENTE
+        return n
+
+
+_STRONG = _ShogiGame()

@@ -2,14 +2,21 @@ import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 
 /**
- * 管理ダッシュボードの「ゲーム設定」（オセロ・チェス・将棋）の保存と、Discord パネル送信。
+ * 管理ダッシュボードの「ゲーム設定」（オセロ・チェス・将棋・ポーカー）の保存と、Discord パネル送信。
  * 設定キーは OTHELLO_ / CHESS_ / SHOGI_ で始まる同じ項目。
  */
-const KEYS = ['BET_ENABLED', 'SHOW_STATS', 'PANEL_CHANNEL', 'AUTO_VC_ENABLED', 'VC_CATEGORY_ID', 'VC_NAME', 'GAME_CHANNEL', 'AI_MULT_4', 'AI_MULT_5', 'AI_MAX_BET_4', 'AI_MAX_BET_5'];
+const KEYS = ['BET_ENABLED', 'SHOW_STATS', 'PANEL_CHANNEL', 'AUTO_VC_ENABLED', 'VC_CATEGORY_ID', 'VC_NAME', 'GAME_CHANNEL', 'AI_MULT_4', 'AI_MULT_5', 'AI_MULT_6', 'AI_MAX_BET_4', 'AI_MAX_BET_5', 'AI_MAX_BET_6'];
 
-export function boardGameSettingsHandlers(game: 'othello' | 'chess' | 'shogi') {
+/** ポーカーの設定項目（POKER_ で始まる） */
+const POKER_KEYS = [
+  'BET_ENABLED', 'SHOW_STATS', 'PANEL_CHANNEL', 'GAME_CHANNEL',
+  'START_CHIPS', 'SMALL_BLIND', 'BIG_BLIND', 'BLIND_UP_HANDS', 'TURN_SECONDS', 'MAX_PLAYERS',
+  'AI_MAX_HANDS', 'PVP_MAX_HANDS', 'PVP_MAX_BUYIN', 'AI_MULT_4', 'AI_MULT_5', 'AI_MULT_6', 'AI_MAX_BET_4', 'AI_MAX_BET_5', 'AI_MAX_BET_6',
+];
+
+export function boardGameSettingsHandlers(game: 'othello' | 'chess' | 'shogi' | 'poker') {
   const prefix = game.toUpperCase();
-  const settingKeys = KEYS.map((k) => `${prefix}_${k}`);
+  const settingKeys = (game === 'poker' ? POKER_KEYS : KEYS).map((k) => `${prefix}_${k}`);
 
   async function GET(request: Request, { params }: { params: { guild_id: string } }) {
     const guildId = params.guild_id;

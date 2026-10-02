@@ -13,6 +13,7 @@ import io
 from PIL import Image, ImageDraw, ImageFont
 
 import database
+import othello_engine
 from helpers import get_setting, JST, create_game_stats_embed, AI_BET_MIN_LEVEL, ai_bet_multiplier, ai_bet_max, ai_bet_over_max_message, format_mult
 
 # ============================================================
@@ -38,6 +39,9 @@ WEIGHT_TABLE = [
 ]
 
 # 8方向
+LEVEL6_TIME_LIMIT = 5.0  # レベル6の1手あたりの思考時間（秒）
+LEVEL_NAMES = {1: "簡単", 2: "普通", 3: "中級", 4: "難しい", 5: "最難関", 6: "超難関"}
+
 DIRECTIONS = [(-1, -1), (-1, 0), (-1, 1),
               ( 0, -1),          ( 0, 1),
               ( 1, -1), ( 1, 0), ( 1, 1)]
@@ -132,10 +136,10 @@ class OthelloBoard:
 
 
 # ============================================================
-# OthelloAI クラス (5段階難易度)
+# OthelloAI クラス (6段階難易度)
 # ============================================================
 class OthelloAI:
-    """オセロAI (レベル1〜5)。"""
+    """オセロAI (レベル1〜6)。"""
 
     def __init__(self, level: int):
         self.level = level
@@ -153,9 +157,12 @@ class OthelloAI:
         elif self.level == 3:
             return self._minimax_move(board, color, depth=3, use_alpha_beta=False, use_weight=False)
         elif self.level == 4:
-            return self._minimax_move(board, color, depth=5, use_alpha_beta=True, use_weight=False)
-        else:  # level 5
+            # 以前は石の数だけで評価していて弱かった（隅を簡単に取られる）ため、位置の重みで評価する
+            return self._minimax_move(board, color, depth=5, use_alpha_beta=True, use_weight=True)
+        elif self.level == 5:
             return self._minimax_move(board, color, depth=7, use_alpha_beta=True, use_weight=True)
+        else:  # level 6: ビットボードで時間いっぱい読み、終盤は読み切る
+            return othello_engine.strong_move(board.board, color, LEVEL6_TIME_LIMIT)
 
     def _random(self, valid_moves: list) -> tuple:
         """Lv1: ランダムに手を選ぶ。"""
@@ -400,8 +407,7 @@ async def show_game_board(channel, session: OthelloSession):
     color_name = "⚫ 黒" if session.current_color == 1 else "⬜ 白"
 
     if session.is_ai and session.current_color == 2:
-        level_names = {1: "簡単", 2: "普通", 3: "中級", 4: "難しい", 5: "最難関"}
-        lname = level_names.get(session.ai_level, str(session.ai_level))
+        lname = LEVEL_NAMES.get(session.ai_level, str(session.ai_level))
         turn_text = f"🤖 AI (Lv{session.ai_level}: {lname}) が思考中..."
     else:
         player_id = session.black_id if session.current_color == 1 else session.white_id
@@ -476,7 +482,8 @@ async def process_turn(channel, session: OthelloSession):
     if session.is_ai and session.current_color == 2:
         await asyncio.sleep(1.0)  # 思考中の演出
         ai = OthelloAI(session.ai_level)
-        move = ai.get_move(session.board, 2)
+        # 強いレベルは考えるのに数秒かかるので、Bot 全体が止まらないよう別スレッドで考える
+        move = await asyncio.to_thread(ai.get_move, session.board.copy(), 2)
         if move:
             row, col = move
             session.board.apply_move(row, col, 2)
@@ -1016,6 +1023,10 @@ class DifficultySelectView(discord.ui.View):
     async def lv5(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._handle_level(interaction, 5)
 
+    @discord.ui.button(label="レベル6（超難関）", style=discord.ButtonStyle.danger, row=2)
+    async def lv6(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._handle_level(interaction, 6)
+
 
 async def _start_ai_game(interaction: discord.Interaction, ai_level: int, bet: int):
     """AI対戦を開始する内部関数。DM内でゲームを行う。"""
@@ -1079,8 +1090,7 @@ async def _start_ai_game(interaction: discord.Interaction, ai_level: int, bet: i
     game_sessions[key] = session
 
     # エフェメラルで通知
-    level_names = {1: "簡単", 2: "普通", 3: "中級", 4: "難しい", 5: "最難関"}
-    level_name = level_names.get(ai_level, str(ai_level))
+    level_name = LEVEL_NAMES.get(ai_level, str(ai_level))
     msg = f"✅ AI対戦 (レベル{ai_level}: {level_name}) を開始します！DMをご確認ください。\nあなたは ⚫ 黒 です。"
 
     try:

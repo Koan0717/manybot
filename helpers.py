@@ -824,14 +824,18 @@ def format_evaluation_datetime(dt) -> str:
 AI_BET_MIN_LEVEL = 4
 
 
+AI_MULT_DEFAULT = {4: 2.0, 5: 3.0, 6: 5.0}  # ダッシュボードの初期値と同じ
+
+
 def ai_bet_multiplier(bot, prefix: str, guild_id, level: int) -> float:
-    """AI に勝ったときの倍率（{prefix}_AI_MULT_{level}）。未設定・不正な値は 2 倍"""
+    """AI に勝ったときの倍率（{prefix}_AI_MULT_{level}）。未設定・不正な値はレベルごとの初期値"""
+    fallback = AI_MULT_DEFAULT.get(level, 2.0)
     raw = get_setting(bot, f"{prefix}_AI_MULT_{level}", guild_id)
     try:
         v = float(raw)
     except (TypeError, ValueError):
-        return 2.0
-    return min(100.0, v) if v >= 1 else 2.0
+        return fallback
+    return min(100.0, v) if v >= 1 else fallback
 
 
 def ai_bet_max(bot, prefix: str, guild_id, level: int) -> int:
@@ -1226,6 +1230,7 @@ def create_game_stats_embed(user: discord.User or discord.Member, game_type: str
         "othello": {"name": "オセロ", "emoji": "♟️", "color": discord.Color.green()},
         "chess": {"name": "チェス", "emoji": "♟️", "color": discord.Color.dark_gold()},
         "shogi": {"name": "将棋", "emoji": "☗", "color": discord.Color.from_rgb(222, 178, 108)},
+        "poker": {"name": "ポーカー", "emoji": "🃏", "color": discord.Color.from_rgb(26, 122, 70)},
     }
 
     meta = game_meta.get(game_type, {"name": game_type, "emoji": "🎮", "color": discord.Color.blurple()})
@@ -1263,7 +1268,7 @@ def create_game_stats_embed(user: discord.User or discord.Member, game_type: str
         embed.set_thumbnail(url=user.display_avatar.url)
 
     embed.add_field(name="🎮 総プレイ回数", value=f"**{plays:,}** 回", inline=True)
-    if game_type in ("othello", "chess", "shogi") or draws > 0:
+    if game_type in ("othello", "chess", "shogi", "poker") or draws > 0:
         embed.add_field(name="🏆 勝敗", value=f"**{wins:,}** 勝 **{losses:,}** 敗 (**{draws:,}** 分)", inline=True)
     else:
         embed.add_field(name="🏆 勝敗", value=f"**{wins:,}** 勝 **{losses:,}** 敗", inline=True)
@@ -1330,7 +1335,7 @@ def create_game_stats_embed(user: discord.User or discord.Member, game_type: str
         ]
         embed.add_field(name="🃏 詳細履歴", value="\n".join(detail_lines), inline=False)
 
-    elif game_type in ("othello", "chess", "shogi"):
+    elif game_type in ("othello", "chess", "shogi", "poker"):
         pvp_w = extra.get("pvp_wins", 0)
         pvp_l = extra.get("pvp_losses", 0)
         pvp_d = extra.get("pvp_draws", 0)

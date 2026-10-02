@@ -366,6 +366,12 @@ class IPC(commands.Cog):
                             color=discord.Color.green()
                         )
                         view = OthelloPanelView(show_stats=(show_stats is not False))
+                    elif panel_type == "poker":
+                        from cogs.poker import PokerPanelView, panel_embed as poker_panel_embed
+                        from helpers import get_setting
+                        show_stats = get_setting(self.bot, "POKER_SHOW_STATS", guild_id)
+                        embed = poker_panel_embed()
+                        view = PokerPanelView(show_stats=(show_stats is not False))
                     elif panel_type in ("chess", "shogi"):
                         from cogs.board_games import make_panel_view, panel_embed
                         from helpers import get_setting

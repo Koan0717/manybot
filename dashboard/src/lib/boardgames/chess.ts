@@ -4,6 +4,8 @@
  * 駒: 白は大文字 "PNBRQK"、黒は小文字、空きは "."
  */
 
+import { bestMove, MATE as SEARCH_MATE, SearchGame } from './search';
+
 export type Color = 'w' | 'b';
 export interface ChessState {
   board: string[];
@@ -335,6 +337,7 @@ export function aiMove(s: ChessState, level: number): ChessMove | null {
   const legal = legalMoves(s);
   if (!legal.length) return null;
   if (level <= 1) return legal[Math.floor(Math.random() * legal.length)];
+  if (level >= 6) return bestMove(STRONG, s, legal, LEVEL6_TIME_MS);
   const [depth, usePst, noise] = ({ 2: [1, false, 30], 3: [2, true, 10], 4: [3, true, 0], 5: [4, true, 0] } as Record<number, [number, boolean, number]>)[level] ?? [4, true, 0];
   let bestScore = -MATE * 3;
   let best: ChessMove[] = [];
@@ -349,3 +352,119 @@ export function aiMove(s: ChessState, level: number): ChessMove | null {
   }
   return best[Math.floor(Math.random() * best.length)];
 }
+
+// ============================================================
+// レベル6（超難関）: search.ts の反復深化＋静止探索で、時間いっぱい読む（Bot の chess_engine.py と対応）
+// ============================================================
+const LEVEL6_TIME_MS = 3000;
+
+const KING_END = [-50, -40, -30, -20, -20, -30, -40, -50, -30, -20, -10, 0, 0, -10, -20, -30, -30, -10, 20, 30, 30, 20, -10, -30,
+  -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 30, 40, 40, 30, -10, -30, -30, -10, 20, 30, 30, 20, -10, -30,
+  -30, -30, 0, 0, 0, 0, -30, -30, -50, -30, -30, -30, -30, -30, -30, -50];
+const PASSED_BONUS = [0, 10, 15, 25, 40, 65, 100, 0];
+
+/** 白から見た点数（駒の価値・位置・終盤のキング・ビショップペア・ポーンの形・ルークの筋・終盤の追い詰め） */
+function evaluateStrong(board: string[]) {
+  let score = 0;
+  let npm = 0;
+  let wb = 0;
+  let bb = 0;
+  let wk = -1;
+  let bk = -1;
+  const wp: number[][] = Array.from({ length: 8 }, () => []);
+  const bp: number[][] = Array.from({ length: 8 }, () => []);
+  const rooks: [number, boolean][] = [];
+  for (let sq = 0; sq < 64; sq++) {
+    const p = board[sq];
+    if (p === '.') continue;
+    const kind = p.toLowerCase();
+    const white = isUpper(p);
+    if (kind === 'k') {
+      if (white) wk = sq;
+      else bk = sq;
+      continue;
+    }
+    const idx = white ? sq : (7 - Math.floor(sq / 8)) * 8 + (sq % 8);
+    const v = VALUES[kind] + PST[kind][idx];
+    score += white ? v : -v;
+    if (kind === 'p') (white ? wp : bp)[sq % 8].push(Math.floor(sq / 8));
+    else {
+      npm += VALUES[kind];
+      if (kind === 'b') {
+        if (white) wb++;
+        else bb++;
+      } else if (kind === 'r') rooks.push([sq % 8, white]);
+    }
+  }
+  const phase = Math.min(npm, 6200) / 6200;
+  for (const [ksq, white] of [[wk, true], [bk, false]] as [number, boolean][]) {
+    if (ksq < 0) continue;
+    const idx = white ? ksq : (7 - Math.floor(ksq / 8)) * 8 + (ksq % 8);
+    const v = Math.trunc(PST.k[idx] * phase + KING_END[idx] * (1 - phase));
+    score += white ? v : -v;
+  }
+  if (wb >= 2) score += 30;
+  if (bb >= 2) score -= 30;
+  for (let f = 0; f < 8; f++) {
+    for (const [mine, theirs, white] of [[wp, bp, true], [bp, wp, false]] as [number[][], number[][], boolean][]) {
+      const rows = mine[f];
+      if (!rows.length) continue;
+      const sign = white ? 1 : -1;
+      if (rows.length > 1) score -= sign * 15 * (rows.length - 1);
+      if (!(f > 0 && mine[f - 1].length) && !(f < 7 && mine[f + 1].length)) score -= sign * 12 * rows.length;
+      for (const r of rows) {
+        let blocked = false;
+        for (let ff = f - 1; ff <= f + 1 && !blocked; ff++) {
+          if (ff < 0 || ff > 7) continue;
+          blocked = theirs[ff].some((rr) => (white ? rr < r : rr > r));
+        }
+        if (!blocked) {
+          const advance = white ? 6 - r : r - 1;
+          score += sign * Math.trunc(PASSED_BONUS[Math.max(0, Math.min(7, advance + 1))] * (1.5 - phase));
+        }
+      }
+    }
+  }
+  for (const [f, white] of rooks) {
+    const [own, opp] = white ? [wp, bp] : [bp, wp];
+    if (!own[f].length) score += (opp[f].length ? 8 : 15) * (white ? 1 : -1);
+  }
+  // 終盤で大きく勝っているときは、相手キングを端へ追い詰め、自分のキングを近づける
+  if (phase < 0.5 && Math.abs(score) > 250 && wk >= 0 && bk >= 0) {
+    const winWhite = score > 0;
+    const loser = winWhite ? bk : wk;
+    const lr = Math.floor(loser / 8);
+    const lc = loser % 8;
+    const center = Math.max(3 - lr, lr - 4) + Math.max(3 - lc, lc - 4);
+    const dist = Math.abs(Math.floor(wk / 8) - Math.floor(bk / 8)) + Math.abs((wk % 8) - (bk % 8));
+    const mop = Math.trunc((center * 10 + (14 - dist) * 4) * (1 - phase));
+    score += winWhite ? mop : -mop;
+  }
+  return score;
+}
+
+const STRONG: SearchGame<ChessState, ChessMove> = {
+  checkExtension: true,
+  moves: (s) => pseudoMoves(s),
+  noisy: (s) => pseudoMoves(s).filter((m) => s.board[m[1]] !== '.' || m[2] === 'q' || (m[1] === s.ep && s.board[m[0]].toLowerCase() === 'p')),
+  apply: (s, m) => applyMove(s, m),
+  leavesInCheck: (s, next) => inCheck(next, s.turn),
+  inCheck: (s) => inCheck(s),
+  evaluate(s) {
+    const v = evaluateStrong(s.board);
+    return s.turn === 'w' ? v : -v;
+  },
+  key: (s) => `${s.board.join('')}${s.turn}${s.castling}${s.ep}`,
+  orderScore(s, m) {
+    const cap = s.board[m[1]];
+    let sc = 0;
+    if (cap !== '.') sc += 10 * VALUES[cap.toLowerCase()] - Math.floor(VALUES[s.board[m[0]].toLowerCase()] / 10);
+    else if (m[1] === s.ep && s.board[m[0]].toLowerCase() === 'p') sc += 900;
+    if (m[2]) sc += VALUES[m[2]];
+    return sc;
+  },
+  moveKey: (m) => `${m[0]},${m[1]},${m[2] ?? ''}`,
+  noMovesScore: (_s, chk, ply) => (chk ? -SEARCH_MATE + ply : 0),
+  canNull: (s) => s.board.some((p) => p !== '.' && (s.turn === 'w' ? 'NBRQ' : 'nbrq').includes(p)),
+  nullMove: (s) => ({ ...s, board: s.board.slice(), turn: other(s.turn), ep: -1 }),
+};
