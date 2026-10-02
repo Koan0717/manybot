@@ -48,6 +48,66 @@ function Toggle({ on, onClick, labels = ['有効 (ON)', '無効 (OFF)'] }: { on:
   );
 }
 
+/** ブラインドと「ブラインドを上げる間隔」の説明（開いたときだけ表示）。例は今の設定値で計算する */
+function BlindHelp({ sb, bb, every }: { sb: number; bb: number; every: number }) {
+  const n = every > 0 ? every : 5;
+  const rows = [0, 1, 2, 3].map((i) => ({ hands: `${i * n + 1}〜${(i + 1) * n}`, sb: sb * 2 ** i, bb: bb * 2 ** i }));
+  return (
+    <details className="group bg-zinc-800/30 rounded-lg border border-zinc-700/50 text-xs font-tech text-zinc-400">
+      <summary className="cursor-pointer select-none px-4 py-2.5 text-zinc-300 hover:text-white list-none flex items-center gap-1.5">
+        <span className="text-cyan-400 transition-transform group-open:rotate-90">▶</span>
+        ブラインド・「ブラインドを上げる間隔」とは？
+      </summary>
+      <div className="px-4 pb-4 space-y-3 leading-relaxed">
+        <div>
+          <p className="text-zinc-300 font-medium">ブラインドとは</p>
+          <p>
+            ハンドごとに2人が、カードを見る前に必ず場に出すチップです。少ない方がスモールブラインド（SB）、多い方がビッグブラインド（BB）で、毎ハンド交代で回ってきます。
+            何もしなくてもチップが減っていくので、ずっと降り続けることができなくなります。
+          </p>
+        </div>
+        <div>
+          <p className="text-zinc-300 font-medium">「ブラインドを上げる間隔」とは</p>
+          <p>
+            ここで決めたハンド数ごとに、SBとBBが2倍になります（0 なら最後まで変わりません）。
+            {every > 0 ? `今の設定（${every}ハンドごと）だと次のようになります。` : `たとえば ${n} にすると次のようになります。`}
+          </p>
+          <table className="mt-2 w-full max-w-xs border border-zinc-700/60">
+            <thead>
+              <tr className="bg-zinc-800/60 text-zinc-300">
+                <th className="px-2 py-1 text-left font-medium">ハンド</th>
+                <th className="px-2 py-1 text-right font-medium">SB / BB</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.hands} className="border-t border-zinc-700/60">
+                  <td className="px-2 py-1">{r.hands}</td>
+                  <td className="px-2 py-1 text-right">{r.sb.toLocaleString()} / {r.bb.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <p className="text-zinc-300 font-medium">何のための設定か</p>
+          <p>
+            序盤はブラインドが小さいのでじっくり遊べ、後半は大きくなって待っているだけでチップが減るため勝負せざるを得なくなります。
+            ゲームが長引かずに決着しやすくなります。「みんなで遊ぶときのハンド数」を 0（無制限）にしているときに設定しておくと、ダラダラ続くのを防げます。
+          </p>
+        </div>
+        <div>
+          <p className="text-zinc-300 font-medium">チップ＝通貨のときの注意</p>
+          <p>
+            ブラインドは持ち込み額・参加費に関係なく、ここで設定した額です。間隔を短くすると、持ち込みが少ない人ほど早く追い込まれます
+            （例: BB {bb.toLocaleString()} で持ち込み {(bb * 10).toLocaleString()} ならBB 10回分、BBが2倍になると5回分）。
+          </p>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 export default function PokerSettingsPage() {
   const params = useParams();
   const guildId = params.guild_id as string;
@@ -202,6 +262,11 @@ export default function PokerSettingsPage() {
           {numberInput('BLIND_UP_HANDS', 'ブラインドを上げる間隔', 'このハンド数ごとにブラインドが2倍になります（0 で上げない）', 'ハンド')}
           {numberInput('TURN_SECONDS', '持ち時間', '自分の番の制限時間。過ぎるとチェック（できなければフォールド）になります。3回続けて時間切れになると退席（AI戦は降参）', '秒')}
         </div>
+        <BlindHelp
+          sb={toInt(settings[`${P}_SMALL_BLIND`], 'SMALL_BLIND')}
+          bb={toInt(settings[`${P}_BIG_BLIND`], 'BIG_BLIND')}
+          every={toInt(settings[`${P}_BLIND_UP_HANDS`], 'BLIND_UP_HANDS')}
+        />
       </section>
 
       {/* 対戦の長さ */}
