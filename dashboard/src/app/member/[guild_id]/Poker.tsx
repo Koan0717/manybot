@@ -17,6 +17,8 @@ export interface PokerView {
   id: string | null;
   bet: number;
   mult: number;
+  /** チップ＝通貨（持ち込んだ額がそのままチップ）の対戦か */
+  chip_money?: boolean;
   level: number;
   level_name: string;
   start_chips: number;
@@ -51,7 +53,6 @@ export interface PokerInfo {
   max_hands: number;
   bet_enabled: boolean;
   bet_min_level: number;
-  ai_mult: Record<string, number>;
   ai_max_bet: Record<string, number>;
   level_names: Record<string, string>;
 }
@@ -156,7 +157,8 @@ export default function Poker({
   const maxBet = info.ai_max_bet[String(level)] || 0;
   const maxAllowed = Math.min(maxBet > 0 ? maxBet : Infinity, balance);
   const bet = Number(betText);
-  const betValid = !betting || (Number.isInteger(bet) && bet >= 1 && bet <= maxAllowed);
+  // 持ち込む額はビッグブラインド以上（それがそのままチップになる）
+  const betValid = !betting || (Number.isInteger(bet) && bet >= info.bb && bet <= maxAllowed);
 
   const post = async (body: object): Promise<PokerView & { balance: number; resumed?: boolean } | null> => {
     const res = await memberFetch(`/api/member/guilds/${guildId}/poker`, {
@@ -200,7 +202,12 @@ export default function Poker({
   const act = (move: string, amount = 0) => send({ action: 'act', id: game?.id, move, amount }, true);
   const next = () => send({ action: 'next', id: game?.id }, true);
   const resign = () => {
-    if (!confirm(game?.bet ? `降参すると負けになり、賭け金 ${fmt(game.bet)} ${cur} は戻りません。降参しますか？` : '降参すると負けになります。降参しますか？')) return;
+    const msg = game?.chip_money
+      ? `席を立ちますか？今のハンドに出したチップは失い、残りのチップをそのまま ${cur} で受け取ります。`
+      : game?.bet
+        ? `降参すると負けになり、賭け金 ${fmt(game.bet)} ${cur} は戻りません。降参しますか？`
+        : '降参すると負けになります。降参しますか？';
+    if (!confirm(msg)) return;
     send({ action: 'resign', id: game?.id }, false);
   };
 
@@ -212,7 +219,12 @@ export default function Poker({
     return (
       <div className="space-y-4">
         <div className="rounded-2xl p-4 bg-gradient-to-br from-emerald-900/60 to-emerald-950/60 border border-emerald-800/60 text-sm text-emerald-100/90 leading-relaxed">
-          🃏 テキサスホールデムで AI と 1対1。お互いチップ <b>{fmt(info.start_chips)}</b> から、{hands}。
+          🃏 テキサスホールデムで AI と 1対1。
+          {betting ? (
+            <>持ち込んだ {cur} が<b>そのままチップ</b>になり、AI も同じ額から始めます。{hands}。終了したとき（または席を立ったとき）に残ったチップを {cur} で受け取ります。</>
+          ) : (
+            <>お互いチップ <b>{fmt(info.start_chips)}</b> から、{hands}。チップは {cur} に影響しません。</>
+          )}
           <div className="text-xs text-emerald-200/60 mt-1">
             ブラインド {fmt(info.sb)} / {fmt(info.bb)}
             {info.blind_up ? `（${info.blind_up}ハンドごとに2倍）` : ''}
@@ -233,7 +245,7 @@ export default function Poker({
                   }`}
                 >
                   <div className="font-semibold">Lv{lv} {info.level_names[String(lv)]}</div>
-                  {canBet && <div className="text-[11px] text-amber-300">勝つと ×{info.ai_mult[String(lv)]}</div>}
+                  {canBet && <div className="text-[11px] text-amber-300">チップ＝{cur}</div>}
                 </button>
               );
             })}
@@ -246,7 +258,7 @@ export default function Poker({
         {betting && (
           <div>
             <label className="block text-sm text-zinc-400 mb-2">
-              賭け金{maxBet > 0 ? `（上限 ${fmt(maxBet)}）` : ''}・勝つと ×{info.ai_mult[String(level)]}、引き分けは返金
+              持ち込む {cur}（そのままチップになります・{fmt(info.bb)}〜{maxBet > 0 ? fmt(maxBet) : ''}）
             </label>
             <div className="flex items-center gap-2">
               <input
@@ -276,7 +288,7 @@ export default function Poker({
               </button>
             </div>
             {betText && !betValid && (
-              <p className="text-xs text-red-400 mt-1.5">1〜{fmt(Math.max(0, Math.floor(maxAllowed)))} の整数で入力してください</p>
+              <p className="text-xs text-red-400 mt-1.5">{fmt(info.bb)}〜{fmt(Math.max(0, Math.floor(maxAllowed)))} の整数で入力してください</p>
             )}
           </div>
         )}
@@ -313,7 +325,12 @@ export default function Poker({
         <span>
           ハンド #{g.hand_no}{g.max_hands ? ` / ${g.max_hands}` : ''}・{STREET[g.street] ?? ''}・ブラインド {fmt(g.sb)}/{fmt(g.bb)}
         </span>
-        {g.bet > 0 && <span className="text-amber-300">賭け金 {fmt(g.bet)}（×{g.mult}）</span>}
+        {g.bet > 0 &&
+          (g.chip_money ? (
+            <span className="text-amber-300">チップ＝{cur}（持ち込み {fmt(g.bet)}）</span>
+          ) : (
+            <span className="text-amber-300">賭け金 {fmt(g.bet)}（×{g.mult}）</span>
+          ))}
       </div>
 
       <div className="rounded-[2rem] p-4 space-y-3 bg-[radial-gradient(ellipse_at_center,_#166534_0%,_#14532d_55%,_#052e16_100%)] border-4 border-amber-900/80 shadow-[inset_0_0_40px_rgba(0,0,0,0.5)]">
@@ -337,7 +354,7 @@ export default function Poker({
           {g.me.hole.map((c, i) => <PlayingCard key={i} card={c} dim={g.me.folded} />)}
         </div>
         {g.me.hand_name && <div className="text-center text-xs text-emerald-100">{g.me.hand_name}</div>}
-        <SeatInfo label="👤 あなた" seat={g.me} />
+        <SeatInfo label="👤 あなた" seat={g.me} cur={g.chip_money ? cur : undefined} />
       </div>
 
       {thinking && (
@@ -372,12 +389,18 @@ export default function Poker({
           }`}
         >
           <div className="font-bold text-base">
-            {g.final.result === 'win' ? '🏆🎉 あなたの勝ち！' : g.final.result === 'lose' ? `🤖 AIの勝ち${g.final.resigned ? '（降参）' : ''}` : '🤝 引き分け'}
+            {g.final.result === 'win' ? '🏆🎉 あなたの勝ち！' : g.final.result === 'lose' ? '🤖 AIの勝ち' : '🤝 引き分け'}
+            {g.final.resigned ? (g.chip_money ? '（途中で席を立ちました）' : '（降参）') : ''}
           </div>
           <div className="mt-1 opacity-90">
             最終チップ: あなた {fmt(g.final.my_stack)} ／ AI {fmt(g.final.ai_stack)}（{g.final.hands}ハンド）
           </div>
-          {g.bet > 0 && (
+          {g.chip_money ? (
+            <div className="mt-1 opacity-90">
+              💰 持ち込み {fmt(g.bet)} → {fmt(g.final.payout)} {cur} を受け取りました（{g.final.payout - g.bet >= 0 ? '+' : ''}
+              {fmt(g.final.payout - g.bet)}）
+            </div>
+          ) : g.bet > 0 && (
             <div className="mt-1 opacity-90">
               {g.final.result === 'win'
                 ? `💰 ${fmt(g.final.payout)} ${cur} を受け取りました（+${fmt(g.final.payout - g.bet)}）`
@@ -483,7 +506,7 @@ export default function Poker({
           disabled={busy}
           className="w-full py-2 text-xs text-zinc-400 hover:text-red-300 flex items-center justify-center gap-1.5 disabled:opacity-50"
         >
-          <Flag className="w-3.5 h-3.5" /> 降参する
+          <Flag className="w-3.5 h-3.5" /> {g.chip_money ? '席を立つ（残りのチップを受け取る）' : '降参する'}
         </button>
       )}
     </div>

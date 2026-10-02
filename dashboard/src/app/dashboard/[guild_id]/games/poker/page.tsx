@@ -8,7 +8,6 @@ import PageHeader from '@/components/PageHeader';
 import { toast } from 'react-hot-toast';
 
 const P = 'POKER';
-const AI_MULT_DEFAULT = { 4: 2, 5: 3, 6: 5 } as const;
 const BET_LEVELS = [4, 5, 6] as const;
 const LEVEL_NAME = { 4: '難しい', 5: '最難関', 6: '超難関' } as const;
 
@@ -30,11 +29,6 @@ const toInt = (raw: unknown, key: string) => {
   const n = Math.floor(Number(raw));
   if (raw === '' || !Number.isFinite(n)) return def;
   return Math.min(hi, Math.max(lo, n));
-};
-const toMult = (raw: unknown, fallback: number) => {
-  const n = Number(raw);
-  if (raw === '' || !Number.isFinite(n)) return fallback;
-  return Math.round(Math.min(100, Math.max(1, n)) * 100) / 100;
 };
 const toMaxBet = (raw: unknown) => {
   const n = Math.floor(Number(raw));
@@ -65,7 +59,6 @@ export default function PokerSettingsPage() {
     [`${P}_GAME_CHANNEL`]: data[`${P}_GAME_CHANNEL`] ?? '',
     // 入力中は文字列のまま持ち、保存時に数値へ直す
     ...Object.fromEntries(Object.entries(NUMBER_FIELDS).map(([k, [def]]) => [`${P}_${k}`, String(data[`${P}_${k}`] ?? def)])),
-    ...Object.fromEntries(BET_LEVELS.map((lv) => [`${P}_AI_MULT_${lv}`, String(data[`${P}_AI_MULT_${lv}`] ?? AI_MULT_DEFAULT[lv])])),
     ...Object.fromEntries(BET_LEVELS.map((lv) => [`${P}_AI_MAX_BET_${lv}`, String(data[`${P}_AI_MAX_BET_${lv}`] ?? 0)])),
   });
   const [settings, setSettings] = useState<Record<string, any>>(defaults());
@@ -110,7 +103,6 @@ export default function PokerSettingsPage() {
         body: JSON.stringify({
           ...settings,
           ...Object.fromEntries(Object.keys(NUMBER_FIELDS).map((k) => [`${P}_${k}`, toInt(settings[`${P}_${k}`], k)])),
-          ...Object.fromEntries(BET_LEVELS.map((lv) => [`${P}_AI_MULT_${lv}`, toMult(settings[`${P}_AI_MULT_${lv}`], AI_MULT_DEFAULT[lv])])),
           ...Object.fromEntries(BET_LEVELS.map((lv) => [`${P}_AI_MAX_BET_${lv}`, toMaxBet(settings[`${P}_AI_MAX_BET_${lv}`])])),
         }),
       });
@@ -203,7 +195,7 @@ export default function PokerSettingsPage() {
       <section className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl space-y-4">
         <h2 className="font-mecha text-base font-bold text-white border-b border-zinc-800 pb-2">テーブルのルール</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {numberInput('START_CHIPS', '最初のチップ', '全員がこの枚数のチップから始めます', '枚')}
+          {numberInput('START_CHIPS', '最初のチップ（賭けなしのとき）', '賭けなしの対戦は全員がこの枚数から始めます（通貨には影響しません）。賭けるときは持ち込んだ通貨がそのままチップになります', '枚')}
           {numberInput('MAX_PLAYERS', '最大人数（みんなで遊ぶ）', '卓を開いた人を含めた最大人数（2〜10人）', '人')}
           {numberInput('SMALL_BLIND', 'スモールブラインド', 'ハンドごとに強制で出すチップ（小）', '枚')}
           {numberInput('BIG_BLIND', 'ビッグブラインド', 'ハンドごとに強制で出すチップ（大）。最小ベット額にもなります', '枚')}
@@ -229,46 +221,24 @@ export default function PokerSettingsPage() {
           <div>
             <p className="text-sm font-tech text-zinc-300 font-medium">賭け ON/OFF</p>
             <p className="text-xs font-tech text-zinc-500 mt-0.5">
-              みんなで遊ぶとき: 卓を開いた人が参加費を決め、全員が同じ額を払います。終了時に残ったチップの割合で精算します（最初のチップ = 参加費）。
+              ONのときはチップ＝通貨になります。
               <br />
-              AI対戦: レベル4〜6のときだけ賭けられます。
+              みんなで遊ぶとき: 卓を開いた人が参加費を決め、全員が同じ額を払います。参加費がそのままチップになり、終了時・退席時に残ったチップを通貨で受け取ります（空欄・0 なら賭けなし）。
+              <br />
+              AI対戦: レベル4〜6のときだけ、持ち込んだ通貨がそのままチップになります（AIも同じ額から始めます）。レベル1〜3は通貨に影響しません。
+              <br />
+              OFFのときは、どの対戦も「最初のチップ」で遊び、通貨には影響しません。参加費・持ち込みはビッグブラインド以上が必要です。
             </p>
           </div>
           <Toggle on={!!settings[`${P}_BET_ENABLED`]} onClick={() => update(`${P}_BET_ENABLED`, !settings[`${P}_BET_ENABLED`])} />
         </div>
 
-        {numberInput('PVP_MAX_BUYIN', '参加費の上限（みんなで遊ぶ）', '0 で上限なし')}
+        {numberInput('PVP_MAX_BUYIN', '参加費の上限（みんなで遊ぶ）', '参加費＝最初のチップ。0 で上限なし')}
 
         <div className="bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50 space-y-3">
           <div>
-            <p className="text-sm font-tech text-zinc-300 font-medium">AI対戦の倍率</p>
-            <p className="text-xs font-tech text-zinc-500 mt-0.5">AIに勝つと「賭け金 × 倍率」が戻ります（引き分けは返金、負けは没収）</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {BET_LEVELS.map((lv) => (
-              <label key={lv} className="flex items-center gap-2">
-                <span className="text-sm font-tech text-zinc-300 whitespace-nowrap">レベル{lv}（{LEVEL_NAME[lv]}）</span>
-                <span className="text-zinc-500">×</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.1"
-                  min="1"
-                  max="100"
-                  value={settings[`${P}_AI_MULT_${lv}`]}
-                  onChange={(e) => update(`${P}_AI_MULT_${lv}`, e.target.value)}
-                  onBlur={() => update(`${P}_AI_MULT_${lv}`, String(toMult(settings[`${P}_AI_MULT_${lv}`], AI_MULT_DEFAULT[lv])))}
-                  className="w-24 bg-zinc-900 border border-zinc-600 rounded px-3 py-1.5 text-white font-tech focus:outline-none focus:border-cyan-500"
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-zinc-800/40 p-4 rounded-lg border border-zinc-700/50 space-y-3">
-          <div>
-            <p className="text-sm font-tech text-zinc-300 font-medium">AI対戦の賭け金上限</p>
-            <p className="text-xs font-tech text-zinc-500 mt-0.5">レベルごとに1回で賭けられる金額の上限です（0 で上限なし）</p>
+            <p className="text-sm font-tech text-zinc-300 font-medium">AI対戦の持ち込み上限</p>
+            <p className="text-xs font-tech text-zinc-500 mt-0.5">レベルごとに1回で持ち込める（チップにできる）金額の上限です（0 で上限なし）</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {BET_LEVELS.map((lv) => (

@@ -8,7 +8,8 @@ import { AI_LEVEL_NAMES, PCard, PokerTable, TableState, aiDecide, bestHandName, 
 /**
  * Web・アクティビティのポーカー（AIと1対1。メンバー画面の「ゲーム」タブで遊ぶ）。流れは cogs/poker.py の AI 対戦と同じ:
  * お互い同じチップから始め、決めたハンド数が終わったとき（どちらかのチップがなくなったらその時点）にチップが多い方の勝ち。
- * レベル4以上で賭けがONなら賭け金を払って始め、勝つと 賭け金×倍率、引き分けは返金。
+ * 賭けがONでレベル4以上なら、持ち込んだ通貨がそのままチップになる（AI も同じ額から始める）。
+ * 終了したとき・席を立ったときに残ったチップを通貨で受け取る。賭けなしのときは設定のチップで遊び、通貨は動かない。
  * 卓の状態（山札・AIの手札を含む）は web_casino_sessions にだけ置き、ブラウザには見せてよいものだけ返す。
  */
 
@@ -22,7 +23,10 @@ const BETTING = ['preflop', 'flop', 'turn', 'river'];
 interface PokerState {
   table: TableState;
   level: number;
+  /** 旧ルール（勝つと 賭け金×倍率）で始まった対戦の倍率。チップ＝通貨の対戦では使わない */
   mult: number;
+  /** チップ＝通貨（持ち込んだ額がそのままチップ）の対戦か */
+  chipMoney?: boolean;
   maxHands: number;
   blindUp: number;
   startChips: number;
@@ -89,22 +93,36 @@ async function settle(client: PoolClient, ctx: PlayContext, row: SessionRow, res
   const st = row.state;
   const t = st.table;
   const bet = Number(row.bet) || 0;
-  // 途中のハンドで出していたチップは、出した人に戻して比べる
+  const chipMoney = bet > 0 && !!st.chipMoney;
+  const me = t.players.find((p) => p.uid !== AI_UID)!;
+  const ai = t.players.find((p) => p.uid === AI_UID)!;
   if (t.street !== 'done' && t.street !== 'waiting') {
+    if (resigned && chipMoney) {
+      // チップ＝通貨で席を立った: 今のハンドに出したチップはフォールドしたものとして AI のもの
+      ai.stack += t.players.reduce((a, p) => a + p.totalIn, 0);
+    } else {
+      // 途中のハンドで出していたチップは、出した人に戻して比べる
+      for (const p of t.players) p.stack += p.totalIn;
+    }
     for (const p of t.players) {
-      p.stack += p.totalIn;
       p.totalIn = 0;
       p.bet = 0;
     }
   }
-  const me = t.players.find((p) => p.uid !== AI_UID)!;
-  const ai = t.players.find((p) => p.uid === AI_UID)!;
-  const result: FinalResult = resigned ? 'lose' : me.stack > ai.stack ? 'win' : me.stack < ai.stack ? 'lose' : 'draw';
+  let result: FinalResult;
   let payout = 0;
-  if (bet > 0) {
-    if (result === 'win') payout = Math.trunc(bet * st.mult);
-    else if (result === 'draw') payout = bet;
+  if (chipMoney) {
+    // 残ったチップをそのまま受け取る。持ち込んだ額より増えたら勝ち
+    result = me.stack > bet ? 'win' : me.stack < bet ? 'lose' : 'draw';
+    payout = me.stack;
     await addBalance(client, ctx.guildId, ctx.userId, payout);
+  } else {
+    result = resigned ? 'lose' : me.stack > ai.stack ? 'win' : me.stack < ai.stack ? 'lose' : 'draw';
+    if (bet > 0) {
+      if (result === 'win') payout = Math.trunc(bet * st.mult);
+      else if (result === 'draw') payout = bet;
+      await addBalance(client, ctx.guildId, ctx.userId, payout);
+    }
   }
   await recordGameResult(client, {
     guildId: ctx.guildId,
@@ -128,17 +146,19 @@ async function logPoker(ctx: PlayContext, bet: number, st: PokerState, f: Final)
     color: f.result === 'win' ? GOLD : f.result === 'draw' ? GREY : RED,
     fields: [
       { name: 'プレイヤー', value: `<@${ctx.userId}> (ID: ${ctx.userId})`, inline: true },
-      { name: '賭け金', value: money(bet), inline: true },
+      { name: st.chipMoney ? '持ち込み（チップ）' : '賭け金', value: money(bet), inline: true },
       {
         name: '結果',
-        value: f.result === 'win' ? '勝ち 🏆' : f.result === 'draw' ? '引き分け 🤝' : f.resigned ? '負け（降参） 💀' : '負け 💀',
+        value:
+          (f.result === 'win' ? '勝ち 🏆' : f.result === 'draw' ? '引き分け 🤝' : '負け 💀') +
+          (f.resigned ? (st.chipMoney ? '（途中で席を立った）' : '（降参）') : ''),
         inline: true,
       },
-      f.result === 'win'
-        ? { name: '獲得額 (配当)', value: `+${money(f.payout - bet)} (倍率: ${st.mult}倍)`, inline: true }
-        : f.result === 'draw'
+      f.payout - bet > 0
+        ? { name: '獲得額', value: `+${money(f.payout - bet)}`, inline: true }
+        : f.payout - bet === 0
           ? { name: '獲得額', value: '±0', inline: true }
-          : { name: '損失額', value: `-${money(bet)}`, inline: true },
+          : { name: '損失額', value: `-${money(bet - f.payout)}`, inline: true },
       { name: 'AIレベル', value: `Lv${st.level}（${AI_LEVEL_NAMES[st.level]}）`, inline: true },
       { name: '最終チップ', value: `あなた ${fmt(f.my_stack)} ／ AI ${fmt(f.ai_stack)}（${f.hands}ハンド）`, inline: false },
     ],
@@ -165,6 +185,7 @@ function view(id: string | null, bet: number, st: PokerState) {
     id,
     bet,
     mult: st.mult,
+    chip_money: bet > 0 && !!st.chipMoney,
     level: st.level,
     level_name: AI_LEVEL_NAMES[st.level],
     start_chips: st.startChips,
@@ -212,7 +233,6 @@ export function pokerInfo(ctx: PlayContext) {
     max_hands: p.maxHands,
     bet_enabled: p.betEnabled,
     bet_min_level: POKER_AI_BET_MIN_LEVEL,
-    ai_mult: p.aiMult,
     ai_max_bet: p.aiMaxBet,
     level_names: AI_LEVEL_NAMES,
   };
@@ -243,9 +263,11 @@ export async function poker(ctx: PlayContext, body: any) {
     let bet = 0;
     if (betting) {
       bet = body?.bet;
-      if (!Number.isSafeInteger(bet) || bet < 1) throw new CasinoError('賭け金は1以上の整数で入力してください');
+      if (!Number.isSafeInteger(bet) || bet < p.bb) {
+        throw new CasinoError(`持ち込む金額はビッグブラインド（${fmt(p.bb)}）以上の整数で入力してください`);
+      }
       const limit = p.aiMaxBet[level] ?? 0;
-      if (limit && bet > limit) throw new CasinoError(`レベル${level}の賭け金の上限は ${fmt(limit)} ${ctx.s.currencyName} です`);
+      if (limit && bet > limit) throw new CasinoError(`レベル${level}の持ち込みの上限は ${fmt(limit)} ${ctx.s.currencyName} です`);
     }
     const out = await withTransaction(ctx.pool, async (client) => {
       const existing = await loadSession(client, ctx, true);
@@ -256,18 +278,17 @@ export async function poker(ctx: PlayContext, body: any) {
         if ((Number(res.rows[0]?.balance) || 0) < bet) throw new CasinoError('残高が不足しています');
         await client.query('UPDATE users SET balance = balance - $1 WHERE guild_id = $2 AND user_id = $3', [bet, ctx.guildId, ctx.userId]);
       }
-      const table = newTable(
-        [newPlayer(ctx.userId, 'あなた', p.startChips), newPlayer(AI_UID, 'AI', p.startChips, true, level)],
-        p.sb,
-        p.bb
-      );
+      // 賭けるときは持ち込んだ額がそのままチップ（AI も同じ額）
+      const start = bet > 0 ? bet : p.startChips;
+      const table = newTable([newPlayer(ctx.userId, 'あなた', start), newPlayer(AI_UID, 'AI', start, true, level)], p.sb, p.bb);
       const st: PokerState = {
         table,
         level,
-        mult: bet > 0 ? p.aiMult[level] ?? 2 : 1,
+        mult: 1,
+        chipMoney: bet > 0,
         maxHands: p.maxHands,
         blindUp: p.blindUp,
-        startChips: p.startChips,
+        startChips: start,
       };
       const t = new PokerTable(table);
       t.startHand();

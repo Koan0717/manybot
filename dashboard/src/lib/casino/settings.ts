@@ -68,13 +68,12 @@ export interface CasinoSettings {
   /** ポーカー（AI対戦。メンバー画面の「ゲーム」タブで遊ぶ）。Bot と同じく「ゲーム設定 → ポーカー」の POKER_ の値を使う（cogs/poker.py の table_config） */
   poker: {
     startChips: number; sb: number; bb: number; blindUp: number; maxHands: number;
-    betEnabled: boolean; aiMult: Record<number, number>; aiMaxBet: Record<number, number>;
+    betEnabled: boolean; aiMaxBet: Record<number, number>;
   };
 }
 
-/** AI対戦で賭けられる最低レベルと、勝ったときの倍率の初期値（helpers.py と同じ） */
+/** AI対戦で賭けられる（チップ＝通貨になる）最低レベル（helpers.py と同じ） */
 export const POKER_AI_BET_MIN_LEVEL = 4;
-const POKER_AI_MULT_DEFAULT: Record<number, number> = { 4: 2, 5: 3, 6: 5 };
 
 export function parseEnabledGames(raw: unknown): Record<WebGame, boolean> {
   const value = parseValue(raw);
@@ -189,11 +188,8 @@ function pokerSettings(v: (key: string) => unknown): CasinoSettings['poker'] {
     return Math.max(lo, Math.min(hi, n));
   };
   const bb = int('BIG_BLIND', 20, 2, 1_000_000);
-  const aiMult: Record<number, number> = {};
   const aiMaxBet: Record<number, number> = {};
   for (const lv of [4, 5, 6]) {
-    const m = toNumber(v(`POKER_AI_MULT_${lv}`));
-    aiMult[lv] = m !== null && m >= 1 ? Math.min(100, m) : POKER_AI_MULT_DEFAULT[lv];
     const mb = Math.trunc(toNumber(v(`POKER_AI_MAX_BET_${lv}`)) ?? 0);
     aiMaxBet[lv] = mb > 0 ? mb : 0;
   }
@@ -205,7 +201,6 @@ function pokerSettings(v: (key: string) => unknown): CasinoSettings['poker'] {
     blindUp: int('BLIND_UP_HANDS', 0, 0, 1000),
     maxHands: int('AI_MAX_HANDS', 30, 0, 1000),
     betEnabled: betRaw === true || String(betRaw).toLowerCase() === 'true',
-    aiMult,
     aiMaxBet,
   };
 }

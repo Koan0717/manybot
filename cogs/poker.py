@@ -5,8 +5,10 @@ cogs/poker.py
 
 パネル
  ├ 👥 みんなで遊ぶ: 募集（ロビー）を作る → VCにいる人・招待した人などが参加（自分を含めて最大10人）→ 開始
- │                   賭けONなら全員が同じ参加費を払い、終了時に残ったチップの割合で精算
- ├ 🤖 AIと1対1:    DM で AI と対戦（レベル1〜6）。レベル4以上だけ賭けられる（勝つと 賭け金×倍率）
+ │                   賭けONなら全員が同じ参加費を払い、それがそのままチップになる（終了時に残ったチップを通貨で受け取る）
+ ├ 🤖 AIと1対1:    DM で AI と対戦（レベル1〜6）。賭けONでレベル4以上なら、持ち込んだ通貨がそのままチップになる
+ │                   （AI も同じ額から始め、終了時・席を立ったときに残ったチップを通貨で受け取る）
+ │                   賭けOFF・レベル3以下は設定のチップで遊び、通貨は動かない
  └ 📊 自分の戦績
 """
 import asyncio
@@ -17,7 +19,7 @@ from discord.ext import commands, tasks
 
 import database
 import poker_engine as pe
-from helpers import get_setting, create_game_stats_embed, AI_BET_MIN_LEVEL, ai_bet_multiplier, ai_bet_max, ai_bet_over_max_message, format_mult
+from helpers import get_setting, create_game_stats_embed, AI_BET_MIN_LEVEL, ai_bet_max, ai_bet_over_max_message
 
 PREFIX = "POKER"
 AI_UID = "ai"
@@ -79,15 +81,16 @@ async def _reply(interaction: discord.Interaction, msg: str, **kw):
 # 1つの卓
 # ============================================================
 class PokerGame:
-    def __init__(self, mode, guild_id, channel, players, cfg, buyin=0, host_id=None, ai_level=0, ai_mult=2.0):
+    def __init__(self, mode, guild_id, channel, players, cfg, buyin=0, host_id=None, ai_level=0):
         self.mode = mode                  # "ai" / "pvp"
         self.guild_id = guild_id
         self.channel = channel
         self.cfg = cfg
-        self.buyin = buyin                # 1人あたりの参加費（AI 戦は賭け金）
+        # 1人あたりの持ち込み（参加費）。0 でなければチップ＝通貨（持ち込んだ額がそのままチップになる）
+        self.buyin = buyin
+        self.start = buyin or cfg["start_chips"]  # 最初のチップ
         self.host_id = host_id
         self.ai_level = ai_level
-        self.ai_mult = ai_mult
         self.table = pe.PokerTable(players, cfg["sb"], cfg["bb"])
         self.message = None
         self.deadline = 0.0
@@ -163,7 +166,8 @@ def table_embed(game: PokerGame) -> discord.Embed:
         embed.add_field(name="直前の行動", value="\n".join(recent)[:1024], inline=False)
     footer = []
     if game.buyin:
-        footer.append(f"賭け金 {game.buyin:,} {_currency(game.guild_id)}" if game.mode == "ai" else f"参加費 {game.buyin:,} {_currency(game.guild_id)}")
+        cur = _currency(game.guild_id)
+        footer.append(f"チップ＝{cur}（{'持ち込み' if game.mode == 'ai' else '参加費'} {game.buyin:,} {cur}）")
     if game.max_hands:
         footer.append(f"{game.max_hands}ハンドで終了")
     if footer:
@@ -203,7 +207,7 @@ class TableView(discord.ui.View):
 
         if game.mode == "pvp":
             self._btn("🂠 手札を見る", discord.ButtonStyle.secondary, 0, self.show_hand)
-        self._btn("🚪 退席" if game.mode == "pvp" else "🏳️ 降参", discord.ButtonStyle.secondary, 0, self.leave)
+        self._btn("🚪 退席" if game.mode == "pvp" else ("🚪 席を立つ" if game.buyin else "🏳️ 降参"), discord.ButtonStyle.secondary, 0, self.leave)
         if game.mode == "pvp" and interaction_host_can_end(game):
             self._btn("⏹ このハンドで終了", discord.ButtonStyle.secondary, 0, self.end_after_hand)
         if not active:
@@ -258,8 +262,11 @@ class TableView(discord.ui.View):
         if not p or p.uid == AI_UID:
             return await interaction.response.send_message("この卓のプレイヤーではありません。", ephemeral=True)
         if g.mode == "ai":
-            note = "\n※賭け金は没収されます。" if g.buyin else ""
-            return await interaction.response.send_message(f"本当に降参しますか？AIの勝ちになります。{note}", view=ConfirmView(g, interaction.user.id), ephemeral=True)
+            if g.buyin:
+                return await interaction.response.send_message(
+                    f"席を立ちますか？今のハンドに出したチップは失い、残りのチップをそのまま {_currency(g.guild_id)} で受け取ります。",
+                    view=ConfirmView(g, interaction.user.id), ephemeral=True)
+            return await interaction.response.send_message("本当に降参しますか？AIの勝ちになります。", view=ConfirmView(g, interaction.user.id), ephemeral=True)
         await interaction.response.send_message(
             "退席しますか？今のハンドはフォールド扱いになり、ハンドが終わった時点のチップで精算します。",
             view=ConfirmView(g, interaction.user.id), ephemeral=True)
@@ -481,10 +488,10 @@ async def _next_hand_later(game: PokerGame):
 
 
 async def cash_out(game: PokerGame, p: pe.Player, note: str = ""):
-    """PvP: チップを参加費の割合で通貨に戻す（参加費なしならチップを消すだけ）"""
+    """PvP: 残ったチップをそのまま通貨に戻す（参加費なしならチップを消すだけ）"""
     chips = p.stack
     p.stack = 0
-    payout = chips * game.buyin // game.cfg["start_chips"] if game.buyin else 0
+    payout = chips if game.buyin else 0
     game.paid_out[p.uid] = game.paid_out.get(p.uid, 0) + payout
     if payout:
         try:
@@ -504,7 +511,7 @@ async def cash_out(game: PokerGame, p: pe.Player, note: str = ""):
 async def _record(game: PokerGame, uid, chips: int, payout: int):
     if not game.guild_id or uid == AI_UID:
         return
-    start = game.cfg["start_chips"]
+    start = game.start
     is_win, is_draw = chips > start, chips == start
     mode = "ai" if game.mode == "ai" else "pvp"
     try:
@@ -532,12 +539,20 @@ async def finish_game(game: PokerGame, resigned: bool = False):
     if game.mode == "ai":
         me = game.human()
         ai = game.player(AI_UID)
-        # 途中のハンドで出していたチップは、出した人に戻して比べる
         if t.street not in ("done", "waiting"):
+            if resigned and game.buyin:
+                # 通貨チップで席を立った: 今のハンドに出したチップはフォールドしたものとして AI のもの
+                ai.stack += t.pot()
+            else:
+                # 途中のハンドで出していたチップは、出した人に戻して比べる
+                for p in t.players:
+                    p.stack += p.total_in
             for p in t.players:
-                p.stack += p.total_in
                 p.total_in = 0
-        if resigned:
+        if game.buyin:
+            # 通貨チップ: 持ち込んだ額より増えたら勝ち
+            result = "win" if me.stack > game.buyin else "lose" if me.stack < game.buyin else "draw"
+        elif resigned:
             result = "lose"
         elif me.stack > ai.stack:
             result = "win"
@@ -546,30 +561,29 @@ async def finish_game(game: PokerGame, resigned: bool = False):
         else:
             result = "draw"
         lv = f"Lv{game.ai_level}（{LEVEL_NAMES.get(game.ai_level)}）"
+        left = "（途中で席を立ちました）" if resigned and game.buyin else "（降参）" if resigned else ""
         embed.description = {
-            "win": f"🏆🎉 **<@{me.uid}> の勝ち！** AI {lv} に勝利しました",
-            "lose": f"🤖 **AI {lv} の勝ち**" + ("（降参）" if resigned else "") + "\n次回のリベンジをお待ちしています！",
-            "draw": "🤝 **引き分け**",
+            "win": f"🏆🎉 **<@{me.uid}> の勝ち！** AI {lv} に勝利しました{left}",
+            "lose": f"🤖 **AI {lv} の勝ち**{left}\n次回のリベンジをお待ちしています！",
+            "draw": f"🤝 **引き分け**{left}",
         }[result]
         embed.add_field(name="最終チップ", value=f"あなた {me.stack:,} ／ AI {ai.stack:,}（{t.hand_no}ハンド）", inline=False)
         payout = 0
         if game.buyin:
-            if result == "win":
-                payout = int(game.buyin * game.ai_mult)
-                embed.add_field(name="💰 賭け精算", value=f"元金 **{game.buyin:,}** → **{payout:,} {cur}**（×{format_mult(game.ai_mult)}、+{payout - game.buyin:,}）", inline=False)
-            elif result == "draw":
-                payout = game.buyin
-                embed.add_field(name="💰 賭け精算", value=f"引き分けのため **{game.buyin:,} {cur}** 返金", inline=False)
-            else:
-                embed.add_field(name="💰 賭け精算", value=f"**{game.buyin:,} {cur}** 没収", inline=False)
+            # チップ＝通貨: 残ったチップをそのまま受け取る
+            payout = me.stack
+            diff = payout - game.buyin
+            embed.add_field(name="💰 精算", value=f"持ち込み **{game.buyin:,}** → **{payout:,} {cur}**（{'+' if diff >= 0 else ''}{diff:,}）", inline=False)
             if payout:
                 try:
                     await database.add_balance(game.guild_id, me.uid, payout)
                 except Exception as e:
                     print(f"[poker] AI payout failed: {e}")
-        start = game.cfg["start_chips"]
-        chips_for_record = start + 1 if result == "win" else (start if result == "draw" else start - 1)
-        await _record(game, me.uid, chips_for_record, payout)
+            await _record(game, me.uid, me.stack, payout)
+        else:
+            start = game.start
+            chips_for_record = start + 1 if result == "win" else (start if result == "draw" else start - 1)
+            await _record(game, me.uid, chips_for_record, payout)
     else:
         # 途中のハンドがあれば出したチップを戻す（強制終了のとき）
         if t.street not in ("done", "waiting"):
@@ -591,7 +605,7 @@ async def finish_game(game: PokerGame, resigned: bool = False):
             lines.append(f"{medal} <@{uid}>　チップ {chips:,}{money}")
         embed.description = f"{t.hand_no}ハンドで終了しました。\n\n" + "\n".join(lines)
         if game.buyin:
-            embed.set_footer(text=f"参加費 {game.buyin:,} {cur}。残ったチップの割合で精算しました（開始時のチップ {game.cfg['start_chips']:,} = 参加費）")
+            embed.set_footer(text=f"参加費 {game.buyin:,} {cur}。チップ＝{cur}なので、残ったチップをそのまま受け取りました")
     try:
         await game.channel.send(embed=embed)
     except Exception as e:
@@ -602,13 +616,13 @@ async def finish_game(game: PokerGame, resigned: bool = False):
 # AI 対戦の開始
 # ============================================================
 class BetModal(discord.ui.Modal):
-    bet_input = discord.ui.TextInput(label="賭ける金額", placeholder="例: 1000", max_length=12, required=True)
+    bet_input = discord.ui.TextInput(label="持ち込む金額（そのままチップになります）", placeholder="例: 1000", max_length=12, required=True)
 
-    def __init__(self, level: int, mult: float, max_bet: int):
-        super().__init__(title=f"ポーカー：賭け金（勝つと×{format_mult(mult)}）")
+    def __init__(self, level: int, max_bet: int):
+        super().__init__(title="ポーカー：持ち込む金額（チップ＝通貨）")
         self.level = level
         if max_bet:
-            self.bet_input.label = f"賭ける金額（上限 {max_bet:,}）"
+            self.bet_input.label = f"持ち込む金額（上限 {max_bet:,}・そのままチップに）"
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -637,9 +651,8 @@ class DifficultyView(discord.ui.View):
             guild_id = interaction.guild.id if interaction.guild else None
             cfg = table_config(guild_id)
             if level >= AI_BET_MIN_LEVEL and cfg["bet_enabled"]:
-                mult = ai_bet_multiplier(interaction.client, PREFIX, guild_id, level)
                 max_bet = ai_bet_max(interaction.client, PREFIX, guild_id, level)
-                await interaction.response.send_modal(BetModal(level, mult, max_bet))
+                await interaction.response.send_modal(BetModal(level, max_bet))
             else:
                 await interaction.response.defer(ephemeral=True)
                 await start_ai_game(interaction, level, 0)
@@ -656,6 +669,9 @@ async def start_ai_game(interaction: discord.Interaction, level: int, bet: int):
     over = ai_bet_over_max_message(interaction.client, PREFIX, guild_id, level, bet)
     if over:
         return await _reply(interaction, over)
+    cfg = table_config(guild_id)
+    if bet and bet < cfg["bb"]:
+        return await _reply(interaction, f"持ち込む金額はビッグブラインド（{cfg['bb']:,}）以上にしてください。")
     if bet > 0 and guild_id:
         if not await database.remove_balance(guild_id, user.id, bet):
             bal = await database.get_balance(guild_id, user.id)
@@ -666,20 +682,21 @@ async def start_ai_game(interaction: discord.Interaction, level: int, bet: int):
         if bet > 0 and guild_id:
             await database.add_balance(guild_id, user.id, bet)
         return await _reply(interaction, "DMを送れませんでした。BotからのDMを許可してください。")
-    cfg = table_config(guild_id)
-    mult = ai_bet_multiplier(interaction.client, PREFIX, guild_id, level)
+    start = bet or cfg["start_chips"]  # 賭けるときは持ち込んだ額がそのままチップ（AI も同じ額）
     players = [
-        pe.Player(user.id, getattr(user, "display_name", user.name), cfg["start_chips"]),
-        pe.Player(AI_UID, "AI", cfg["start_chips"], is_ai=True, ai_level=level),
+        pe.Player(user.id, getattr(user, "display_name", user.name), start),
+        pe.Player(AI_UID, "AI", start, is_ai=True, ai_level=level),
     ]
-    game = PokerGame("ai", guild_id, dm, players, cfg, buyin=bet, host_id=user.id, ai_level=level, ai_mult=mult)
+    game = PokerGame("ai", guild_id, dm, players, cfg, buyin=bet, host_id=user.id, ai_level=level)
     games[game.key()] = game
     hands = f"{cfg['ai_max_hands']}ハンド終了時にチップが多い方の勝ち（どちらかのチップがなくなったらその時点で終了）" if cfg["ai_max_hands"] else "どちらかのチップがなくなるまで"
-    bet_text = f"\n💰 賭け金 {bet:,} {_currency(guild_id)}（勝つと ×{format_mult(mult)}）" if bet else ""
+    cur = _currency(guild_id)
+    bet_text = (f"\n💰 チップ＝{cur}：持ち込んだ {bet:,} {cur} がそのままチップです。終了時（または席を立ったとき）に残ったチップを {cur} で受け取ります。"
+                if bet else "\n（賭けなし：チップは通貨に影響しません）")
     await _reply(interaction, f"✅ ポーカーのAI対戦（レベル{level}: {LEVEL_NAMES[level]}）を始めます！DMを確認してください。")
     try:
         await dm.send(f"🃏 **ポーカー AI対戦**（レベル{level}: {LEVEL_NAMES[level]}）\n"
-                      f"お互いチップ {cfg['start_chips']:,} から、{hands}。{bet_text}")
+                      f"お互いチップ {start:,} から、{hands}。{bet_text}")
     except discord.HTTPException:
         games.pop(game.key(), None)
         if bet > 0 and guild_id:
@@ -717,7 +734,7 @@ def lobby_embed(lb: Lobby) -> discord.Embed:
     e.description = (f"<@{lb.host_id}> がポーカーの卓を開きました！「✋ 参加する」で参加できます。\n"
                      f"（自分を含めて最大 {cfg['max_players']} 人。<t:{int(lb.created + LOBBY_LIMIT_SEC)}:R> に締め切り）")
     e.add_field(name=f"参加者（{len(lb.players)}/{cfg['max_players']}）", value="\n".join(f"・<@{u}>" + (" 👑" if u == lb.host_id else "") for u in lb.players), inline=False)
-    rules = f"チップ {cfg['start_chips']:,} から ／ ブラインド {cfg['sb']:,}/{cfg['bb']:,}"
+    rules = f"チップ {lb.buyin or cfg['start_chips']:,} から ／ ブラインド {cfg['sb']:,}/{cfg['bb']:,}"
     if cfg["blind_up"]:
         rules += f"（{cfg['blind_up']}ハンドごとに2倍）"
     if cfg["pvp_max_hands"]:
@@ -725,7 +742,9 @@ def lobby_embed(lb: Lobby) -> discord.Embed:
     rules += f" ／ 持ち時間 {cfg['turn_sec']}秒"
     e.add_field(name="ルール", value=rules, inline=False)
     if lb.buyin:
-        e.add_field(name="💰 参加費", value=f"**{lb.buyin:,} {cur}**（開始時に払います。終了時に残ったチップの割合で戻ります）", inline=False)
+        e.add_field(name="💰 参加費（チップ＝通貨）", value=f"**{lb.buyin:,} {cur}**（開始時に払い、そのままチップになります。終了時・退席時に残ったチップを {cur} で受け取ります）", inline=False)
+    else:
+        e.add_field(name="賭けなし", value="チップは通貨に影響しません", inline=False)
     return e
 
 
@@ -835,7 +854,7 @@ class InviteSelectView(discord.ui.View):
 
 
 class LobbyBuyinModal(discord.ui.Modal):
-    buyin_input = discord.ui.TextInput(label="参加費（全員同じ額）", placeholder="空欄・0 で賭けなし", max_length=12, required=False)
+    buyin_input = discord.ui.TextInput(label="参加費（全員同じ額・そのままチップに）", placeholder="空欄・0 で賭けなし", max_length=12, required=False)
 
     def __init__(self, max_buyin: int):
         super().__init__(title="ポーカー：参加費を決める")
@@ -853,6 +872,9 @@ class LobbyBuyinModal(discord.ui.Modal):
             return await interaction.response.send_message("0以上の金額を入力してください。", ephemeral=True)
         if self.max_buyin and buyin > self.max_buyin:
             return await interaction.response.send_message(f"参加費の上限は {self.max_buyin:,} です。", ephemeral=True)
+        bb = table_config(interaction.guild.id)["bb"]
+        if buyin and buyin < bb:
+            return await interaction.response.send_message(f"参加費はビッグブラインド（{bb:,}）以上にしてください。", ephemeral=True)
         await open_lobby(interaction, buyin)
 
 
@@ -925,7 +947,7 @@ async def start_pvp_game(lb: Lobby):
     players = []
     for uid in paid:
         m = guild.get_member(uid) if guild else None
-        players.append(pe.Player(uid, m.display_name if m else str(uid), cfg["start_chips"]))
+        players.append(pe.Player(uid, m.display_name if m else str(uid), lb.buyin or cfg["start_chips"]))
     game = PokerGame("pvp", lb.guild_id, lb.channel, players, cfg, buyin=lb.buyin, host_id=lb.host_id)
     games[game.key()] = game
     await lb.channel.send(f"🃏 **ポーカー開始！** {len(players)}人　（自分の手札は「🂠 手札を見る」で確認できます）")
