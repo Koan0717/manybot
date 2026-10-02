@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { ArrowLeft, Bot, Flag, Loader2, Search, Swords, Users } from 'lucide-react';
 import { getActivityContext, memberFetch } from '@/lib/memberClient';
 import { ChessBoardView, OthelloBoardView, ShogiBoardView } from './Boards';
+import Poker, { PokerInfo, PokerView } from './Poker';
 
 type GameKey = 'othello' | 'chess' | 'shogi';
 
@@ -42,6 +43,8 @@ export interface GamesInfo {
   mine: BoardGameView[];
   /** アクティビティを通話で開いているとき、その通話にいる人 */
   voice_peers?: Player[];
+  /** ポーカー（AI対戦）。Webアクティビティ設定でONのとき（または対戦の途中のとき） */
+  poker?: { info: PokerInfo; active: PokerView | null; balance: number } | null;
 }
 
 const GAME_META: Record<GameKey, { icon: string; label: string; sides: [string, string]; color: string }> = {
@@ -282,7 +285,18 @@ export default function Games({
   openGameId?: string | null;
   onOpened?: () => void;
 }) {
-  const [game, setGame] = useState<GameKey>(info.games[0]?.key ?? 'othello');
+  const [game, setGame] = useState<GameKey | 'poker'>(
+    info.poker?.active || (!info.games.length && info.poker) ? 'poker' : info.games[0]?.key ?? 'othello'
+  );
+  // ポーカーの対戦中は他のゲームに切り替えられないようにする
+  const [pokerLock, setPokerLock] = useState(false);
+  // 開いたときに進行中だった対戦。終わったら、戻ってきたときに古い卓を出さないよう消す
+  const [pokerResume, setPokerResume] = useState<PokerView | null>(info.poker?.active ?? null);
+  const [pokerBalance, setPokerBalance] = useState(info.poker?.balance ?? 0);
+  const onPokerLock = useCallback((locked: boolean) => {
+    setPokerLock(locked);
+    if (!locked) setPokerResume(null);
+  }, []);
   const [mine, setMine] = useState<BoardGameView[]>(info.mine);
   const [open, setOpen] = useState<BoardGameView | null>(null);
   const [level, setLevel] = useState(3);
@@ -415,12 +429,12 @@ export default function Games({
       ))}
 
       {/* ゲームを選ぶ */}
-      {info.games.length > 0 && (
-        <div className="grid grid-cols-3 gap-2">
+      {info.games.length + (info.poker ? 1 : 0) > 1 && (
+        <div className={`grid gap-2 ${info.games.length + (info.poker ? 1 : 0) >= 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
           {info.games.map((x) => (
             <button
               key={x.key}
-              onClick={() => setGame(x.key)}
+              onClick={() => !pokerLock && setGame(x.key)}
               className={`rounded-2xl border p-3 flex flex-col items-center gap-1 transition-all bg-gradient-to-br ${
                 game === x.key ? `${GAME_META[x.key].color} ring-2 ring-white/40` : 'from-zinc-900 to-zinc-900 border-zinc-800 opacity-70'
               }`}
@@ -429,10 +443,36 @@ export default function Games({
               <span className="text-sm font-bold">{x.label}</span>
             </button>
           ))}
+          {info.poker && (
+            <button
+              onClick={() => setGame('poker')}
+              className={`rounded-2xl border p-3 flex flex-col items-center gap-1 transition-all bg-gradient-to-br ${
+                game === 'poker' ? 'from-green-700/40 to-emerald-950/40 border-green-700/60 ring-2 ring-white/40' : 'from-zinc-900 to-zinc-900 border-zinc-800 opacity-70'
+              }`}
+            >
+              <span className="text-3xl leading-none">♠️</span>
+              <span className="text-sm font-bold">ポーカー</span>
+            </button>
+          )}
         </div>
       )}
 
-      {g && (
+      {game === 'poker' && info.poker && (
+        <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4">
+          <Poker
+            guildId={guildId}
+            info={info.poker.info}
+            initial={pokerResume}
+            cur={info.currency_name}
+            balance={pokerBalance}
+            onBalance={setPokerBalance}
+            onFinished={onChanged}
+            onLock={onPokerLock}
+          />
+        </div>
+      )}
+
+      {g && game !== 'poker' && (
         <>
           {/* AI対戦 */}
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 space-y-3">

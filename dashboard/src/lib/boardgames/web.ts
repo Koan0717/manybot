@@ -27,6 +27,8 @@ const INVITE_LIMIT_MIN = 10;
 export interface BoardGameSettings {
   currencyName: string;
   enabled: Record<BoardGame, boolean>;
+  /** ポーカー（AI対戦）を「ゲーム」タブで遊べるか。中身は lib/casino/poker.ts */
+  pokerEnabled: boolean;
   /** aiMult: AI に勝ったときの倍率（賭けられるのはレベル AI_BET_MIN_LEVEL 以上だけ） */
   /** aiMaxBet: AI対戦の賭け金上限（キーはレベル。0 は上限なし） */
   bet: Record<BoardGame, { enabled: boolean; aiMult: Record<number, number>; aiMaxBet: Record<number, number> }>;
@@ -68,6 +70,7 @@ export async function loadBoardGameSettings(pool: Pool, guildId: string): Promis
   return {
     currencyName: cur || 'コイン',
     enabled: Object.fromEntries(BOARD_GAMES.map((g) => [g, t(enabledRaw?.[g])])) as Record<BoardGame, boolean>,
+    pokerEnabled: t(enabledRaw?.poker),
     bet: Object.fromEntries(
       BOARD_GAMES.map((g) => {
         const P = g.toUpperCase();

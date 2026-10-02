@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { requireGuildMember } from '@/lib/memberAuth';
-import { CasinoError } from '@/lib/casino/db';
+import { CasinoError, ensureCasinoTables, getBalance } from '@/lib/casino/db';
+import { activePoker, pokerInfo, settleStalePoker } from '@/lib/casino/poker';
+import { loadCasinoSettings } from '@/lib/casino/settings';
 import { canUseFeature, getMemberFlags } from '@/lib/webAccess';
 import {
   BOARD_GAMES,
@@ -37,17 +39,27 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     await ensureBoardGameTable(pool);
     await expireGames(pool, guildId);
     const mine = await listGames(pool, guildId, session.discord_id);
+    // ポーカー（AI対戦）。進行中の対戦があれば続きから遊べるようにする
+    const ctx = { pool, s: await loadCasinoSettings(pool, guildId), guildId, userId: session.discord_id };
+    await ensureCasinoTables(pool);
+    await settleStalePoker(ctx);
+    const activeP = await activePoker(ctx);
+    const pokerOn = allowed && s.pokerEnabled;
     // アクティビティを通話で開いているときは、その通話にいる人（すぐ申し込めるように）
     const channelId = new URL(request.url).searchParams.get('channel_id');
     const peers = channelId ? await voicePeers(pool, guildId, channelId, session.discord_id) : [];
     // ゲームがOFFでも、始めてしまった対局は最後まで遊べるようにする
-    if (!games.length && !mine.some((g) => g.status === 'active')) return NextResponse.json({ enabled: false });
+    if (!games.length && !pokerOn && !activeP && !mine.some((g) => g.status === 'active')) return NextResponse.json({ enabled: false });
     return NextResponse.json({
       enabled: true,
       currency_name: s.currencyName,
       games: games.map((g) => ({ key: g, label: BOARD_GAME_LABEL[g], bet_enabled: s.bet[g].enabled, ai_mult: s.bet[g].aiMult, ai_max_bet: s.bet[g].aiMaxBet })),
       mine,
       voice_peers: peers,
+      poker:
+        pokerOn || activeP
+          ? { info: pokerInfo(ctx), active: activeP, balance: await getBalance(pool, guildId, session.discord_id) }
+          : null,
     });
   } catch (e) {
     console.error('boardgames list failed:', e);

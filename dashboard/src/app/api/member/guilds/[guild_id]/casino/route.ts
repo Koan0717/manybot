@@ -3,7 +3,6 @@ import { getPool } from '@/lib/db';
 import { requireGuildMember } from '@/lib/memberAuth';
 import { ensureCasinoTables, getPlayerStatus } from '@/lib/casino/db';
 import { HORSE_LIST, activeBlackjack, activeHighLow, highLowMuls, settleStaleBlackjack, settleStaleHighLow } from '@/lib/casino/games';
-import { activePoker, pokerInfo, settleStalePoker } from '@/lib/casino/poker';
 import { WEB_GAMES, WEB_GAME_LABEL, loadCasinoSettings } from '@/lib/casino/settings';
 import { canUseFeature, getMemberFlags } from '@/lib/webAccess';
 
@@ -28,12 +27,10 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
     const ctx = { pool, s, guildId, userId: session.discord_id };
     await settleStaleBlackjack(ctx);
     await settleStaleHighLow(ctx);
-    await settleStalePoker(ctx);
-    const [status, blackjack, highlow, poker] = await Promise.all([
+    const [status, blackjack, highlow] = await Promise.all([
       getPlayerStatus(pool, guildId, session.discord_id),
       activeBlackjack(ctx),
       activeHighLow(ctx),
-      activePoker(ctx),
     ]);
 
     return NextResponse.json({
@@ -53,8 +50,6 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
       // ゲームがOFFにされても、始めてしまったブラックジャックは最後まで遊べるようにする
       active_blackjack: blackjack,
       active_highlow: highlow,
-      poker: pokerInfo(ctx),
-      active_poker: poker,
     });
   } catch (e) {
     console.error('casino info failed:', e);
