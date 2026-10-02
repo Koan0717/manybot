@@ -275,6 +275,7 @@ class EconomyBot(commands.Bot):
             "cogs.board_games",
             "cogs.invite_link",
             "cogs.role_history",
+            "cogs.vc_float",
         ]
         for cog in cogs_to_load:
             try:

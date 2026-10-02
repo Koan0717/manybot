@@ -119,6 +119,7 @@ export default function DashboardLayout({
         { label: '評価落ちVCアクセス制御', path: `/dashboard/${guildId}/room-access`, roles: ['admin', 'subadmin'], icon: ShieldOff, group: '評価鯖' },
         { label: 'VCトリガー設定', path: `/dashboard/${guildId}/vc-triggers`, roles: ['admin', 'subadmin'], icon: Zap, group: '雑談鯖' },
         { label: 'VCコイン獲得制限', path: `/dashboard/${guildId}/vc-coins`, roles: ['admin', 'subadmin'], icon: Timer, group: '評価鯖' },
+        { label: 'VC浮上報酬', path: `/dashboard/${guildId}/vc-float`, roles: ['admin', 'subadmin'], icon: Gift, group: '評価鯖' },
       ],
     },
     {

@@ -116,6 +116,15 @@ class IPC(commands.Cog):
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload vc_coins settings: {e}")
 
+                        elif panel_type == "reload_vc_float":
+                            try:
+                                cog = self.bot.get_cog("VCFloat")
+                                if cog:
+                                    await cog.reload_settings(guild_id)
+                                print(f"[IPC] Reloaded vc_float settings for guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to reload vc_float settings: {e}")
+
                         elif panel_type == "reload_call_board":
                             try:
                                 print(f"[IPC] Processed reload_call_board for guild {guild_id}")
