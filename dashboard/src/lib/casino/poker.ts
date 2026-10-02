@@ -6,7 +6,7 @@ import type { PlayContext } from './games';
 import { AI_LEVEL_NAMES, PCard, PokerTable, TableState, aiDecide, bestHandName, newPlayer, newTable } from '@/lib/poker/engine';
 
 /**
- * Web・アクティビティのポーカー（AIと1対1）。流れは cogs/poker.py の AI 対戦と同じ:
+ * Web・アクティビティのポーカー（AIと1対1。メンバー画面の「ゲーム」タブで遊ぶ）。流れは cogs/poker.py の AI 対戦と同じ:
  * お互い同じチップから始め、決めたハンド数が終わったとき（どちらかのチップがなくなったらその時点）にチップが多い方の勝ち。
  * レベル4以上で賭けがONなら賭け金を払って始め、勝つと 賭け金×倍率、引き分けは返金。
  * 卓の状態（山札・AIの手札を含む）は web_casino_sessions にだけ置き、ブラウザには見せてよいものだけ返す。

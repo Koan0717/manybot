@@ -17,7 +17,6 @@ const GAMES = [
   { key: 'chinchiro', label: '🎲 チンチロリン', desc: 'サイコロの役でBotと勝負' },
   { key: 'horse', label: '🏇 競馬', desc: '単勝・複勝で馬券を買う' },
   { key: 'highlow', label: '🃏 High & Low', desc: '次のカードが大きいか小さいかを当てて連勝を狙う' },
-  { key: 'poker', label: '♠️ ポーカー', desc: 'テキサスホールデムでAIと1対1（レベル1〜6）。チップ・ブラインド・賭けは「ゲーム設定 → ポーカー」の設定を使う' },
 ] as const;
 type GameKey = (typeof GAMES)[number]['key'];
 type Enabled = Record<GameKey, boolean>;
@@ -30,11 +29,12 @@ const allAllowed = (): RoleAccess => ({
   downgrade: { casino: true, shop: true, gacha: true, games: true },
   violator: { casino: true, shop: true, gacha: true, games: true },
 });
-// lib/boardgames/web.ts の BOARD_GAMES と同じ
+// lib/boardgames/web.ts の BOARD_GAMES と同じ（poker は lib/casino/poker.ts）
 const BOARD_GAMES = [
   { key: 'othello', label: '⚫ オセロ', desc: 'AI対戦（6段階）・メンバー同士の対戦' },
   { key: 'chess', label: '♟️ チェス', desc: 'AI対戦（6段階）・メンバー同士の対戦' },
   { key: 'shogi', label: '☗ 将棋', desc: 'AI対戦（6段階）・メンバー同士の対戦' },
+  { key: 'poker', label: '♠️ ポーカー', desc: 'テキサスホールデムでAIと1対1（6段階）。みんなで遊ぶ対戦はDiscordのみ' },
 ] as const;
 type BoardGameKey = (typeof BOARD_GAMES)[number]['key'];
 const ROLE_GROUPS = [
@@ -63,7 +63,7 @@ export default function WebActivitySettingsPage() {
   const [enabled, setEnabled] = useState<Enabled>(allOff);
   const [shopEnabled, setShopEnabled] = useState(false);
   const [gachaEnabled, setGachaEnabled] = useState(false);
-  const [boardGames, setBoardGames] = useState<Record<BoardGameKey, boolean>>({ othello: false, chess: false, shogi: false });
+  const [boardGames, setBoardGames] = useState<Record<BoardGameKey, boolean>>({ othello: false, chess: false, shogi: false, poker: false });
   const [roleAccess, setRoleAccess] = useState<RoleAccess>(allAllowed);
   // 「基本・評価設定」のロール（役職タブ・利用制限の判定に使う。ここでは表示だけ）
   const [baseRoles, setBaseRoles] = useState<Record<string, string[]>>({});
@@ -85,7 +85,7 @@ export default function WebActivitySettingsPage() {
         setShopEnabled(data?.WEB_SHOP_ENABLED === true);
         setGachaEnabled(data?.WEB_GACHA_ENABLED === true);
         const bg = data?.WEB_BOARDGAMES_ENABLED && typeof data.WEB_BOARDGAMES_ENABLED === 'object' ? data.WEB_BOARDGAMES_ENABLED : {};
-        setBoardGames({ othello: bg.othello === true, chess: bg.chess === true, shogi: bg.shogi === true });
+        setBoardGames(Object.fromEntries(BOARD_GAMES.map((g) => [g.key, bg[g.key] === true])) as Record<BoardGameKey, boolean>);
         const toIds = (v: unknown) => (Array.isArray(v) ? v.map(String) : v ? [String(v)] : []);
         setBaseRoles(Object.fromEntries(BASE_ROLE_SETTINGS.map((b) => [b.key, toIds(data?.[b.key])])));
         const ra = data?.WEB_ROLE_ACCESS && typeof data.WEB_ROLE_ACCESS === 'object' ? data.WEB_ROLE_ACCESS : {};
@@ -250,7 +250,7 @@ export default function WebActivitySettingsPage() {
         className="bg-gray-800/50 border border-cyan-500/20 p-6 rounded-xl space-y-2"
       >
         <div className="border-b border-cyan-500/20 pb-4 mb-2">
-          <h2 className="text-xl font-semibold text-cyan-300">🎮 ゲーム（ボードゲーム）</h2>
+          <h2 className="text-xl font-semibold text-cyan-300">🎮 ゲーム（ボードゲーム・ポーカー）</h2>
           <p className="text-xs text-gray-500 mt-1">
             ONにしたゲームが、メンバー画面の「ゲーム」タブで遊べます（AI対戦・メンバー同士の対戦）。賭けの有無・金額・戦績ボタンは
             <Link href={`/dashboard/${guildId}/games`} className="text-cyan-400 hover:underline mx-1">ゲーム設定</Link>
@@ -353,9 +353,6 @@ export default function WebActivitySettingsPage() {
         <Link href={`/dashboard/${guildId}/gambling`} className="text-cyan-400 hover:underline mx-1">ギャンブル設定</Link>
         の値を使います。1日の回数と賭け金の上限は、パネルで遊んだ分と合算されます。
         結果は「ログ出力設定」の「賭博・カジノ機能の利用」のチャンネルに送られます。
-        ポーカーだけは
-        <Link href={`/dashboard/${guildId}/games/poker`} className="text-cyan-400 hover:underline mx-1">ゲーム設定 → ポーカー</Link>
-        のチップ・ブラインド・ハンド数・賭けの有無・レベルごとの倍率と上限を使い、Discordのポーカーと戦績が共通です（Webで遊べるのはAI対戦のみ）。
       </div>
     </div>
   );

@@ -119,7 +119,7 @@ export default function Poker({
   info,
   initial,
   cur,
-  balance,
+  balance: initialBalance,
   onBalance,
   onFinished,
   onLock,
@@ -134,6 +134,7 @@ export default function Poker({
   onLock: (locked: boolean) => void;
 }) {
   const [game, setGame] = useState<PokerView | null>(initial);
+  const [balance, setBalance] = useState(initialBalance);
   const [level, setLevel] = useState(3);
   const [betText, setBetText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -158,7 +159,7 @@ export default function Poker({
   const betValid = !betting || (Number.isInteger(bet) && bet >= 1 && bet <= maxAllowed);
 
   const post = async (body: object): Promise<PokerView & { balance: number; resumed?: boolean } | null> => {
-    const res = await memberFetch(`/api/member/guilds/${guildId}/casino/poker`, {
+    const res = await memberFetch(`/api/member/guilds/${guildId}/poker`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -181,6 +182,7 @@ export default function Poker({
       const [data] = await Promise.all([post(body), aiMayAct ? sleep(700) : Promise.resolve()]);
       if (!alive.current || !data) return;
       setGame(data);
+      setBalance(data.balance);
       onBalance(data.balance);
       if (data.resumed) toast('進行中のゲームの続きです');
       if (data.finished) onFinished();
