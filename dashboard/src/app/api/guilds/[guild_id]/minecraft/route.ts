@@ -12,6 +12,7 @@ import {
   getMinecraftServer,
   hashApiKey,
   isServerOnline,
+  listListings,
   postToChannel,
 } from '@/lib/minecraft';
 
@@ -31,7 +32,7 @@ export async function GET(_request: Request, { params }: { params: { guild_id: s
     const pool = await getPool(guildId);
     await ensureMinecraftGuildSchema(pool);
 
-    const [links, events, transactions, currencyName] = await Promise.all([
+    const [links, events, transactions, currencyName, listings] = await Promise.all([
       pool.query(
         `SELECT user_id::text AS user_id, mc_name, linked_at FROM minecraft_links WHERE guild_id = $1 ORDER BY linked_at DESC LIMIT 200`,
         [guildId]
@@ -43,6 +44,7 @@ export async function GET(_request: Request, { params }: { params: { guild_id: s
         [guildId]
       ),
       getCurrencyName(pool, guildId),
+      listListings(pool, guildId),
     ]);
 
     // 連携済みメンバーの表示名（多すぎるとDiscordのレート制限に当たるので先頭だけ）
@@ -66,6 +68,7 @@ export async function GET(_request: Request, { params }: { params: { guild_id: s
             trade_log_channel_id: server.trade_log_channel_id ?? '',
             allow_pay: server.allow_pay,
             allow_sell: server.allow_sell,
+            allow_market: server.allow_market,
             sell_prices: server.sell_prices,
             api_key_hint: server.api_key_hint,
           }
@@ -88,6 +91,7 @@ export async function GET(_request: Request, { params }: { params: { guild_id: s
       links: links.rows.map((l) => ({ ...l, display_name: names.get(l.user_id) ?? null })),
       events: events.rows,
       transactions: transactions.rows,
+      listings,
     });
   } catch (error: any) {
     console.error('GET minecraft settings failed:', error);
@@ -117,7 +121,7 @@ function parseSellPrices(raw: unknown): SellPrice[] | null {
 /**
  * POST /api/guilds/[guild_id]/minecraft
  * action:
- *  - save: 設定を保存 { is_enabled, join_leave_channel_id, trade_log_channel_id, allow_pay, allow_sell, sell_prices }
+ *  - save: 設定を保存 { is_enabled, join_leave_channel_id, trade_log_channel_id, allow_pay, allow_sell, allow_market, sell_prices }
  *  - regenerate_key: APIキーを（再）発行。平文はこのレスポンスでしか返さない
  *  - test_log: { channel_id } にテストメッセージを送る
  *  - unlink: { user_id } のプレイヤー連携を解除
@@ -150,8 +154,8 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
         return NextResponse.json({ error: '売却価格の設定が不正です（アイテムIDは minecraft:diamond の形、価格は1以上の整数）' }, { status: 400 });
       }
       await masterPool.query(
-        `INSERT INTO minecraft_servers (guild_id, is_enabled, join_leave_channel_id, trade_log_channel_id, allow_pay, allow_sell, sell_prices)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+        `INSERT INTO minecraft_servers (guild_id, is_enabled, join_leave_channel_id, trade_log_channel_id, allow_pay, allow_sell, sell_prices, allow_market)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
          ON CONFLICT (guild_id) DO UPDATE SET
            is_enabled = EXCLUDED.is_enabled,
            join_leave_channel_id = EXCLUDED.join_leave_channel_id,
@@ -159,6 +163,7 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
            allow_pay = EXCLUDED.allow_pay,
            allow_sell = EXCLUDED.allow_sell,
            sell_prices = EXCLUDED.sell_prices,
+           allow_market = EXCLUDED.allow_market,
            updated_at = NOW()`,
         [
           guildId,
@@ -168,6 +173,7 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
           body.allow_pay !== false,
           body.allow_sell !== false,
           JSON.stringify(sellPrices),
+          body.allow_market !== false,
         ]
       );
       return NextResponse.json({ success: true });

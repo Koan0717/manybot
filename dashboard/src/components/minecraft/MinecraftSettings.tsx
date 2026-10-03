@@ -43,6 +43,7 @@ interface McData {
     trade_log_channel_id: string;
     allow_pay: boolean;
     allow_sell: boolean;
+    allow_market: boolean;
     sell_prices: SellPrice[];
     api_key_hint: string | null;
   } | null;
@@ -70,6 +71,15 @@ interface McData {
     balance_after: string | null;
     created_at: string;
   }[];
+  listings: {
+    id: string;
+    seller_user_id: string;
+    seller_mc_name: string;
+    item: string;
+    quantity: number;
+    unit_price: number;
+    created_at: string;
+  }[];
 }
 
 const KIND_LABEL: Record<string, string> = {
@@ -77,6 +87,8 @@ const KIND_LABEL: Record<string, string> = {
   pay_out: '送金（送った）',
   pay_in: '送金（受け取った）',
   adjust: 'アドオンからの増減',
+  market_sell: 'マーケットで売れた',
+  market_buy: 'マーケットで購入',
 };
 
 type Level = 'ok' | 'warn' | 'error' | 'off';
@@ -150,6 +162,7 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
     trade_log_channel_id: '',
     allow_pay: true,
     allow_sell: true,
+    allow_market: true,
     sell_prices: [] as { item: string; label: string; price: string }[],
   });
 
@@ -167,6 +180,7 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
             trade_log_channel_id: d.settings.trade_log_channel_id || '',
             allow_pay: d.settings.allow_pay,
             allow_sell: d.settings.allow_sell,
+            allow_market: d.settings.allow_market !== false,
             sell_prices: (d.settings.sell_prices || []).map((p: SellPrice) => ({ item: p.item, label: p.label ?? '', price: String(p.price) })),
           });
         }
@@ -525,26 +539,36 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
           </div>
           <div className="flex items-center justify-between gap-4 bg-black/30 border border-zinc-800 rounded-lg p-3">
             <div>
-              <div className="text-sm text-zinc-200">アイテム売却・ショップ</div>
-              <div className="font-tech text-[11px] text-zinc-500">下の価格で通貨に換えます（/manybot:sell・ショップ画面）</div>
+              <div className="text-sm text-zinc-200">サーバーに即売り（/manybot:sell）</div>
+              <div className="font-tech text-[11px] text-zinc-500">下の値段でサーバーがアイテムをすぐ買います</div>
             </div>
             <Toggle checked={form.allow_sell} onChange={(v) => setForm({ ...form, allow_sell: v })} />
+          </div>
+          <div className="flex items-center justify-between gap-4 bg-black/30 border border-zinc-800 rounded-lg p-3 md:col-span-2">
+            <div>
+              <div className="text-sm text-zinc-200">マーケット（売却＝出品 / 買取＝購入）</div>
+              <div className="font-tech text-[11px] text-zinc-500">
+                売却 /manybot:shopsell で出品（何を・何個・1個いくら）、買取 /manybot:shopbuy で出品者を選んで購入。代金は鯖内通貨で出品者に入ります
+              </div>
+            </div>
+            <Toggle checked={form.allow_market} onChange={(v) => setForm({ ...form, allow_market: v })} />
           </div>
         </div>
 
         <div>
-          <div className="text-sm font-bold text-zinc-200 mb-2">売却価格（1個あたり・{data?.currency_name ?? 'コイン'}）</div>
+          <div className="text-sm font-bold text-zinc-200 mb-2">サーバー即売りの値段（1個あたり・{data?.currency_name ?? 'コイン'}）</div>
           <div className="bg-zinc-950/60 border border-zinc-800 rounded-lg p-3 mb-3 text-xs text-zinc-400 space-y-1 leading-relaxed">
             <p className="font-bold text-zinc-200 flex items-center gap-1.5">
               <Info className="w-4 h-4 text-cyan-400" /> ゲーム内ショップ
             </p>
             <p>
-              <code className="text-cyan-300">/manybot:shop</code> か、専用アイテム「ショップ端末」を使うとショップ画面が開き、ここに登録したアイテムを選んで売却できます。
+              <code className="text-cyan-300">/manybot:shop</code> か、専用アイテム「ショップ端末」を使うと、ショップのメニュー（売却・買取・自分の出品・サーバーに即売り）が開きます。
+              「サーバーに即売り」には、ここに登録したアイテムがこの値段で並びます。
             </p>
             <p>
               ショップ端末は <code className="text-cyan-300">/manybot:shopitem</code> でもらえます。使い方は PC は右クリック、スマホ・タブレットは長押し、Switch・PS・Xbox は使用ボタンです。
             </p>
-            <p>「表示名」はショップのボタンに表示される名前です（空欄ならアイテムID）。</p>
+            <p>「表示名」はサーバーに即売りの画面に表示される名前です（空欄ならゲームの言語のアイテム名）。</p>
           </div>
           <div className="space-y-2">
             {form.sell_prices.map((p, i) => (
@@ -600,6 +624,26 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
         </div>
 
         {saveButton}
+      </div>
+
+      <div className="mecha-clip bg-neutral-900/80 border border-zinc-800/80 p-6">
+        <div className="text-sm font-bold text-zinc-200 mb-3">マーケットに出品中（{data?.listings.length ?? 0}件）</div>
+        {data && data.listings.length > 0 ? (
+          <div className="divide-y divide-zinc-800">
+            {data.listings.map((l) => (
+              <div key={l.id} className="flex items-center gap-3 py-2 text-xs">
+                <span className="text-zinc-200 w-32 truncate">{l.seller_mc_name}</span>
+                <span className="font-mono text-zinc-300 flex-1 truncate">{l.item}</span>
+                <span className="text-zinc-400">×{l.quantity.toLocaleString()}</span>
+                <span className="text-amber-300 w-36 text-right">
+                  1個 {l.unit_price.toLocaleString()} {data.currency_name}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="font-tech text-xs text-zinc-500">出品はありません</div>
+        )}
       </div>
 
       <div className="mecha-clip bg-neutral-900/80 border border-zinc-800/80 p-6">

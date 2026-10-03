@@ -14,7 +14,7 @@ import { botRequest } from '@/lib/discordApi';
  */
 
 /** リポジトリ内の minecraft-addon/ の最新バージョン（アドオンが送ってくる値と比べて「更新あり」を出す） */
-export const LATEST_ADDON_VERSION = '1.1.0';
+export const LATEST_ADDON_VERSION = '1.2.0';
 
 /** ハートビートがこれより古ければ「オフライン」扱い（アドオンは60秒ごとに送る） */
 export const HEARTBEAT_TIMEOUT_MS = 3 * 60 * 1000;
@@ -39,6 +39,7 @@ export interface MinecraftServerRow {
   trade_log_channel_id: string | null;
   allow_pay: boolean;
   allow_sell: boolean;
+  allow_market: boolean;
   sell_prices: SellPrice[];
   server_name: string | null;
   addon_version: string | null;
@@ -66,6 +67,7 @@ export function ensureMinecraftMasterSchema(): Promise<void> {
           trade_log_channel_id VARCHAR(50),
           allow_pay BOOLEAN NOT NULL DEFAULT TRUE,
           allow_sell BOOLEAN NOT NULL DEFAULT TRUE,
+          allow_market BOOLEAN NOT NULL DEFAULT TRUE,
           sell_prices JSONB NOT NULL DEFAULT '[]',
           server_name TEXT,
           addon_version TEXT,
@@ -78,6 +80,8 @@ export function ensureMinecraftMasterSchema(): Promise<void> {
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `)
+      // 後から追加したカラム
+      .then(() => masterPool.query('ALTER TABLE minecraft_servers ADD COLUMN IF NOT EXISTS allow_market BOOLEAN NOT NULL DEFAULT TRUE'))
       .then(() => undefined)
       .catch((e) => {
         masterEnsured = null; // 次のリクエストでやり直す
@@ -128,6 +132,19 @@ export async function ensureMinecraftGuildSchema(pool: Pool): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_minecraft_events_guild ON minecraft_events (guild_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS minecraft_listings (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id BIGINT NOT NULL,
+      seller_user_id BIGINT NOT NULL,
+      seller_mc_name TEXT NOT NULL,
+      item TEXT NOT NULL,
+      name_key TEXT,
+      quantity INT NOT NULL CHECK (quantity > 0),
+      unit_price BIGINT NOT NULL CHECK (unit_price > 0),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_minecraft_listings_guild ON minecraft_listings (guild_id, seller_user_id);
   `);
   guildEnsured.add(pool);
 }
@@ -149,6 +166,7 @@ function toServerRow(r: any): MinecraftServerRow {
     trade_log_channel_id: r.trade_log_channel_id ?? null,
     allow_pay: r.allow_pay !== false,
     allow_sell: r.allow_sell !== false,
+    allow_market: r.allow_market !== false,
     sell_prices: Array.isArray(r.sell_prices) ? r.sell_prices : [],
     server_name: r.server_name ?? null,
     addon_version: r.addon_version ?? null,
@@ -163,7 +181,7 @@ function toServerRow(r: any): MinecraftServerRow {
 }
 
 const SERVER_COLUMNS = `guild_id, api_key_hint, is_enabled, join_leave_channel_id, trade_log_channel_id,
-  allow_pay, allow_sell, sell_prices, server_name, addon_version, addon_info, online_players, max_players,
+  allow_pay, allow_sell, allow_market, sell_prices, server_name, addon_version, addon_info, online_players, max_players,
   last_heartbeat_at, last_event_at, created_at, updated_at`;
 
 export async function getMinecraftServer(guildId: string): Promise<MinecraftServerRow | null> {
@@ -336,4 +354,39 @@ export const MC_TX_KIND_LABEL: Record<string, string> = {
   pay_out: '送金（送った）',
   pay_in: '送金（受け取った）',
   adjust: 'アドオンからの増減',
+  market_sell: 'マーケットで売れた',
+  market_buy: 'マーケットで購入',
 };
+
+// ------------------------------------------------------------
+// マーケット（プレイヤー同士の出品・購入）
+// ------------------------------------------------------------
+
+/** 1人が同時に出せる出品の数 */
+export const MAX_LISTINGS_PER_PLAYER = 20;
+/** 1回の出品の最大個数（インベントリ全部 = 36枠 × 64） */
+export const MAX_LISTING_QUANTITY = 64 * 36;
+
+export const ITEM_TYPE_ID = /^[a-z0-9_.\-]+:[a-z0-9_.\-/]+$/;
+
+export interface Listing {
+  id: string;
+  seller_user_id: string;
+  seller_mc_name: string;
+  item: string;
+  name_key: string | null;
+  quantity: number;
+  unit_price: number;
+  created_at: string;
+}
+
+export async function listListings(pool: Pool, guildId: string, sellerUserId?: string): Promise<Listing[]> {
+  const r = await pool.query(
+    `SELECT id::text, seller_user_id::text, seller_mc_name, item, name_key, quantity, unit_price::text AS unit_price, created_at
+     FROM minecraft_listings
+     WHERE guild_id = $1 AND ($2::bigint IS NULL OR seller_user_id = $2)
+     ORDER BY seller_mc_name, created_at`,
+    [guildId, sellerUserId ?? null]
+  );
+  return r.rows.map((x) => ({ ...x, quantity: Number(x.quantity), unit_price: Number(x.unit_price) }));
+}

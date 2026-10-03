@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     ok: true,
     guild_id: guildId,
     currency_name: await getCurrencyName(pool, guildId),
-    features: { pay: server.allow_pay, sell: server.allow_sell },
+    features: { pay: server.allow_pay, sell: server.allow_sell, market: server.allow_market },
     sell_prices: server.sell_prices,
     join_leave_log: !!server.join_leave_channel_id,
   });
