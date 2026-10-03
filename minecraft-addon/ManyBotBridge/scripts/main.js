@@ -28,7 +28,7 @@ import { http, HttpRequest, HttpHeader, HttpRequestMethod } from '@minecraft/ser
 import { secrets, variables } from '@minecraft/server-admin';
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from '@minecraft/server-ui';
 
-const ADDON_VERSION = '1.3.0';
+const ADDON_VERSION = '1.3.1';
 const SCRIPT_API_VERSION = '2.0.0';
 const HEARTBEAT_TICKS = 20 * 60;
 const PREFIX = '§a[ManyBot]§r ';
@@ -132,6 +132,7 @@ world.afterEvents.playerSpawn.subscribe(async (ev) => {
 });
 
 world.afterEvents.playerLeave.subscribe((ev) => {
+  lastCombat.delete(ev.playerId);
   api('POST', '/api/minecraft/events', { type: 'leave', player: ev.playerName, online: onlineNames(ev.playerName) });
 });
 
@@ -771,9 +772,36 @@ async function openProfile(player) {
   later(() => openTerminal(player));
 }
 
+// ---------------- 戦闘中のテレポート禁止 ----------------
+
+/** 直近この時間内に戦闘（プレイヤー・モブを攻撃した／された）があればロビーへテレポートできない */
+const COMBAT_COOLDOWN_MS = 15_000;
+const lastCombat = new Map(); // player.id → 最後に戦闘した時刻
+
+const isPlayer = (e) => !!e && e.typeId === 'minecraft:player';
+
+// 攻撃した側・された側のどちらかがプレイヤーなら、そのプレイヤーを「戦闘中」にする。
+// 落下・溶岩など相手のいないダメージは戦闘に数えない（弓などの飛び道具は撃った本人が damagingEntity になる）
+world.afterEvents.entityHurt.subscribe((ev) => {
+  const victim = ev.hurtEntity;
+  const attacker = ev.damageSource?.damagingEntity;
+  if (!attacker || attacker === victim) return;
+  const now = Date.now();
+  try {
+    if (isPlayer(victim)) lastCombat.set(victim.id, now);
+    if (isPlayer(attacker)) lastCombat.set(attacker.id, now);
+  } catch {}
+});
+
+function inCombat(player) {
+  const t = lastCombat.get(player.id);
+  return t !== undefined && Date.now() - t < COMBAT_COOLDOWN_MS;
+}
+
 function teleportLobby(player) {
   const lobby = remote.lobby;
   if (!lobby) return say(player, '§cロビーが設定されていません（ダッシュボードの「ロビー設定」）');
+  if (inCombat(player)) return say(player, '§c戦闘中はテレポートできません。15秒後にまたお試しください。');
   later(() => {
     if (!player.isValid) return;
     try {
