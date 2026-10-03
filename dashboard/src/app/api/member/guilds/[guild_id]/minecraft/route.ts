@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { jsonError, requireGuildMember } from '@/lib/memberAuth';
-import { ensureMinecraftGuildSchema, getMinecraftServer, isServerOnline } from '@/lib/minecraft';
+import { discordStatusOf, ensureMinecraftGuildSchema, getMinecraftServer, isServerOnline, saveDiscordStatus } from '@/lib/minecraft';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +44,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
 export async function POST(request: Request, { params }: { params: { guild_id: string } }) {
   const access = await requireGuildMember(request, params.guild_id);
   if (!access.ok) return access.response;
-  const { guildId, session } = access;
+  const { guildId, session, member } = access;
 
   const body = await request.json().catch(() => null);
   const code = typeof body?.code === 'string' ? body.code.replace(/\s/g, '') : '';
@@ -77,7 +77,16 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
       [guildId, session.discord_id, mcName, mcName.toLowerCase()]
     );
     await client.query('COMMIT');
-    return NextResponse.json({ success: true, link: { mc_name: mcName, linked_at: new Date().toISOString() } });
+    // 連携した時点のロールを記録する。運営管理者ロールがあれば、マイクラ側でOPが付く（アドオンのハートビートで反映）
+    let isStaff = false;
+    try {
+      const st = await discordStatusOf(guildId, member);
+      await saveDiscordStatus(pool, guildId, session.discord_id, st);
+      isStaff = st.is_staff;
+    } catch (e) {
+      console.error('minecraft link role check failed:', e);
+    }
+    return NextResponse.json({ success: true, is_staff: isStaff, link: { mc_name: mcName, linked_at: new Date().toISOString() } });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('member minecraft link failed:', e);

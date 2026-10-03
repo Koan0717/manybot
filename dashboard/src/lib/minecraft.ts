@@ -2,7 +2,8 @@ import crypto from 'crypto';
 import type { Pool, PoolClient } from 'pg';
 import { NextResponse } from 'next/server';
 import { masterPool, getPool } from '@/lib/db';
-import { botRequest } from '@/lib/discordApi';
+import { DiscordApiError, DiscordGuildMember, DiscordRole, botRequest, memberDisplayName } from '@/lib/discordApi';
+import { isGuildAdmin } from '@/lib/memberAdmin';
 
 /**
  * マイクラ（統合版 / Bedrock Dedicated Server）連携。
@@ -14,7 +15,7 @@ import { botRequest } from '@/lib/discordApi';
  */
 
 /** リポジトリ内の minecraft-addon/ の最新バージョン（アドオンが送ってくる値と比べて「更新あり」を出す） */
-export const LATEST_ADDON_VERSION = '1.2.0';
+export const LATEST_ADDON_VERSION = '1.3.0';
 
 /** ハートビートがこれより古ければ「オフライン」扱い（アドオンは60秒ごとに送る） */
 export const HEARTBEAT_TIMEOUT_MS = 3 * 60 * 1000;
@@ -23,6 +24,16 @@ export const HEARTBEAT_TIMEOUT_MS = 3 * 60 * 1000;
 export const MAX_MC_AMOUNT = 1_000_000_000;
 
 const LINK_CODE_TTL_MIN = 10;
+
+export interface Lobby {
+  x: number;
+  y: number;
+  z: number;
+  /** minecraft:overworld / minecraft:nether / minecraft:the_end */
+  dimension: string;
+}
+
+export const LOBBY_DIMENSIONS = ['minecraft:overworld', 'minecraft:nether', 'minecraft:the_end'] as const;
 
 export interface SellPrice {
   item: string;
@@ -41,6 +52,7 @@ export interface MinecraftServerRow {
   allow_sell: boolean;
   allow_market: boolean;
   sell_prices: SellPrice[];
+  lobby: Lobby | null;
   server_name: string | null;
   addon_version: string | null;
   addon_info: Record<string, unknown>;
@@ -82,6 +94,7 @@ export function ensureMinecraftMasterSchema(): Promise<void> {
       `)
       // 後から追加したカラム
       .then(() => masterPool.query('ALTER TABLE minecraft_servers ADD COLUMN IF NOT EXISTS allow_market BOOLEAN NOT NULL DEFAULT TRUE'))
+      .then(() => masterPool.query('ALTER TABLE minecraft_servers ADD COLUMN IF NOT EXISTS lobby JSONB'))
       .then(() => undefined)
       .catch((e) => {
         masterEnsured = null; // 次のリクエストでやり直す
@@ -145,6 +158,14 @@ export async function ensureMinecraftGuildSchema(pool: Pool): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_minecraft_listings_guild ON minecraft_listings (guild_id, seller_user_id);
+    -- 連携時・参加時に取り直すDiscord側の情報と、OPの反映状況（後から追加したカラム）
+    ALTER TABLE minecraft_links ADD COLUMN IF NOT EXISTS discord_name TEXT;
+    ALTER TABLE minecraft_links ADD COLUMN IF NOT EXISTS role_names JSONB NOT NULL DEFAULT '[]';
+    ALTER TABLE minecraft_links ADD COLUMN IF NOT EXISTS is_staff BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE minecraft_links ADD COLUMN IF NOT EXISTS in_guild BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE minecraft_links ADD COLUMN IF NOT EXISTS roles_checked_at TIMESTAMPTZ;
+    ALTER TABLE minecraft_links ADD COLUMN IF NOT EXISTS op_status TEXT;
+    ALTER TABLE minecraft_links ADD COLUMN IF NOT EXISTS op_reported_at TIMESTAMPTZ;
   `);
   guildEnsured.add(pool);
 }
@@ -167,6 +188,7 @@ function toServerRow(r: any): MinecraftServerRow {
     allow_pay: r.allow_pay !== false,
     allow_sell: r.allow_sell !== false,
     allow_market: r.allow_market !== false,
+    lobby: parseLobby(r.lobby),
     sell_prices: Array.isArray(r.sell_prices) ? r.sell_prices : [],
     server_name: r.server_name ?? null,
     addon_version: r.addon_version ?? null,
@@ -181,7 +203,7 @@ function toServerRow(r: any): MinecraftServerRow {
 }
 
 const SERVER_COLUMNS = `guild_id, api_key_hint, is_enabled, join_leave_channel_id, trade_log_channel_id,
-  allow_pay, allow_sell, allow_market, sell_prices, server_name, addon_version, addon_info, online_players, max_players,
+  allow_pay, allow_sell, allow_market, sell_prices, lobby, server_name, addon_version, addon_info, online_players, max_players,
   last_heartbeat_at, last_event_at, created_at, updated_at`;
 
 export async function getMinecraftServer(guildId: string): Promise<MinecraftServerRow | null> {
@@ -262,6 +284,66 @@ export async function requireAddon(request: Request): Promise<AddonAuth> {
   } catch (e) {
     console.error('requireAddon failed:', e);
     return { ok: false, response: addonError('サーバー内部エラー', 500) };
+  }
+}
+
+export function parseLobby(raw: any): Lobby | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const [x, y, z] = [Number(raw.x), Number(raw.y), Number(raw.z)];
+  if (![x, y, z].every(Number.isFinite)) return null;
+  const dimension = (LOBBY_DIMENSIONS as readonly string[]).includes(raw.dimension) ? raw.dimension : 'minecraft:overworld';
+  return { x, y, z, dimension };
+}
+
+// ------------------------------------------------------------
+// Discordのロール・運営かどうか（OPの付与に使う）
+// ------------------------------------------------------------
+
+export interface DiscordStatus {
+  in_guild: boolean;
+  is_staff: boolean;
+  discord_name: string | null;
+  role_names: string[];
+}
+
+/** メンバー情報から、表示名・ロール名（上位順）・運営（基本・評価設定の「運営管理者ロール」）を出す */
+export async function discordStatusOf(guildId: string, member: DiscordGuildMember, roles?: DiscordRole[]): Promise<DiscordStatus> {
+  const allRoles = roles ?? (await botRequest<DiscordRole[]>(`/guilds/${guildId}/roles`));
+  const held = allRoles
+    .filter((r) => member.roles.includes(r.id))
+    .sort((a, b) => b.position - a.position)
+    .map((r) => r.name);
+  return { in_guild: true, is_staff: await isGuildAdmin(guildId, member), discord_name: memberDisplayName(member), role_names: held };
+}
+
+/** Discordから取り直す。サーバーにいなければ in_guild=false・運営ではない扱い */
+export async function fetchDiscordStatus(guildId: string, userId: string, roles?: DiscordRole[]): Promise<DiscordStatus> {
+  try {
+    const member = await botRequest<DiscordGuildMember>(`/guilds/${guildId}/members/${userId}`);
+    return await discordStatusOf(guildId, member, roles);
+  } catch (e) {
+    if (e instanceof DiscordApiError && e.status === 404) return { in_guild: false, is_staff: false, discord_name: null, role_names: [] };
+    throw e;
+  }
+}
+
+export async function saveDiscordStatus(pool: Pool | PoolClient, guildId: string, userId: string, st: DiscordStatus) {
+  await pool.query(
+    `UPDATE minecraft_links SET in_guild = $3, is_staff = $4, discord_name = COALESCE($5, discord_name), role_names = $6::jsonb, roles_checked_at = NOW()
+     WHERE guild_id = $1 AND user_id = $2`,
+    [guildId, userId, st.in_guild, st.is_staff, st.discord_name, JSON.stringify(st.role_names.slice(0, 50))]
+  );
+}
+
+/** Discordから取り直して保存する。失敗したら前回の保存内容のまま（null） */
+export async function refreshDiscordStatus(pool: Pool, guildId: string, userId: string): Promise<DiscordStatus | null> {
+  try {
+    const st = await fetchDiscordStatus(guildId, userId);
+    await saveDiscordStatus(pool, guildId, userId, st);
+    return st;
+  } catch (e) {
+    console.error('refreshDiscordStatus failed:', e);
+    return null;
   }
 }
 

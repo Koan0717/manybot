@@ -4,11 +4,14 @@
 // - ワールドへの参加・退出をダッシュボードに送り、設定したDiscordチャンネルにログを流す
 // - マイクラ内の通貨は Discord サーバーの通貨（ManyBot の所持金）そのもの。
 //   /manybot:link で Discord と連携し、/manybot:balance・/manybot:pay・/manybot:sell で使う
-// - ショップ: /manybot:shop か、専用アイテム「ショップ端末」を使う（PCは右クリック・スマホは長押し・
-//   それ以外は使用ボタン）とメニューが開く。端末は /manybot:shopitem でもらえる
+// - 情報端末（/manybot:terminal でもらえる）を使う（PCは右クリック・スマホは長押し・それ以外は使用ボタン）と
+//   プロフィール・ショップ・ロビーへテレポートのメニューが開く
+// - ショップ（/manybot:shop）
 //   - 売却（出品・/manybot:shopsell）と 買取（プレイヤーの出品を買う・/manybot:shopbuy）。代金は鯖内通貨
 //   - サーバーに即売り: ダッシュボードで決めた値段でサーバーがすぐ買う（/manybot:sell）
 // - コマンドブロックや他のアドオンからは /scriptevent manybot:adjust {"player":"名前","amount":100,"reason":"クエスト報酬"}
+//
+// - Discordの「運営管理者ロール」を持つ人として連携しているプレイヤーには OP を付ける（外れたら外す）
 //
 // 設定は BDS の config/default/variables.json（manybot_url）と secrets.json（manybot_api_key）に置く。
 
@@ -25,7 +28,7 @@ import { http, HttpRequest, HttpHeader, HttpRequestMethod } from '@minecraft/ser
 import { secrets, variables } from '@minecraft/server-admin';
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from '@minecraft/server-ui';
 
-const ADDON_VERSION = '1.2.0';
+const ADDON_VERSION = '1.3.0';
 const SCRIPT_API_VERSION = '2.0.0';
 const HEARTBEAT_TICKS = 20 * 60;
 const PREFIX = '§a[ManyBot]§r ';
@@ -51,7 +54,7 @@ function loadConfig() {
 }
 
 // ダッシュボードから受け取った設定（ハートビートの返り値）
-let remote = { currency_name: 'コイン', features: { pay: true, sell: true, market: true }, sell_prices: [] };
+let remote = { currency_name: 'コイン', features: { pay: true, sell: true, market: true }, sell_prices: [], lobby: null, operators: null };
 
 // ------------------------------------------------------------
 // HTTP
@@ -99,7 +102,10 @@ async function heartbeat() {
       currency_name: res.currency_name ?? remote.currency_name,
       features: res.features ?? remote.features,
       sell_prices: Array.isArray(res.sell_prices) ? res.sell_prices : remote.sell_prices,
+      lobby: res.lobby ?? null,
+      operators: Array.isArray(res.operators) ? res.operators : null,
     };
+    syncAllOperators();
   } else {
     console.warn(`[ManyBot] heartbeat failed: ${res.error}`);
   }
@@ -117,6 +123,7 @@ world.afterEvents.playerSpawn.subscribe(async (ev) => {
   const name = player.name;
   const res = await api('POST', '/api/minecraft/events', { type: 'join', player: name, online: onlineNames() });
   if (!res.ok) return;
+  if (typeof res.is_staff === 'boolean') syncOperator(player, res.is_staff);
   if (res.linked && res.balance != null) {
     say(player, `おかえりなさい！ 所持金: §e${fmt(res.balance)} ${res.currency_name ?? remote.currency_name}`);
   } else if (!res.linked) {
@@ -170,18 +177,22 @@ async function cmdPay(player, to, amount) {
 // インベントリ
 // ------------------------------------------------------------
 
-// ショップ端末の目印（説明文の最後の行）。名前は金床で変えられても説明文は変えられない
-const SHOP_ITEM_TYPE = 'minecraft:compass';
-const SHOP_ITEM_MARKER = '§r§8manybot:shop';
+// 情報端末の目印（説明文の最後の行）。名前は金床で変えられても説明文は変えられない。
+// 以前配った「ショップ端末」（manybot:shop）も情報端末として使える
+const TERMINAL_TYPE = 'minecraft:compass';
+const TERMINAL_MARKER = '§r§8manybot:terminal';
+const LEGACY_SHOP_MARKER = '§r§8manybot:shop';
 
-function isShopItem(item) {
-  return !!item && item.typeId === SHOP_ITEM_TYPE && item.getLore().includes(SHOP_ITEM_MARKER);
+function isTerminal(item) {
+  if (!item || item.typeId !== TERMINAL_TYPE) return false;
+  const lore = item.getLore();
+  return lore.includes(TERMINAL_MARKER) || lore.includes(LEGACY_SHOP_MARKER);
 }
 
-function createShopItem() {
-  const item = new ItemStack(SHOP_ITEM_TYPE, 1);
-  item.nameTag = '§a§lManyBot ショップ端末';
-  item.setLore(['§7右クリック / 長押し / 使用ボタンで', '§7ショップを開きます', SHOP_ITEM_MARKER]);
+function createTerminal() {
+  const item = new ItemStack(TERMINAL_TYPE, 1);
+  item.nameTag = '§b§l情報端末';
+  item.setLore(['§7右クリック / 長押し / 使用ボタンで', '§7プロフィール・ショップ・ロビーへ', TERMINAL_MARKER]);
   item.keepOnDeath = true;
   return item;
 }
@@ -192,7 +203,7 @@ const NOT_LISTABLE = /(shulker_box|bundle|potion|tipped_arrow|firework_rocket|fi
 
 /** 出品できる「ふつうの」アイテムか（名前・説明文・エンチャント・耐久の減りがなく、スタックできる） */
 function isPlain(item) {
-  if (!item || isShopItem(item) || item.nameTag || item.getLore().length > 0) return false;
+  if (!item || isTerminal(item) || item.nameTag || item.getLore().length > 0) return false;
   if (item.maxAmount <= 1 || NOT_LISTABLE.test(item.typeId)) return false;
   try {
     if (item.getComponent('minecraft:enchantable')?.getEnchantments().length) return false;
@@ -205,12 +216,12 @@ function inventoryOf(player) {
   return player.getComponent('minecraft:inventory')?.container;
 }
 
-/** インベントリにある typeId の個数（ショップ端末は数えない。plainOnly なら出品できるものだけ） */
+/** インベントリにある typeId の個数（情報端末は数えない。plainOnly なら出品できるものだけ） */
 function countItem(container, typeId, plainOnly = false) {
   let n = 0;
   for (let i = 0; i < container.size; i++) {
     const it = container.getItem(i);
-    if (it && it.typeId === typeId && !isShopItem(it) && (!plainOnly || isPlain(it))) n += it.amount;
+    if (it && it.typeId === typeId && !isTerminal(it) && (!plainOnly || isPlain(it))) n += it.amount;
   }
   return n;
 }
@@ -224,7 +235,7 @@ function takeItems(container, typeId, n, { preferSlot, plainOnly = false } = {})
   for (const i of slots) {
     if (left <= 0) break;
     const it = container.getItem(i);
-    if (!it || it.typeId !== typeId || isShopItem(it) || (plainOnly && !isPlain(it))) continue;
+    if (!it || it.typeId !== typeId || isTerminal(it) || (plainOnly && !isPlain(it))) continue;
     const k = Math.min(left, it.amount);
     const copy = it.clone();
     copy.amount = k;
@@ -388,11 +399,12 @@ async function openShop(player) {
   }
   if (actions.length === 0) return say(player, '§cこのサーバーではショップがOFFになっています');
 
-  const form = new ActionFormData().title('§lManyBot ショップ').body(balanceLine(bal));
+  const form = new ActionFormData().title('§lショップ').body(balanceLine(bal));
   for (const [text, icon] of actions) form.button(text, icon);
-  form.button('§c閉じる');
+  form.button('§7情報端末へ');
   const sel = picked(await showForm(player, form));
-  if (sel !== null && sel < actions.length) later(actions[sel][2]);
+  if (sel === null) return;
+  later(sel < actions.length ? actions[sel][2] : () => openTerminal(player));
 }
 
 // ---------------- 出品 ----------------
@@ -666,7 +678,7 @@ function cmdSell(player, count) {
   later(() => {
     const container = inventoryOf(player);
     const item = container?.getItem(player.selectedSlotIndex);
-    if (!item || isShopItem(item)) return say(player, '§c売りたいアイテムを手に持ってください（/manybot:shop でショップも開けます）');
+    if (!item || isTerminal(item)) return say(player, '§c売りたいアイテムを手に持ってください（/manybot:shop でショップも開けます）');
     sellItems(player, item.typeId, count ?? countItem(container, item.typeId), player.selectedSlotIndex);
   });
 }
@@ -704,27 +716,161 @@ async function openServerBuyback(player) {
   later(() => sellItems(player, entry.item, options[a]));
 }
 
-// ---------------- ショップ端末 ----------------
+// ---------------- 情報端末 ----------------
 
-function giveShopItem(player) {
+/** 情報端末のメニュー: プロフィール / ショップ / ロビーへテレポート */
+async function openTerminal(player) {
+  const bal = await getBalance(player);
+  const actions = [
+    ['§lプロフィール§r\n§7Discordとの連携・所持金・ロール', 'textures/ui/icon_steve', () => openProfile(player)],
+    ['§lショップ§r\n§7売却・買取・自分の出品', 'textures/items/emerald', () => openShop(player)],
+  ];
+  if (remote.lobby) actions.push(['§lロビーへテレポート§r\n§7ロビーに戻ります', 'textures/items/ender_pearl', () => teleportLobby(player)]);
+  const form = new ActionFormData().title('§l情報端末').body(`§f${player.name}§r\n${balanceLine(bal)}`);
+  for (const [text, icon] of actions) form.button(text, icon);
+  form.button('§c閉じる');
+  const sel = picked(await showForm(player, form));
+  if (sel !== null && sel < actions.length) later(actions[sel][2]);
+}
+
+async function openProfile(player) {
+  const p = await api('GET', `/api/minecraft/profile?player=${encodeURIComponent(player.name)}`);
+  const form = new ActionFormData().title('§lプロフィール');
+  if (!p.ok) {
+    form.body(`§c${p.error}`);
+  } else if (!p.linked) {
+    form.body(
+      [
+        `マイクラ: §f${player.name}`,
+        '§rDiscord: §cまだ連携していません',
+        '',
+        '§7下の「Discordと連携する」でコードを出し、Webのメンバー画面（プロフィール → マイクラ連携）に入力してください。',
+        '§7連携すると、サーバーの通貨をマイクラ内で使えるようになります。',
+      ].join('\n')
+    );
+    form.button('§aDiscordと連携する', 'textures/ui/icon_book_writable');
+  } else {
+    const lines = [
+      `マイクラ: §f${p.mc_name}`,
+      `§rDiscord: §f${p.discord_name ?? p.discord_id}${p.in_guild ? '' : ' §c（サーバーにいません）'}`,
+      `§r所持金: §e${fmt(p.balance)} ${p.currency_name}`,
+      `§rテキストレベル: §fLv.${p.tc.level} §7(${fmt(p.tc.xp)}/${fmt(p.tc.next_xp)} XP)`,
+      `§rボイスレベル: §fLv.${p.vc.level} §7(${fmt(p.vc.xp)}/${fmt(p.vc.next_xp)} XP)`,
+      `§r出品中: §f${p.listings}件`,
+      `§r権限: ${p.is_staff ? '§6運営（OP）' : '§fメンバー'}`,
+      `§rロール: §7${p.roles.length ? p.roles.join('、') : 'なし'}`,
+      p.linked_at ? `§r連携日: §7${new Date(p.linked_at).toLocaleDateString('ja-JP')}` : '',
+    ];
+    form.body(lines.filter(Boolean).join('\n'));
+  }
+  form.button('§7情報端末へ');
+  const res = await showForm(player, form);
+  const sel = picked(res);
+  if (sel === null) return;
+  if (p.ok && !p.linked && sel === 0) return cmdLink(player);
+  later(() => openTerminal(player));
+}
+
+function teleportLobby(player) {
+  const lobby = remote.lobby;
+  if (!lobby) return say(player, '§cロビーが設定されていません（ダッシュボードの「ロビー設定」）');
+  later(() => {
+    if (!player.isValid) return;
+    try {
+      player.teleport({ x: lobby.x, y: lobby.y, z: lobby.z }, { dimension: world.getDimension(lobby.dimension || 'minecraft:overworld') });
+      say(player, 'ロビーにテレポートしました');
+    } catch (e) {
+      say(player, `§cテレポートできませんでした（${e}）`);
+    }
+  });
+}
+
+function giveTerminal(player) {
   later(() => {
     const container = inventoryOf(player);
     if (!container) return;
     for (let i = 0; i < container.size; i++) {
-      if (isShopItem(container.getItem(i))) return say(player, 'ショップ端末はもう持っています');
+      if (isTerminal(container.getItem(i))) return say(player, '情報端末はもう持っています');
     }
-    giveBack(player, [createShopItem()]);
-    say(player, '§aショップ端末§rを渡しました。右クリック（スマホは長押し・それ以外は使用ボタン）でショップが開きます');
+    giveBack(player, [createTerminal()]);
+    say(player, '§b情報端末§rを渡しました。右クリック（スマホは長押し・それ以外は使用ボタン）でメニューが開きます');
   });
 }
 
-// ショップ端末を使ったら（右クリック / 長押し / 使用ボタン）ショップを開く。コンパス本来の動作は止める
+// 情報端末を使ったら（右クリック / 長押し / 使用ボタン）メニューを開く。コンパス本来の動作は止める
 world.beforeEvents.itemUse.subscribe((ev) => {
-  if (!isShopItem(ev.itemStack)) return;
+  if (!isTerminal(ev.itemStack)) return;
   ev.cancel = true;
   const player = ev.source;
-  later(() => openShop(player));
+  later(() => openTerminal(player));
 });
+
+// ---------------- OP（運営管理者ロール） ----------------
+
+const OP_PROP = 'manybot:op_granted'; // アドオンが付けたOPか（自分で付けたものだけ外す）
+const opReported = new Map(); // プレイヤー名 → 最後にダッシュボードへ送った状態（変わったときだけ送る）
+
+function isOperator(player) {
+  try {
+    if (typeof player.isOp === 'function') return player.isOp();
+  } catch {}
+  try {
+    if (player.commandPermissionLevel !== undefined) return player.commandPermissionLevel >= CommandPermissionLevel.GameDirectors;
+  } catch {}
+  return false;
+}
+
+/** OPを付ける・外す。このバージョンのBDSで付けられなければ false */
+function setOperator(player, on) {
+  try {
+    if (typeof player.setOp === 'function') player.setOp(on);
+    else if (player.commandPermissionLevel !== undefined) {
+      player.commandPermissionLevel = on ? CommandPermissionLevel.GameDirectors : CommandPermissionLevel.Any;
+    }
+  } catch (e) {
+    console.warn(`[ManyBot] OPを変更できませんでした (${player.name}): ${e}`);
+  }
+  return isOperator(player) === on;
+}
+
+function reportOp(player, status) {
+  if (opReported.get(player.name) === status) return;
+  opReported.set(player.name, status);
+  api('POST', '/api/minecraft/op', { player: player.name, status });
+}
+
+/** 運営なら OP を付け、運営でなくなったら（アドオンが付けた）OP を外す */
+function syncOperator(player, shouldBeOp) {
+  later(() => {
+    if (!player.isValid) return;
+    const grantedByUs = player.getDynamicProperty(OP_PROP) === true;
+    if (shouldBeOp) {
+      if (isOperator(player)) return reportOp(player, 'granted');
+      if (setOperator(player, true)) {
+        player.setDynamicProperty(OP_PROP, true);
+        reportOp(player, 'granted');
+        say(player, '§6運営ロールを確認したので、OP権限を付与しました');
+      } else {
+        reportOp(player, 'unsupported');
+        console.warn(`[ManyBot] ${player.name} は運営ですが、このBDSではスクリプトからOPを付けられません。コンソールで op "${player.name}" を実行してください`);
+      }
+    } else if (grantedByUs) {
+      if (setOperator(player, false)) {
+        player.setDynamicProperty(OP_PROP, false);
+        reportOp(player, 'revoked');
+        say(player, '§7運営ロールが外れたため、OP権限を外しました');
+      } else {
+        reportOp(player, 'failed');
+      }
+    }
+  });
+}
+
+function syncAllOperators() {
+  if (!remote.operators) return;
+  const ops = new Set(remote.operators.map((n) => n.toLowerCase()));
+  for (const p of world.getAllPlayers()) syncOperator(p, ops.has(p.name.toLowerCase()));
+}
 
 system.beforeEvents.startup.subscribe((init) => {
   const reg = init.customCommandRegistry;
@@ -804,12 +950,42 @@ system.beforeEvents.startup.subscribe((init) => {
       return ok();
     }
   );
+  // 情報端末をもらう（/manybot:shopitem は以前の名前。そのまま使えるように残す）
+  for (const name of ['manybot:terminal', 'manybot:shopitem']) {
+    reg.registerCommand(
+      { name, description: '情報端末（プロフィール・ショップ・ロビーへ）をもらいます', permissionLevel: CommandPermissionLevel.Any },
+      (origin) => {
+        const p = asPlayer(origin);
+        if (!p) return playerOnly();
+        giveTerminal(p);
+        return ok();
+      }
+    );
+  }
   reg.registerCommand(
-    { name: 'manybot:shopitem', description: 'ショップを開く専用アイテム「ショップ端末」をもらいます', permissionLevel: CommandPermissionLevel.Any },
+    { name: 'manybot:menu', description: '情報端末のメニューを開きます', permissionLevel: CommandPermissionLevel.Any },
     (origin) => {
       const p = asPlayer(origin);
       if (!p) return playerOnly();
-      giveShopItem(p);
+      later(() => openTerminal(p));
+      return ok();
+    }
+  );
+  reg.registerCommand(
+    { name: 'manybot:profile', description: 'プロフィール（Discordとの連携・所持金・ロール）を表示します', permissionLevel: CommandPermissionLevel.Any },
+    (origin) => {
+      const p = asPlayer(origin);
+      if (!p) return playerOnly();
+      later(() => openProfile(p));
+      return ok();
+    }
+  );
+  reg.registerCommand(
+    { name: 'manybot:lobby', description: 'ロビーにテレポートします', permissionLevel: CommandPermissionLevel.Any },
+    (origin) => {
+      const p = asPlayer(origin);
+      if (!p) return playerOnly();
+      teleportLobby(p);
       return ok();
     }
   );

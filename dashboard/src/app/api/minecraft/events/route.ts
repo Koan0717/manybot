@@ -7,6 +7,7 @@ import {
   getCurrencyName,
   normalizePlayerName,
   postToChannel,
+  refreshDiscordStatus,
   requireAddon,
 } from '@/lib/minecraft';
 
@@ -58,11 +59,21 @@ export async function POST(request: Request) {
   });
 
   if (join && link) {
-    const [balance, currency] = await Promise.all([
+    // 参加のたびにDiscordのロールを取り直す（運営ロールを外された人のOPも次のハートビートで外れる）
+    const [balance, currency, status] = await Promise.all([
       getBalance(pool, guildId, link.user_id).catch(() => null),
       getCurrencyName(pool, guildId),
+      refreshDiscordStatus(pool, guildId, link.user_id),
     ]);
-    return NextResponse.json({ ok: true, linked: true, balance, currency_name: currency });
+    // Discordに聞けなかったときは前回保存した状態で判断する
+    let isStaff = status ? status.is_staff && status.in_guild : null;
+    if (isStaff === null) {
+      const r = await pool
+        .query('SELECT is_staff AND in_guild AS staff FROM minecraft_links WHERE guild_id = $1 AND user_id = $2', [guildId, link.user_id])
+        .catch(() => null);
+      isStaff = r?.rows[0]?.staff ?? null;
+    }
+    return NextResponse.json({ ok: true, linked: true, balance, currency_name: currency, is_staff: isStaff });
   }
   return NextResponse.json({ ok: true, linked: !!link });
 }

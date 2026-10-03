@@ -41,8 +41,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: '保存に失敗しました' }, { status: 500 });
   }
 
+  // オンラインのプレイヤーのうち、運営（運営管理者ロール持ち・サーバーに在籍）として連携している人。アドオンがOPを付ける
+  let operators: string[] = [];
+  if (players.length > 0) {
+    try {
+      const r = await pool.query(
+        'SELECT mc_name FROM minecraft_links WHERE guild_id = $1 AND mc_name_lower = ANY($2::text[]) AND is_staff AND in_guild',
+        [guildId, players.map((p) => p.toLowerCase())]
+      );
+      operators = r.rows.map((x) => x.mc_name);
+    } catch (e) {
+      console.error('minecraft heartbeat operators failed:', e);
+    }
+  }
+
   return NextResponse.json({
     ok: true,
+    lobby: server.lobby,
+    operators,
     guild_id: guildId,
     currency_name: await getCurrencyName(pool, guildId),
     features: { pay: server.allow_pay, sell: server.allow_sell, market: server.allow_market },

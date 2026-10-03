@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import ChannelSelect from '@/components/ChannelSelect';
+import MinecraftMembers from '@/components/minecraft/MinecraftMembers';
 
 interface SellPrice {
   item: string;
@@ -44,6 +45,7 @@ interface McData {
     allow_pay: boolean;
     allow_sell: boolean;
     allow_market: boolean;
+    lobby: { x: number; y: number; z: number; dimension: string } | null;
     sell_prices: SellPrice[];
     api_key_hint: string | null;
   } | null;
@@ -133,14 +135,15 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   );
 }
 
-export type MinecraftView = 'status' | 'setup' | 'logs' | 'currency' | 'players';
+export type MinecraftView = 'status' | 'setup' | 'logs' | 'lobby' | 'currency' | 'members';
 
 const VIEW_HEADER: Record<MinecraftView, { title: string; subtitle: string }> = {
   status: { title: '接続状況', subtitle: '統合版サーバー（BDS）・アドオン・ログ送信・通貨連携の状態と、オンラインのプレイヤー' },
   setup: { title: 'APIキー・導入', subtitle: 'マイクラ連携のON/OFF、APIキーの発行とアドオンの導入手順' },
   logs: { title: 'ログ送信設定', subtitle: 'ワールド参加・退出ログとマイクラ内取引ログを送信するDiscordチャンネル' },
   currency: { title: '通貨・取引設定', subtitle: 'マイクラ内通貨（＝鯖内通貨）の送金・アイテム売却と売却価格' },
-  players: { title: '連携プレイヤー', subtitle: 'Discordアカウントと連携済みのプレイヤー' },
+  lobby: { title: 'ロビー設定', subtitle: '情報端末の「ロビーへテレポート」の行き先（X・Y・Z座標）' },
+  members: { title: 'マイクラメンバー一覧', subtitle: 'マイクラのプレイヤー名とDiscordアカウントがきちんと紐付いているか・ロール・OPの状態' },
 };
 
 /**
@@ -164,6 +167,11 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
     allow_sell: true,
     allow_market: true,
     sell_prices: [] as { item: string; label: string; price: string }[],
+    lobby_enabled: false,
+    lobby_x: '',
+    lobby_y: '',
+    lobby_z: '',
+    lobby_dimension: 'minecraft:overworld',
   });
 
   const load = useCallback(
@@ -182,6 +190,11 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
             allow_sell: d.settings.allow_sell,
             allow_market: d.settings.allow_market !== false,
             sell_prices: (d.settings.sell_prices || []).map((p: SellPrice) => ({ item: p.item, label: p.label ?? '', price: String(p.price) })),
+            lobby_enabled: !!d.settings.lobby,
+            lobby_x: d.settings.lobby ? String(d.settings.lobby.x) : '',
+            lobby_y: d.settings.lobby ? String(d.settings.lobby.y) : '',
+            lobby_z: d.settings.lobby ? String(d.settings.lobby.z) : '',
+            lobby_dimension: d.settings.lobby?.dimension ?? 'minecraft:overworld',
           });
         }
       } catch (e: any) {
@@ -216,11 +229,18 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
   };
 
   const handleSave = async () => {
+    const coords = [form.lobby_x, form.lobby_y, form.lobby_z].map((v) => v.trim());
+    if (form.lobby_enabled && coords.some((v) => v === '' || !Number.isFinite(Number(v)))) {
+      toast.error('ロビーの座標は X・Y・Z すべてを数値で入力してください');
+      return;
+    }
     setSaving(true);
     try {
+      const { lobby_enabled, lobby_x, lobby_y, lobby_z, lobby_dimension, ...rest } = form;
       await post({
         action: 'save',
-        ...form,
+        ...rest,
+        lobby: lobby_enabled ? { x: Number(coords[0]), y: Number(coords[1]), z: Number(coords[2]), dimension: lobby_dimension } : null,
         sell_prices: form.sell_prices
           .filter((p) => p.item.trim())
           .map((p) => ({ item: p.item.trim(), label: p.label.trim(), price: Number(p.price) })),
@@ -251,17 +271,6 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
     try {
       await post({ action: 'test_log', channel_id: channelId });
       toast.success('テストメッセージを送信しました');
-    } catch (e: any) {
-      toast.error(e.message);
-    }
-  };
-
-  const handleUnlink = async (userId: string, mcName: string) => {
-    if (!confirm(`${mcName} の連携を解除しますか？`)) return;
-    try {
-      await post({ action: 'unlink', user_id: userId });
-      toast.success('連携を解除しました');
-      await load(false);
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -462,7 +471,7 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
           <p>4. ゲーム内で <code className="text-cyan-300">/manybot:link</code> を実行すると6桁のコードが出ます。Webのメンバー画面（プロフィール → マイクラ連携）に入力するとDiscordアカウントと紐付きます。</p>
           <p>
             連携すると、マイクラ内の残高はこのサーバーの通貨（{data?.currency_name ?? 'コイン'}）と同じものになり、Discordの /pay・Webアクティビティのカジノやショップでもそのまま使えます。
-            ゲーム内コマンド: <code>/manybot:balance</code>・<code>/manybot:pay</code>・<code>/manybot:sell</code>・<code>/manybot:shop</code>・<code>/manybot:shopitem</code>
+            ゲーム内コマンド: <code>/manybot:balance</code>・<code>/manybot:pay</code>・<code>/manybot:sell</code>・<code>/manybot:shop</code>・<code>/manybot:terminal</code>（情報端末）・<code>/manybot:lobby</code>
           </p>
         </div>
       </div>
@@ -562,11 +571,11 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
               <Info className="w-4 h-4 text-cyan-400" /> ゲーム内ショップ
             </p>
             <p>
-              <code className="text-cyan-300">/manybot:shop</code> か、専用アイテム「ショップ端末」を使うと、ショップのメニュー（売却・買取・自分の出品・サーバーに即売り）が開きます。
+              <code className="text-cyan-300">/manybot:shop</code> か、専用アイテム「情報端末」の「ショップ」から、ショップのメニュー（売却・買取・自分の出品・サーバーに即売り）が開きます。
               「サーバーに即売り」には、ここに登録したアイテムがこの値段で並びます。
             </p>
             <p>
-              ショップ端末は <code className="text-cyan-300">/manybot:shopitem</code> でもらえます。使い方は PC は右クリック、スマホ・タブレットは長押し、Switch・PS・Xbox は使用ボタンです。
+              情報端末は <code className="text-cyan-300">/manybot:terminal</code> でもらえます。使い方は PC は右クリック、スマホ・タブレットは長押し、Switch・PS・Xbox は使用ボタンです。
             </p>
             <p>「表示名」はサーバーに即売りの画面に表示される名前です（空欄ならゲームの言語のアイテム名）。</p>
           </div>
@@ -672,32 +681,53 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
         </div>
       </>)}
 
-      {view === 'players' && (<>
-      {/* 連携済みプレイヤー */}
-      <div className="mecha-clip bg-neutral-900/80 border border-zinc-800/80 p-6">
-        <div className="text-sm font-bold text-zinc-200 mb-3">連携済みプレイヤー（{data?.links.length ?? 0}人）</div>
-        {data && data.links.length > 0 ? (
-          <div className="divide-y divide-zinc-800">
-            {data.links.map((l) => (
-              <div key={l.user_id} className="flex items-center gap-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm text-white truncate">{l.mc_name}</div>
-                  <div className="font-tech text-[11px] text-zinc-500 truncate">
-                    {l.display_name ?? 'Discord'}（{l.user_id}）・{new Date(l.linked_at).toLocaleDateString('ja-JP')} 連携
-                  </div>
-                </div>
-                <button onClick={() => handleUnlink(l.user_id, l.mc_name)} className="text-zinc-500 hover:text-red-400" title="連携解除">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
+      {view === 'lobby' && (
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 space-y-6">
+        <div className="bg-zinc-950/60 border border-zinc-800 rounded-lg p-4 text-xs text-zinc-400 space-y-1 leading-relaxed">
+          <p className="font-bold text-zinc-200 flex items-center gap-1.5">
+            <Info className="w-4 h-4 text-cyan-400" /> ロビーについて
+          </p>
+          <p>情報端末（/manybot:terminal でもらえる）の「ロビーへテレポート」と、コマンド <code className="text-cyan-300">/manybot:lobby</code> の行き先です。</p>
+          <p>座標はゲーム内で F3（統合版は設定の「座標を表示」）で確認できます。ブロックの真ん中に立たせたいときは X・Z に .5 を付けてください（例: 100.5）。</p>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-bold text-zinc-200">ロビーへのテレポートを使う</div>
+            <div className="font-tech text-xs text-zinc-500">OFFにすると、情報端末に「ロビーへテレポート」が出ません</div>
           </div>
-        ) : (
-          <div className="font-tech text-xs text-zinc-500">まだいません。ゲーム内で /manybot:link を実行してもらってください。</div>
-        )}
+          <Toggle checked={form.lobby_enabled} onChange={(v) => setForm({ ...form, lobby_enabled: v })} />
+        </div>
+        <div className={`grid grid-cols-1 sm:grid-cols-4 gap-3 ${form.lobby_enabled ? '' : 'opacity-40 pointer-events-none'}`}>
+          {(['x', 'y', 'z'] as const).map((k) => (
+            <label key={k} className="block">
+              <span className="block font-tech text-xs text-zinc-400 mb-1">{k.toUpperCase()} 座標</span>
+              <input
+                value={form[`lobby_${k}`]}
+                onChange={(e) => setForm({ ...form, [`lobby_${k}`]: e.target.value.replace(/[^\d.\-]/g, '') })}
+                inputMode="decimal"
+                placeholder={k === 'y' ? '64' : '0.5'}
+                className="w-full bg-black/60 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-cyan-500"
+              />
+            </label>
+          ))}
+          <label className="block">
+            <span className="block font-tech text-xs text-zinc-400 mb-1">ディメンション</span>
+            <select
+              value={form.lobby_dimension}
+              onChange={(e) => setForm({ ...form, lobby_dimension: e.target.value })}
+              className="w-full bg-black/60 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+            >
+              <option value="minecraft:overworld">オーバーワールド</option>
+              <option value="minecraft:nether">ネザー</option>
+              <option value="minecraft:the_end">ジ・エンド</option>
+            </select>
+          </label>
+        </div>
+        {saveButton}
       </div>
+      )}
 
-      </>)}
+      {view === 'members' && <MinecraftMembers guildId={guildId} />}
     </div>
   );
 }

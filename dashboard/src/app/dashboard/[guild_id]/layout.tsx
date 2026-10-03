@@ -40,6 +40,7 @@ import {
   ListOrdered,
   Pickaxe,
   KeyRound,
+  MapPin,
 } from 'lucide-react';
 
 
@@ -152,8 +153,9 @@ export default function DashboardLayout({
         { label: '接続状況', path: `/dashboard/${guildId}/minecraft`, roles: ['admin', 'subadmin'], icon: Activity, group: 'マイクラ' },
         { label: 'APIキー・導入', path: `/dashboard/${guildId}/minecraft/setup`, roles: ['admin', 'subadmin'], icon: KeyRound, group: 'マイクラ' },
         { label: 'ログ送信設定', path: `/dashboard/${guildId}/minecraft/logs`, roles: ['admin', 'subadmin'], icon: ScrollText, group: 'マイクラ' },
+        { label: 'ロビー設定', path: `/dashboard/${guildId}/minecraft/lobby`, roles: ['admin', 'subadmin'], icon: MapPin, group: 'マイクラ' },
         { label: '通貨・取引設定', path: `/dashboard/${guildId}/minecraft/currency`, roles: ['admin', 'subadmin'], icon: Coins, group: 'マイクラ' },
-        { label: '連携プレイヤー', path: `/dashboard/${guildId}/minecraft/players`, roles: ['admin', 'subadmin'], icon: Pickaxe, group: 'マイクラ' },
+        { label: 'マイクラメンバー一覧', path: `/dashboard/${guildId}/minecraft/members`, roles: ['admin', 'subadmin'], icon: Users, group: 'マイクラ' },
       ],
     },
     {

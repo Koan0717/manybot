@@ -12,6 +12,7 @@ import {
   getMinecraftServer,
   hashApiKey,
   isServerOnline,
+  parseLobby,
   listListings,
   postToChannel,
 } from '@/lib/minecraft';
@@ -69,6 +70,7 @@ export async function GET(_request: Request, { params }: { params: { guild_id: s
             allow_pay: server.allow_pay,
             allow_sell: server.allow_sell,
             allow_market: server.allow_market,
+            lobby: server.lobby,
             sell_prices: server.sell_prices,
             api_key_hint: server.api_key_hint,
           }
@@ -121,7 +123,7 @@ function parseSellPrices(raw: unknown): SellPrice[] | null {
 /**
  * POST /api/guilds/[guild_id]/minecraft
  * action:
- *  - save: 設定を保存 { is_enabled, join_leave_channel_id, trade_log_channel_id, allow_pay, allow_sell, allow_market, sell_prices }
+ *  - save: 設定を保存 { is_enabled, join_leave_channel_id, trade_log_channel_id, allow_pay, allow_sell, allow_market, sell_prices, lobby: {x,y,z,dimension} | null }
  *  - regenerate_key: APIキーを（再）発行。平文はこのレスポンスでしか返さない
  *  - test_log: { channel_id } にテストメッセージを送る
  *  - unlink: { user_id } のプレイヤー連携を解除
@@ -150,12 +152,20 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     if (action === 'save') {
       const channel = (v: unknown) => (typeof v === 'string' && SNOWFLAKE.test(v) ? v : null);
       const sellPrices = parseSellPrices(body.sell_prices ?? []);
+      // ロビー: 未入力（null）なら未設定。入力があるのに数値でなければエラー
+      const lobby = body.lobby ? parseLobby(body.lobby) : null;
+      if (body.lobby && !lobby) {
+        return NextResponse.json({ error: 'ロビーの座標は X・Y・Z すべてを数値で入力してください' }, { status: 400 });
+      }
+      if (lobby && (Math.abs(lobby.x) > 30_000_000 || Math.abs(lobby.z) > 30_000_000 || lobby.y < -64 || lobby.y > 320)) {
+        return NextResponse.json({ error: 'ロビーの座標がワールドの範囲外です（Yは -64〜320）' }, { status: 400 });
+      }
       if (!sellPrices) {
         return NextResponse.json({ error: '売却価格の設定が不正です（アイテムIDは minecraft:diamond の形、価格は1以上の整数）' }, { status: 400 });
       }
       await masterPool.query(
-        `INSERT INTO minecraft_servers (guild_id, is_enabled, join_leave_channel_id, trade_log_channel_id, allow_pay, allow_sell, sell_prices, allow_market)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+        `INSERT INTO minecraft_servers (guild_id, is_enabled, join_leave_channel_id, trade_log_channel_id, allow_pay, allow_sell, sell_prices, allow_market, lobby)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb)
          ON CONFLICT (guild_id) DO UPDATE SET
            is_enabled = EXCLUDED.is_enabled,
            join_leave_channel_id = EXCLUDED.join_leave_channel_id,
@@ -164,6 +174,7 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
            allow_sell = EXCLUDED.allow_sell,
            sell_prices = EXCLUDED.sell_prices,
            allow_market = EXCLUDED.allow_market,
+           lobby = EXCLUDED.lobby,
            updated_at = NOW()`,
         [
           guildId,
@@ -174,6 +185,7 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
           body.allow_sell !== false,
           JSON.stringify(sellPrices),
           body.allow_market !== false,
+          lobby ? JSON.stringify(lobby) : null,
         ]
       );
       return NextResponse.json({ success: true });
