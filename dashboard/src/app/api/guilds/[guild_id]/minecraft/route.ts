@@ -107,7 +107,9 @@ function parseSellPrices(raw: unknown): SellPrice[] | null {
     if (!ITEM_ID.test(item) || !Number.isSafeInteger(price) || price < 1 || price > 1_000_000_000) return null;
     if (seen.has(item)) continue;
     seen.add(item);
-    out.push({ item, price });
+    // §（色コード）はゲーム内の表示を崩すので外す
+    const label = typeof r?.label === 'string' ? r.label.replace(/§./g, '').trim().slice(0, 32) : '';
+    out.push(label ? { item, price, label } : { item, price });
   }
   return out;
 }

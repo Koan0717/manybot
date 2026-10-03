@@ -4,6 +4,8 @@
 // - ワールドへの参加・退出をダッシュボードに送り、設定したDiscordチャンネルにログを流す
 // - マイクラ内の通貨は Discord サーバーの通貨（ManyBot の所持金）そのもの。
 //   /manybot:link で Discord と連携し、/manybot:balance・/manybot:pay・/manybot:sell で使う
+// - ショップ: /manybot:shop か、専用アイテム「ショップ端末」を使う（PCは右クリック・スマホは長押し・
+//   それ以外は使用ボタン）と、売りたいものを選ぶ画面が開く。端末は /manybot:shopitem でもらえる
 // - コマンドブロックや他のアドオンからは /scriptevent manybot:adjust {"player":"名前","amount":100,"reason":"クエスト報酬"}
 //
 // 設定は BDS の config/default/variables.json（manybot_url）と secrets.json（manybot_api_key）に置く。
@@ -11,14 +13,16 @@
 import {
   system,
   world,
+  ItemStack,
   CommandPermissionLevel,
   CustomCommandParamType,
   CustomCommandStatus,
 } from '@minecraft/server';
 import { http, HttpRequest, HttpHeader, HttpRequestMethod } from '@minecraft/server-net';
 import { secrets, variables } from '@minecraft/server-admin';
+import { ActionFormData, FormCancelationReason } from '@minecraft/server-ui';
 
-const ADDON_VERSION = '1.0.0';
+const ADDON_VERSION = '1.1.0';
 const SCRIPT_API_VERSION = '2.0.0';
 const HEARTBEAT_TICKS = 20 * 60;
 const PREFIX = '§a[ManyBot]§r ';
@@ -159,41 +163,196 @@ async function cmdPay(player, to, amount) {
   if (target) say(target, `§b${player.name}§r から §e${fmt(res.amount)} ${res.currency_name}§r を受け取りました`);
 }
 
-function cmdSell(player, count) {
-  if (!remote.features.sell) return say(player, '§cこのサーバーではアイテム売却がOFFです');
-  // インベントリの操作は読み取り専用の文脈ではできないので system.run の中で行う
-  system.run(async () => {
-    const container = player.getComponent('minecraft:inventory')?.container;
-    const slot = player.selectedSlotIndex;
-    const item = container?.getItem(slot);
-    if (!container || !item) return say(player, '§c売りたいアイテムを手に持ってください');
-    const entry = remote.sell_prices.find((p) => p.item === item.typeId);
-    if (!entry) return say(player, `§c${item.typeId} は売却できません`);
-    const n = Math.min(count ?? item.amount, item.amount);
-    if (!(n >= 1)) return say(player, '§c個数が不正です');
+// ------------------------------------------------------------
+// 売却（コマンド・ショップ共通）
+// ------------------------------------------------------------
 
-    // 先にアイテムを減らし、売却に失敗したら返す（二重取りを防ぐ）
-    const restore = item.clone();
-    restore.amount = n;
-    if (n >= item.amount) container.setItem(slot, undefined);
+// ショップ端末の目印（説明文の最後の行）。名前は変えられても説明文は金床で変えられない
+const SHOP_ITEM_TYPE = 'minecraft:compass';
+const SHOP_ITEM_MARKER = '§r§8manybot:shop';
+
+function isShopItem(item) {
+  return !!item && item.typeId === SHOP_ITEM_TYPE && item.getLore().includes(SHOP_ITEM_MARKER);
+}
+
+function createShopItem() {
+  const item = new ItemStack(SHOP_ITEM_TYPE, 1);
+  item.nameTag = '§a§lManyBot ショップ端末';
+  item.setLore(['§7右クリック / 長押し / 使用ボタンで', '§7ショップを開きます', SHOP_ITEM_MARKER]);
+  item.keepOnDeath = true;
+  return item;
+}
+
+function inventoryOf(player) {
+  return player.getComponent('minecraft:inventory')?.container;
+}
+
+/** インベントリにある typeId の個数（ショップ端末は数えない） */
+function countItem(container, typeId) {
+  let n = 0;
+  for (let i = 0; i < container.size; i++) {
+    const it = container.getItem(i);
+    if (it && it.typeId === typeId && !isShopItem(it)) n += it.amount;
+  }
+  return n;
+}
+
+/** typeId を n 個取り除き、取り除いた分（返却用の複製）を返す。preferSlot から先に減らす */
+function takeItems(container, typeId, n, preferSlot) {
+  const slots = [...Array(container.size).keys()];
+  if (preferSlot !== undefined) slots.sort((x, y) => (x === preferSlot ? -1 : y === preferSlot ? 1 : 0));
+  const taken = [];
+  let left = n;
+  for (const i of slots) {
+    if (left <= 0) break;
+    const it = container.getItem(i);
+    if (!it || it.typeId !== typeId || isShopItem(it)) continue;
+    const k = Math.min(left, it.amount);
+    const copy = it.clone();
+    copy.amount = k;
+    taken.push(copy);
+    if (k >= it.amount) container.setItem(i, undefined);
     else {
-      item.amount -= n;
-      container.setItem(slot, item);
+      it.amount -= k;
+      container.setItem(i, it);
     }
+    left -= k;
+  }
+  return taken;
+}
 
-    const res = await api('POST', '/api/minecraft/sell', { player: player.name, item: restore.typeId, count: n });
-    if (!res.ok) {
-      system.run(() => {
-        if (!player.isValid) return;
-        const left = player.getComponent('minecraft:inventory')?.container?.addItem(restore);
-        if (left) player.dimension.spawnItem(left, player.location);
-        player.sendMessage(`${PREFIX}§c${res.error}（アイテムは返却しました）`);
-      });
-      return;
-    }
-    say(player, `${restore.typeId} x${n} を売却して §e+${fmt(res.earned)} ${res.currency_name}§r（残高 ${fmt(res.balance)}）`);
+function giveBack(player, items) {
+  if (!player.isValid) return;
+  const container = inventoryOf(player);
+  for (const it of items) {
+    const rest = container?.addItem(it);
+    if (rest) player.dimension.spawnItem(rest, player.location);
+  }
+}
+
+const priceOf = (typeId) => remote.sell_prices.find((p) => p.item === typeId);
+const itemLabel = (entry) => entry.label || entry.item.replace(/^minecraft:/, '');
+
+/**
+ * 売却の本体。先にアイテムを取り除いてからダッシュボードに売却を記録し、失敗したら返す（二重取りを防ぐ）。
+ * system.run の中（インベントリを変更できる文脈）で呼ぶこと。
+ */
+async function sellItems(player, typeId, count, preferSlot) {
+  if (!remote.features.sell) return say(player, '§cこのサーバーではアイテム売却がOFFです');
+  const entry = priceOf(typeId);
+  if (!entry) return say(player, `§c${typeId} は売却できません`);
+  const container = inventoryOf(player);
+  if (!container) return;
+  const n = Math.min(count, countItem(container, typeId));
+  if (!(n >= 1)) return say(player, `§c${itemLabel(entry)} を持っていません`);
+
+  const taken = takeItems(container, typeId, n, preferSlot);
+  const res = await api('POST', '/api/minecraft/sell', { player: player.name, item: typeId, count: n });
+  if (!res.ok) {
+    system.run(() => {
+      giveBack(player, taken);
+      if (player.isValid) player.sendMessage(`${PREFIX}§c${res.error}（アイテムは返却しました）`);
+    });
+    return;
+  }
+  say(player, `${itemLabel(entry)} x${n} を売却して §e+${fmt(res.earned)} ${res.currency_name}§r（残高 ${fmt(res.balance)}）`);
+}
+
+function cmdSell(player, count) {
+  // インベントリの操作は読み取り専用の文脈ではできないので system.run の中で行う
+  system.run(() => {
+    const container = inventoryOf(player);
+    const item = container?.getItem(player.selectedSlotIndex);
+    if (!item || isShopItem(item)) return say(player, '§c売りたいアイテムを手に持ってください（/manybot:shop でショップも開けます）');
+    sellItems(player, item.typeId, count ?? countItem(container, item.typeId), player.selectedSlotIndex);
   });
 }
+
+// ------------------------------------------------------------
+// ショップ画面
+// ------------------------------------------------------------
+
+/** チャット欄を閉じる前（コマンド直後）は画面を出せないので、閉じるまで少し待って出し直す */
+async function showForm(player, form) {
+  for (let i = 0; i < 20; i++) {
+    if (!player.isValid) return null;
+    const res = await form.show(player);
+    if (res.cancelationReason !== FormCancelationReason.UserBusy) return res;
+    await new Promise((r) => system.runTimeout(r, 10));
+  }
+  return null;
+}
+
+async function openShop(player) {
+  if (!remote.features.sell) return say(player, '§cこのサーバーではアイテム売却がOFFです');
+  const bal = await api('GET', `/api/minecraft/balance?player=${encodeURIComponent(player.name)}`);
+  if (!player.isValid) return;
+  const container = inventoryOf(player);
+  if (!container) return;
+
+  const currency = bal.currency_name ?? remote.currency_name;
+  const entries = remote.sell_prices.map((e) => ({ entry: e, owned: countItem(container, e.item) }));
+  // 持っているものを上に
+  entries.sort((a, b) => Number(b.owned > 0) - Number(a.owned > 0));
+
+  const form = new ActionFormData().title('§lManyBot ショップ');
+  form.body(
+    !bal.ok
+      ? `§c${bal.error}`
+      : !bal.linked
+        ? '§cまだDiscordと連携していません。\n§7/manybot:link で連携すると、売却した分がサーバーの通貨になります。'
+        : entries.length === 0
+          ? `所持金: §e${fmt(bal.balance)} ${currency}§r\n§7売却できるアイテムはまだ設定されていません（ダッシュボードの「通貨・取引設定」）`
+          : `所持金: §e${fmt(bal.balance)} ${currency}§r\n§7売りたいアイテムを選んでください（サーバーの通貨と共通です）`
+  );
+  for (const { entry, owned } of entries) {
+    form.button(`${owned > 0 ? '' : '§8'}${itemLabel(entry)}  ×${owned}\n§r§7${fmt(entry.price)} ${currency} / 個`);
+  }
+  form.button('§c閉じる');
+
+  const res = await showForm(player, form);
+  if (!res || res.canceled || res.selection === undefined || res.selection >= entries.length) return;
+  const { entry, owned } = entries[res.selection];
+  if (owned < 1) {
+    say(player, `§c${itemLabel(entry)} を持っていません`);
+    return system.run(() => openShop(player));
+  }
+  await chooseAmount(player, entry, owned, currency);
+}
+
+async function chooseAmount(player, entry, owned, currency) {
+  const options = [...new Set([1, 16, 64].filter((n) => n < owned).concat(owned))];
+  const form = new ActionFormData()
+    .title(`§l${itemLabel(entry)} を売る`)
+    .body(`所持: ${owned}個 ・ 1個 ${fmt(entry.price)} ${currency}`);
+  for (const n of options) form.button(`${n === owned ? '全部 ' : ''}${n}個\n§r§7→ ${fmt(n * entry.price)} ${currency}`);
+  form.button('§7戻る');
+
+  const res = await showForm(player, form);
+  if (!res || res.canceled || res.selection === undefined) return;
+  if (res.selection >= options.length) return system.run(() => openShop(player));
+  system.run(() => sellItems(player, entry.item, options[res.selection]));
+}
+
+function giveShopItem(player) {
+  system.run(() => {
+    const container = inventoryOf(player);
+    if (!container) return;
+    for (let i = 0; i < container.size; i++) {
+      if (isShopItem(container.getItem(i))) return say(player, 'ショップ端末はもう持っています');
+    }
+    giveBack(player, [createShopItem()]);
+    say(player, '§aショップ端末§rを渡しました。右クリック（スマホは長押し・それ以外は使用ボタン）でショップが開きます');
+  });
+}
+
+// ショップ端末を使ったら（右クリック / 長押し / 使用ボタン）ショップを開く。コンパス本来の動作は止める
+world.beforeEvents.itemUse.subscribe((ev) => {
+  if (!isShopItem(ev.itemStack)) return;
+  ev.cancel = true;
+  const player = ev.source;
+  system.run(() => openShop(player));
+});
 
 system.beforeEvents.startup.subscribe((init) => {
   const reg = init.customCommandRegistry;
@@ -243,6 +402,24 @@ system.beforeEvents.startup.subscribe((init) => {
       const p = asPlayer(origin);
       if (!p) return playerOnly();
       cmdSell(p, count);
+      return ok();
+    }
+  );
+  reg.registerCommand(
+    { name: 'manybot:shop', description: 'ショップを開いて、アイテムを売却します', permissionLevel: CommandPermissionLevel.Any },
+    (origin) => {
+      const p = asPlayer(origin);
+      if (!p) return playerOnly();
+      system.run(() => openShop(p));
+      return ok();
+    }
+  );
+  reg.registerCommand(
+    { name: 'manybot:shopitem', description: 'ショップを開く専用アイテム「ショップ端末」をもらいます', permissionLevel: CommandPermissionLevel.Any },
+    (origin) => {
+      const p = asPlayer(origin);
+      if (!p) return playerOnly();
+      giveShopItem(p);
       return ok();
     }
   );

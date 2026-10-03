@@ -14,7 +14,7 @@ import { botRequest } from '@/lib/discordApi';
  */
 
 /** リポジトリ内の minecraft-addon/ の最新バージョン（アドオンが送ってくる値と比べて「更新あり」を出す） */
-export const LATEST_ADDON_VERSION = '1.0.0';
+export const LATEST_ADDON_VERSION = '1.1.0';
 
 /** ハートビートがこれより古ければ「オフライン」扱い（アドオンは60秒ごとに送る） */
 export const HEARTBEAT_TIMEOUT_MS = 3 * 60 * 1000;
@@ -27,6 +27,8 @@ const LINK_CODE_TTL_MIN = 10;
 export interface SellPrice {
   item: string;
   price: number;
+  /** ゲーム内ショップでの表示名（未設定ならアイテムIDを表示） */
+  label?: string;
 }
 
 export interface MinecraftServerRow {

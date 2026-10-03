@@ -31,6 +31,7 @@ import ChannelSelect from '@/components/ChannelSelect';
 interface SellPrice {
   item: string;
   price: number;
+  label?: string;
 }
 
 interface McData {
@@ -149,7 +150,7 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
     trade_log_channel_id: '',
     allow_pay: true,
     allow_sell: true,
-    sell_prices: [] as { item: string; price: string }[],
+    sell_prices: [] as { item: string; label: string; price: string }[],
   });
 
   const load = useCallback(
@@ -166,7 +167,7 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
             trade_log_channel_id: d.settings.trade_log_channel_id || '',
             allow_pay: d.settings.allow_pay,
             allow_sell: d.settings.allow_sell,
-            sell_prices: (d.settings.sell_prices || []).map((p: SellPrice) => ({ item: p.item, price: String(p.price) })),
+            sell_prices: (d.settings.sell_prices || []).map((p: SellPrice) => ({ item: p.item, label: p.label ?? '', price: String(p.price) })),
           });
         }
       } catch (e: any) {
@@ -208,7 +209,7 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
         ...form,
         sell_prices: form.sell_prices
           .filter((p) => p.item.trim())
-          .map((p) => ({ item: p.item.trim(), price: Number(p.price) })),
+          .map((p) => ({ item: p.item.trim(), label: p.label.trim(), price: Number(p.price) })),
       });
       toast.success('マイクラ連携の設定を保存しました（アドオンには次のハートビートで反映されます）');
       await load(true);
@@ -447,7 +448,7 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
           <p>4. ゲーム内で <code className="text-cyan-300">/manybot:link</code> を実行すると6桁のコードが出ます。Webのメンバー画面（プロフィール → マイクラ連携）に入力するとDiscordアカウントと紐付きます。</p>
           <p>
             連携すると、マイクラ内の残高はこのサーバーの通貨（{data?.currency_name ?? 'コイン'}）と同じものになり、Discordの /pay・Webアクティビティのカジノやショップでもそのまま使えます。
-            ゲーム内コマンド: <code>/manybot:balance</code>・<code>/manybot:pay</code>・<code>/manybot:sell</code>
+            ゲーム内コマンド: <code>/manybot:balance</code>・<code>/manybot:pay</code>・<code>/manybot:sell</code>・<code>/manybot:shop</code>・<code>/manybot:shopitem</code>
           </p>
         </div>
       </div>
@@ -524,8 +525,8 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
           </div>
           <div className="flex items-center justify-between gap-4 bg-black/30 border border-zinc-800 rounded-lg p-3">
             <div>
-              <div className="text-sm text-zinc-200">アイテム売却（/manybot:sell）</div>
-              <div className="font-tech text-[11px] text-zinc-500">手に持ったアイテムを下の価格で通貨に換えます</div>
+              <div className="text-sm text-zinc-200">アイテム売却・ショップ</div>
+              <div className="font-tech text-[11px] text-zinc-500">下の価格で通貨に換えます（/manybot:sell・ショップ画面）</div>
             </div>
             <Toggle checked={form.allow_sell} onChange={(v) => setForm({ ...form, allow_sell: v })} />
           </div>
@@ -533,6 +534,18 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
 
         <div>
           <div className="text-sm font-bold text-zinc-200 mb-2">売却価格（1個あたり・{data?.currency_name ?? 'コイン'}）</div>
+          <div className="bg-zinc-950/60 border border-zinc-800 rounded-lg p-3 mb-3 text-xs text-zinc-400 space-y-1 leading-relaxed">
+            <p className="font-bold text-zinc-200 flex items-center gap-1.5">
+              <Info className="w-4 h-4 text-cyan-400" /> ゲーム内ショップ
+            </p>
+            <p>
+              <code className="text-cyan-300">/manybot:shop</code> か、専用アイテム「ショップ端末」を使うとショップ画面が開き、ここに登録したアイテムを選んで売却できます。
+            </p>
+            <p>
+              ショップ端末は <code className="text-cyan-300">/manybot:shopitem</code> でもらえます。使い方は PC は右クリック、スマホ・タブレットは長押し、Switch・PS・Xbox は使用ボタンです。
+            </p>
+            <p>「表示名」はショップのボタンに表示される名前です（空欄ならアイテムID）。</p>
+          </div>
           <div className="space-y-2">
             {form.sell_prices.map((p, i) => (
               <div key={i} className="flex gap-2">
@@ -545,6 +558,17 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
                   }}
                   placeholder="minecraft:diamond"
                   className="flex-1 min-w-0 bg-black/60 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-cyan-500"
+                />
+                <input
+                  value={p.label}
+                  onChange={(e) => {
+                    const next = [...form.sell_prices];
+                    next[i] = { ...p, label: e.target.value };
+                    setForm({ ...form, sell_prices: next });
+                  }}
+                  maxLength={32}
+                  placeholder="表示名（例: ダイヤモンド）"
+                  className="w-44 min-w-0 bg-black/60 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
                 />
                 <input
                   value={p.price}
@@ -567,7 +591,7 @@ export default function MinecraftSettings({ guildId, view }: { guildId: string; 
               </div>
             ))}
             <button
-              onClick={() => setForm({ ...form, sell_prices: [...form.sell_prices, { item: '', price: '' }] })}
+              onClick={() => setForm({ ...form, sell_prices: [...form.sell_prices, { item: '', label: '', price: '' }] })}
               className="font-tech text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5"
             >
               <Plus className="w-3.5 h-3.5" /> アイテムを追加
