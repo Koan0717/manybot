@@ -33,37 +33,65 @@ def find_ng_keyword(content: str, keywords) -> str | None:
     return None
 
 
-def is_antigrief_target(bot, message: discord.Message) -> bool:
-    """このメッセージが荒らし対策の監視対象かどうか"""
-    guild = message.guild
-    if not guild or not isinstance(message.author, discord.Member):
-        return False
-
+def is_antigrief_enabled(bot, guild: discord.Guild) -> bool:
+    """荒らし対策機能全体のオン/オフ"""
     enable_antigrief = get_setting(bot, "ENABLE_ANTIGRIEF", guild.id)
     if enable_antigrief is None:
-        enable_antigrief = True
-    elif isinstance(enable_antigrief, str):
-        enable_antigrief = enable_antigrief.lower() == "true"
-    if not enable_antigrief:
-        return False
+        return True
+    if isinstance(enable_antigrief, str):
+        return enable_antigrief.lower() == "true"
+    return bool(enable_antigrief)
 
-    cfg = bot.get_antigrief_config(guild.id)
 
-    # 免除ロールチェック
-    exempt_roles = cfg.get("exempt_roles", set())
+def _in_scope(message: discord.Message, categories: set, channels: set, exempt_roles: set) -> bool:
+    """監視対象（カテゴリー/チャンネル）と免除ロールの判定。対象が未指定なら全チャンネル"""
     if exempt_roles & {role.id for role in message.author.roles}:
         return False
-
-    # 対象カテゴリー/チャンネルチェック
-    target_categories = cfg.get("categories", set())
-    target_channels = cfg.get("channels", set())
-    if target_categories or target_channels:
-        in_target_channel = message.channel.id in target_channels
-        category = getattr(message.channel, "category", None)
-        in_target_category = category is not None and category.id in target_categories
-        if not in_target_channel and not in_target_category:
+    if categories or channels:
+        channel = message.channel
+        # スレッド内の発言は親チャンネルの設定に従う
+        parent = getattr(channel, "parent", None)
+        channel_ids = {channel.id} | ({parent.id} if parent is not None else set())
+        category_id = getattr(channel, "category_id", None)
+        if not (channel_ids & channels) and category_id not in categories:
             return False
     return True
+
+
+def is_antigrief_target(bot, message: discord.Message) -> bool:
+    """このメッセージがスパム検知（連投・メンション等）の監視対象かどうか"""
+    cfg = bot.get_antigrief_config(message.guild.id)
+    return _in_scope(
+        message,
+        cfg.get("categories", set()),
+        cfg.get("channels", set()),
+        cfg.get("exempt_roles", set()),
+    )
+
+
+def match_ng_rules(message: discord.Message, rules) -> tuple[dict | None, str | None]:
+    """NGワードルールを順に判定し、最初に一致した (ルール, キーワード) を返す"""
+    for rule in rules or []:
+        if not rule.get("enabled", True):
+            continue
+        if not _in_scope(message, rule.get("categories", set()), rule.get("channels", set()), rule.get("exempt_roles", set())):
+            continue
+        keyword = find_ng_keyword(message.content, rule.get("keywords", []))
+        if keyword:
+            return rule, keyword
+    return None, None
+
+
+async def _get_config(bot, guild_id: int) -> dict:
+    """荒らし対策設定を返す（NGワードルールが未読込ならDBから読み込む）"""
+    cfg = bot.get_antigrief_config(guild_id)
+    if "ng_rules" not in cfg:
+        try:
+            cfg = await bot.fetch_and_cache_antigrief_config(guild_id)
+        except Exception as e:
+            print(f"[ERROR] Failed to load antigrief NG rules for guild {guild_id}: {e}")
+            cfg["ng_rules"] = []
+    return cfg
 
 
 def _detect_spam(bot, message: discord.Message) -> str | None:
@@ -128,7 +156,7 @@ def _clip(text: str, limit: int = 1024) -> str:
     return text if len(text) <= limit else text[:limit - 3] + "..."
 
 
-async def _notify_timeout(bot, message: discord.Message, reason: str, keyword: str | None, timed_out: bool, error: str | None):
+async def _notify_timeout(bot, message: discord.Message, reason: str, rule: dict | None, keyword: str | None, timed_out: bool, error: str | None):
     """管理者チャットとログチャンネルにタイムアウトを通知する"""
     guild = message.guild
     member = message.author
@@ -142,6 +170,8 @@ async def _notify_timeout(bot, message: discord.Message, reason: str, keyword: s
     embed.set_author(name=f"{member.display_name} ({member.name})", icon_url=member.display_avatar.url)
     embed.add_field(name="対象者", value=f"{member.mention} (**{discord.utils.escape_markdown(member.display_name)}** / ID: {member.id})", inline=False)
     embed.add_field(name="理由", value=reason, inline=False)
+    if rule is not None:
+        embed.add_field(name="NGワードルール", value=rule.get("name") or f"ルール#{rule.get('id')}", inline=True)
     if keyword:
         embed.add_field(name="検知キーワード", value=f"`{keyword}`", inline=True)
     embed.add_field(name="チャンネル", value=message.channel.mention, inline=True)
@@ -176,14 +206,24 @@ async def _notify_timeout(bot, message: discord.Message, reason: str, keyword: s
 
 async def handle_antigrief(bot, message: discord.Message) -> bool:
     """荒らし対策を実行する。タイムアウト処理を行った場合 True を返す"""
-    if not is_antigrief_target(bot, message):
+    guild = message.guild
+    if not guild or not isinstance(message.author, discord.Member):
+        return False
+    if not is_antigrief_enabled(bot, guild):
         return False
 
-    keyword = find_ng_keyword(message.content, bot.get_antigrief_config(message.guild.id).get("ng_keywords", []))
+    cfg = await _get_config(bot, guild.id)
+
+    # NGワードルール（ルールごとの監視対象・免除設定で判定）
+    rule, keyword = match_ng_rules(message, cfg.get("ng_rules", []))
     if keyword:
-        reason = f"NGキーワード「{keyword}」を含むメッセージを送信したため"
-    else:
+        rule_name = rule.get("name") or f"ルール#{rule.get('id')}"
+        reason = f"NGワードルール「{rule_name}」のキーワード「{keyword}」を含むメッセージを送信したため"
+    elif is_antigrief_target(bot, message):
+        # スパム検知（荒らし対策の監視対象・免除設定で判定）
         reason = _detect_spam(bot, message)
+    else:
+        reason = None
     if not reason:
         return False
 
@@ -211,7 +251,7 @@ async def handle_antigrief(bot, message: discord.Message) -> bool:
             print(f"[ERROR] Failed to send timeout notice: {e}")
 
     try:
-        await _notify_timeout(bot, message, reason, keyword, timed_out, error)
+        await _notify_timeout(bot, message, reason, rule, keyword, timed_out, error)
     except Exception as e:
         print(f"[ERROR] Antigrief notification failed: {e}")
     return True
