@@ -53,6 +53,21 @@ python bot.py
 
 `.env` に `DISCORD_BOT_TOKEN` が無いと `Error: DISCORD_BOT_TOKEN is not set in .env` と表示され起動しません。
 
+### pm2 で常駐させる（マイクラサーバーと同じVPSで動かす）
+
+リポジトリ直下の `ecosystem.config.js` で、ManyBot とマイクラサーバー（BDS）をまとめて pm2 で動かせます。フォルダが見つからないものは起動しません。
+
+```bash
+npm install -g pm2
+pm2 start ecosystem.config.js        # まとめて起動（--only manybot などで個別も可）
+pm2 save && pm2 startup              # VPS 再起動後も自動で起動
+pm2 logs manybot                     # ログを見る
+```
+
+- 置き場所の既定値: ManyBot はこのリポジトリ、BDS は `~/bedrock-server`（環境変数 `BDS_DIR`・`MANYBOT_DIR` で変更可）
+- `venv`（または `.venv`）があればその Python を使います
+- マイクラ側の詳しい手順は [Koan0717/tenrei-bot の README](https://github.com/Koan0717/tenrei-bot)（マイクラサーバー運用ガイド）と [minecraft-addon/README.md](minecraft-addon/README.md) を参照
+
 ### 初回のスラッシュコマンド同期
 
 Bot導入後、Discordサーバー内で管理者権限を持つユーザーが以下のコマンドを実行すると、スラッシュコマンドがそのサーバーに反映されます。
