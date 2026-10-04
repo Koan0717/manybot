@@ -5,7 +5,7 @@
 //   pm2 save && pm2 startup                # VPS 再起動後も自動で起動
 //
 // 置き場所は環境変数で変えられる（未設定なら下の既定値）。フォルダが無いアプリは起動しない。
-//   MANYBOT_DIR  … このリポジトリ（既定: このファイルがあるフォルダ）
+//   MANYBOT_DIR  … このリポジトリ（既定: このファイルがあるフォルダ）。Bot は その中の bot/ で起動する
 //   BDS_DIR      … Bedrock Dedicated Server を展開したフォルダ（既定: ~/bedrock-server）
 
 const fs = require('fs');
@@ -13,13 +13,17 @@ const os = require('os');
 const path = require('path');
 
 const MANYBOT_DIR = process.env.MANYBOT_DIR || __dirname;
+const BOT_DIR = path.join(MANYBOT_DIR, 'bot');
 const BDS_DIR = process.env.BDS_DIR || path.join(os.homedir(), 'bedrock-server');
 
 /** venv があればその python、無ければ python3 */
 function python(dir) {
-  for (const v of ['venv', '.venv']) {
-    const p = path.join(dir, v, 'bin', 'python');
-    if (fs.existsSync(p)) return p;
+  // bot/ の中、またはリポジトリ直下の venv
+  for (const base of [dir, MANYBOT_DIR]) {
+    for (const v of ['venv', '.venv']) {
+      const p = path.join(base, v, 'bin', 'python');
+      if (fs.existsSync(p)) return p;
+    }
   }
   return 'python3';
 }
@@ -27,9 +31,9 @@ function python(dir) {
 const apps = [
   {
     name: 'manybot',
-    cwd: MANYBOT_DIR,
+    cwd: BOT_DIR,
     script: 'bot.py',
-    interpreter: python(MANYBOT_DIR),
+    interpreter: python(BOT_DIR),
     env: { PORT: '8080', PYTHONUNBUFFERED: '1' },
     autorestart: true,
     restart_delay: 5000,
