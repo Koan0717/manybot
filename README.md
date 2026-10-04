@@ -53,9 +53,9 @@ python bot.py
 
 `.env` に `DISCORD_BOT_TOKEN` が無いと `Error: DISCORD_BOT_TOKEN is not set in .env` と表示され起動しません。
 
-### pm2 で常駐させる（マイクラサーバー・tenrei-bot と同じVPSで動かす）
+### pm2 で常駐させる（マイクラサーバーと同じVPSで動かす）
 
-リポジトリ直下の `ecosystem.config.js` で、ManyBot・マイクラサーバー（BDS）・tenrei-bot をまとめて pm2 で動かせます。フォルダが見つからないものは起動しません。
+リポジトリ直下の `ecosystem.config.js` で、ManyBot とマイクラサーバー（BDS）をまとめて pm2 で動かせます。フォルダが見つからないものは起動しません。
 
 ```bash
 npm install -g pm2
@@ -64,10 +64,9 @@ pm2 save && pm2 startup              # VPS 再起動後も自動で起動
 pm2 logs manybot                     # ログを見る
 ```
 
-- 置き場所の既定値: ManyBot はこのリポジトリ、BDS は `~/bedrock-server`、tenrei-bot は `~/tenrei-bot`（環境変数 `BDS_DIR`・`TENREI_DIR`・`MANYBOT_DIR` で変更可）
-- `keep_alive.py` の待ち受けポートがぶつからないよう、ManyBot は `PORT=8080`、tenrei-bot は `PORT=8081` で起動します
+- 置き場所の既定値: ManyBot はこのリポジトリ、BDS は `~/bedrock-server`（環境変数 `BDS_DIR`・`MANYBOT_DIR` で変更可）
 - `venv`（または `.venv`）があればその Python を使います
-- マイクラ側の詳しい手順は tenrei-bot の README（マイクラサーバーとアドオンの導入）と [minecraft-addon/README.md](minecraft-addon/README.md) を参照
+- マイクラ側の詳しい手順は [Koan0717/tenrei-bot の README](https://github.com/Koan0717/tenrei-bot)（マイクラサーバー運用ガイド）と [minecraft-addon/README.md](minecraft-addon/README.md) を参照
 
 ### 初回のスラッシュコマンド同期
 
