@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'react-hot-toast';
 import ChannelSelect from '@/components/ChannelSelect';
 import RoleSelect from '@/components/RoleSelect';
@@ -36,6 +37,9 @@ export default function NgWordRules({ guildId, channels, roles }: { guildId: str
   const [editingRule, setEditingRule] = useState<NgRule | null>(null);
   const [formData, setFormData] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     fetch(`/api/guilds/${guildId}/antigrief/ng-rules`)
@@ -227,7 +231,8 @@ export default function NgWordRules({ guildId, channels, roles }: { guildId: str
         </div>
       )}
 
-      {isModalOpen && (
+      {/* モーダルは clip-path の枠に閉じ込められないよう body 直下に描画する */}
+      {mounted && isModalOpen && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-zinc-900 rounded-lg shadow-2xl border border-zinc-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleSubmit} className="p-6">
@@ -333,7 +338,8 @@ export default function NgWordRules({ guildId, channels, roles }: { guildId: str
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
