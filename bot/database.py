@@ -815,27 +815,33 @@ async def setup_db_schema(p):
 
             INSERT INTO room_prices (room_type, duration, price) VALUES
 
-            ('螳E', 12, 10000),
+            ('宿', 12, 10000),
 
-            ('螳E', 24, 15000),
+            ('宿', 24, 15000),
 
-            ('鬮倡E壼EE', 12, 150000),
+            ('高級宿', 12, 150000),
 
-            ('鬮倡E壼EE', 24, 250000),
+            ('高級宿', 24, 250000),
 
-            ('繧E繧E繧E繝VC', 24, 30000),
+            ('カスタムVC', 24, 30000),
 
-            ('繧E繝ｼ繝VC', 12, 10000),
+            ('ゲームVC', 12, 10000),
 
-            ('繧E繝ｼ繝VC', 24, 15000),
+            ('ゲームVC', 24, 15000),
 
-            ('雉ｭ蜊啖C', 12, 10000),
+            ('賭博VC', 12, 10000),
 
-            ('雉ｭ蜊啖C', 24, 15000)
+            ('賭博VC', 24, 15000)
 
             ON CONFLICT (room_type, duration) DO NOTHING
 
         ''')
+
+        # 以前の版で文字化けした部屋名のまま登録された行を消す（どの部屋にも当たらず使われない）
+        await conn.execute(
+            "DELETE FROM room_prices WHERE room_type = ANY($1::text[])",
+            ['螳E', '鬮倡E壼EE', '繧E繧E繧E繝\uf8f0VC', '繧E繝ｼ繝\uf8f0VC', '雉ｭ蜊啖C'],
+        )
 
 
 
@@ -901,7 +907,7 @@ async def setup_db_schema(p):
 
         try:
 
-            await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_label TEXT DEFAULT '繝Eこ繝Eヨ繧剁E懈E縺吶EE")
+            await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_label TEXT DEFAULT 'チケットを作成する'")
 
             await conn.execute("ALTER TABLE custom_ticket_panels ADD COLUMN IF NOT EXISTS button_emoji TEXT")
 
@@ -1301,6 +1307,24 @@ async def setup_db_schema(p):
         except Exception as e:
 
             print(f"[Migration] sticky_templates migration warning: {e}")
+
+        # 別の形（channel_ids 列など）で作られていたテーブルでも動くように、
+        # このBotが使う channel_id 列と一意制約を足す。元からある列・データには触らない
+        try:
+            await conn.execute('ALTER TABLE sticky_templates ADD COLUMN IF NOT EXISTS channel_id BIGINT')
+            await conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS sticky_templates_channel_id_key ON sticky_templates (channel_id)')
+        except Exception as e:
+            print(f"[Migration] sticky_templates channel_id migration warning: {e}")
+        # channel_ids が必須（NOT NULL）だと channel_id だけで登録できないので、必須を外す
+        try:
+            not_null_ids = await conn.fetchval(
+                "SELECT is_nullable = 'NO' FROM information_schema.columns "
+                "WHERE table_schema = current_schema() AND table_name = 'sticky_templates' AND column_name = 'channel_ids'"
+            )
+            if not_null_ids:
+                await conn.execute('ALTER TABLE sticky_templates ALTER COLUMN channel_ids DROP NOT NULL')
+        except Exception as e:
+            print(f"[Migration] sticky_templates channel_ids migration warning: {e}")
 
 
 
