@@ -472,6 +472,8 @@ async def check_and_assign_level_roles(bot, member: discord.Member, level_type: 
 async def send_log(guild: discord.Guild, log_type: str, embed: discord.Embed):
     if not guild:
         return
+    from helpers import add_member_names_to_embed
+    embed = add_member_names_to_embed(guild, embed)
     channel_id = await database.get_log_channel(guild.id, log_type)
     if channel_id:
         channel = guild.get_channel(channel_id)

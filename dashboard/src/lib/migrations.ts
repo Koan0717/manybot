@@ -100,6 +100,8 @@ export async function ensureAntigriefSettingsSchema(pool: any) {
       `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS target_category_ids BIGINT[] NOT NULL DEFAULT '{}'`,
       `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS target_channel_ids BIGINT[] NOT NULL DEFAULT '{}'`,
       `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS exempt_role_ids BIGINT[] NOT NULL DEFAULT '{}'`,
+      `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS ng_keywords TEXT[] NOT NULL DEFAULT '{}'`,
+      `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS admin_channel_id BIGINT`,
     ];
     for (const sql of cols) { 
       try { await pool.query(sql); } catch {} 

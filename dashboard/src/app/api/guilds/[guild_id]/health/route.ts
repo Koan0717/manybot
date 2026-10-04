@@ -311,7 +311,7 @@ export async function GET(
 
     // --- 荒らし対策設定 ---
     try {
-      const ag = await pool.query(`SELECT target_channel_ids, exempt_role_ids FROM antigrief_settings WHERE guild_id = $1`, [guildId]);
+      const ag = await pool.query(`SELECT * FROM antigrief_settings WHERE guild_id = $1`, [guildId]);
       const checks: (Check | null)[] = [];
       if (ag.rows.length > 0) {
         for (const cid of ag.rows[0].target_channel_ids || []) {
@@ -319,6 +319,9 @@ export async function GET(
         }
         for (const rid of ag.rows[0].exempt_role_ids || []) {
           checks.push(checkRoleExists(rid?.toString(), roleMap, '除外ロール'));
+        }
+        if (ag.rows[0].admin_channel_id) {
+          checks.push(await checkChannel(ag.rows[0].admin_channel_id.toString(), '管理者チャット（タイムアウト通知先）'));
         }
       }
       result['antigrief'] = finalize(checks);
