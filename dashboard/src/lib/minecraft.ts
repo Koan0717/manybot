@@ -15,7 +15,7 @@ import { isGuildAdmin } from '@/lib/memberAdmin';
  */
 
 /** リポジトリ内の minecraft-addon/ の最新バージョン（アドオンが送ってくる値と比べて「更新あり」を出す） */
-export const LATEST_ADDON_VERSION = '1.3.1';
+export const LATEST_ADDON_VERSION = '1.3.2';
 
 /** ハートビートがこれより古ければ「オフライン」扱い（アドオンは60秒ごとに送る） */
 export const HEARTBEAT_TIMEOUT_MS = 3 * 60 * 1000;

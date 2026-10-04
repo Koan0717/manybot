@@ -28,7 +28,7 @@ import { http, HttpRequest, HttpHeader, HttpRequestMethod } from '@minecraft/ser
 import { secrets, variables } from '@minecraft/server-admin';
 import { ActionFormData, FormCancelationReason, MessageFormData, ModalFormData } from '@minecraft/server-ui';
 
-const ADDON_VERSION = '1.3.1';
+const ADDON_VERSION = '1.3.2';
 const SCRIPT_API_VERSION = '2.0.0';
 const HEARTBEAT_TICKS = 20 * 60;
 const PREFIX = '§a[ManyBot]§r ';
@@ -774,22 +774,22 @@ async function openProfile(player) {
 
 // ---------------- 戦闘中のテレポート禁止 ----------------
 
-/** 直近この時間内に戦闘（プレイヤー・モブを攻撃した／された）があればロビーへテレポートできない */
+/** 直近この時間内に戦闘（攻撃した／ダメージを受けた）があればロビーへテレポートできない */
 const COMBAT_COOLDOWN_MS = 15_000;
 const lastCombat = new Map(); // player.id → 最後に戦闘した時刻
 
 const isPlayer = (e) => !!e && e.typeId === 'minecraft:player';
 
-// 攻撃した側・された側のどちらかがプレイヤーなら、そのプレイヤーを「戦闘中」にする。
-// 落下・溶岩など相手のいないダメージは戦闘に数えない（弓などの飛び道具は撃った本人が damagingEntity になる）
+// プレイヤーがダメージを受けたら（モブ・プレイヤーからの攻撃に加え、落下・溶岩・炎・溺れるなど原因を問わず）、
+// またはプレイヤーが他のプレイヤー・モブを攻撃したら、そのプレイヤーを「戦闘中」にする。
+// 弓などの飛び道具は撃った本人が damagingEntity になる
 world.afterEvents.entityHurt.subscribe((ev) => {
   const victim = ev.hurtEntity;
   const attacker = ev.damageSource?.damagingEntity;
-  if (!attacker || attacker === victim) return;
   const now = Date.now();
   try {
     if (isPlayer(victim)) lastCombat.set(victim.id, now);
-    if (isPlayer(attacker)) lastCombat.set(attacker.id, now);
+    if (isPlayer(attacker) && attacker !== victim) lastCombat.set(attacker.id, now);
   } catch {}
 });
 
