@@ -8,6 +8,7 @@ import Casino, { CasinoInfo } from './Casino';
 import Shop, { ShopInfo } from './Shop';
 import Gacha, { GachaInfo } from './Gacha';
 import Games, { GamesInfo } from './Games';
+import MinecraftLink from './Minecraft';
 import { guildIconUrl, isDiscordActivity, keepMemberSessionAlive, loadMemberState, memberFetch, getActivityContext } from '@/lib/memberClient';
 
 interface LevelStat { level: number; xp: number; next_xp: number }
@@ -172,7 +173,7 @@ function LevelBar({ label, stat }: { label: string; stat: LevelStat }) {
   );
 }
 
-const SOURCE_LABEL: Record<string, string> = { pay: '/pay', activity: 'アクティビティ', web: 'Web' };
+const SOURCE_LABEL: Record<string, string> = { pay: '/pay', activity: 'アクティビティ', web: 'Web', minecraft: 'マイクラ' };
 /** 対局の賭けの精算（負けた人 → 勝った人）として記録された送金 */
 const GAME_LABEL: Record<string, string> = { othello: 'オセロ', chess: 'チェス', shogi: '将棋' };
 
@@ -680,6 +681,8 @@ export default function MemberGuildPage() {
                 <div className="text-sm text-zinc-500 mt-2">イベントポイント: {fmt(profile.stats.event_points)}</div>
               )}
             </div>
+
+            <MinecraftLink guildId={guildId} currency={profile.currency_name} />
 
             <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 space-y-5">
               <LevelBar label="テキストレベル" stat={profile.stats.tc} />

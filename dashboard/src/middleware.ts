@@ -15,6 +15,8 @@ const PUBLIC_PATHS = [
   '/api/auth/login',
   '/member',
   '/api/member',
+  // マイクラのアドオン（BDS）からのリクエスト。各ルートが X-ManyBot-Key（APIキー）を確認する（lib/minecraft.ts の requireAddon）
+  '/api/minecraft',
 ];
 
 /**

@@ -38,6 +38,9 @@ import {
   type LucideIcon,
   MonitorSmartphone,
   ListOrdered,
+  Pickaxe,
+  KeyRound,
+  MapPin,
 } from 'lucide-react';
 
 
@@ -46,7 +49,7 @@ interface NavItem {
   path: string;
   roles: string[];
   icon: LucideIcon;
-  group: '評価鯖' | '雑談鯖' | 'その他';
+  group: '評価鯖' | '雑談鯖' | 'マイクラ' | 'その他';
 }
 
 interface NavSection {
@@ -145,6 +148,17 @@ export default function DashboardLayout({
       ],
     },
     {
+      section: 'マイクラシステム',
+      items: [
+        { label: '接続状況', path: `/dashboard/${guildId}/minecraft`, roles: ['admin', 'subadmin'], icon: Activity, group: 'マイクラ' },
+        { label: 'APIキー・導入', path: `/dashboard/${guildId}/minecraft/setup`, roles: ['admin', 'subadmin'], icon: KeyRound, group: 'マイクラ' },
+        { label: 'ログ送信設定', path: `/dashboard/${guildId}/minecraft/logs`, roles: ['admin', 'subadmin'], icon: ScrollText, group: 'マイクラ' },
+        { label: 'ロビー設定', path: `/dashboard/${guildId}/minecraft/lobby`, roles: ['admin', 'subadmin'], icon: MapPin, group: 'マイクラ' },
+        { label: '通貨・取引設定', path: `/dashboard/${guildId}/minecraft/currency`, roles: ['admin', 'subadmin'], icon: Coins, group: 'マイクラ' },
+        { label: 'マイクラメンバー一覧', path: `/dashboard/${guildId}/minecraft/members`, roles: ['admin', 'subadmin'], icon: Users, group: 'マイクラ' },
+      ],
+    },
+    {
       section: '運用・モデレーション',
       items: [
         { label: 'コマンド設定', path: `/dashboard/${guildId}/commands`, roles: ['admin', 'subadmin'], icon: Terminal, group: 'その他' },
@@ -166,10 +180,11 @@ export default function DashboardLayout({
     },
   ];
 
-  const GROUP_ORDER: Array<'評価鯖' | '雑談鯖' | 'その他'> = ['評価鯖', '雑談鯖', 'その他'];
+  const GROUP_ORDER: Array<'評価鯖' | '雑談鯖' | 'マイクラ' | 'その他'> = ['評価鯖', '雑談鯖', 'マイクラ', 'その他'];
   const GROUP_LABELS: Record<string, string> = {
     '評価鯖': '評価鯖の設定',
     '雑談鯖': '雑談鯖用の設定',
+    'マイクラ': 'マイクラ連携の設定',
     'その他': 'その他の設定',
   };
 

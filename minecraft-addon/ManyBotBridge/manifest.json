@@ -1,0 +1,49 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "ManyBot Bridge",
+    "description": "ManyBot（Discord）とマイクラを連携します。入退出ログ・鯖内通貨の共有",
+    "uuid": "d91cb417-01f0-4a66-a43e-625da22e3c33",
+    "version": [
+      1,
+      3,
+      2
+    ],
+    "min_engine_version": [
+      1,
+      21,
+      90
+    ]
+  },
+  "modules": [
+    {
+      "type": "script",
+      "language": "javascript",
+      "uuid": "4e077c50-b68a-4e95-a802-c471f79306db",
+      "entry": "scripts/main.js",
+      "version": [
+        1,
+        3,
+        2
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "module_name": "@minecraft/server",
+      "version": "2.0.0"
+    },
+    {
+      "module_name": "@minecraft/server-net",
+      "version": "1.0.0-beta"
+    },
+    {
+      "module_name": "@minecraft/server-admin",
+      "version": "1.0.0-beta"
+    },
+    {
+      "module_name": "@minecraft/server-ui",
+      "version": "2.0.0"
+    }
+  ]
+}

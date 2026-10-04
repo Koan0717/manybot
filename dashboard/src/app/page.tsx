@@ -13,31 +13,30 @@ import {
   CheckCircle2,
   XCircle,
   PlusCircle,
-  Bot,
-  Trash2,
-  GitBranch,
   RefreshCw,
-  GitCommit,
   Search,
+  Pickaxe,
 } from 'lucide-react';
-import AddBotModal from '@/components/AddBotModal';
 
 const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || '';
 let discordSdk: DiscordSDK | null = null;
 
 type ConnStatus = { ok: boolean; latencyMs?: number; error?: string; configured?: boolean };
 
-interface RegisteredBot {
-  id: number;
-  bot_id: string;
-  bot_name: string;
-  github_repo: string | null;
-  render_deploy_hook_url: string | null;
-  has_dedicated_db: boolean;
-  last_deploy_at: string | null;
-  last_commit_sha: string | null;
-  last_commit_message: string | null;
-  created_at: string;
+interface McOverview {
+  latest_addon_version: string;
+  servers: {
+    guild_id: string;
+    is_enabled: boolean;
+    has_api_key: boolean;
+    online: boolean;
+    server_name: string | null;
+    addon_version: string | null;
+    online_players: string[];
+    max_players: number | null;
+    last_heartbeat_at: string | null;
+    join_leave_log: boolean;
+  }[];
 }
 
 export default function Home() {
@@ -58,11 +57,11 @@ export default function Home() {
     );
   });
 
-  // 登録済みBot
-  const [registeredBots, setRegisteredBots] = useState<RegisteredBot[]>([]);
-  const [botsLoading, setBotsLoading] = useState(true);
-  const [isAddBotModalOpen, setIsAddBotModalOpen] = useState(false);
-  const [deletingBotId, setDeletingBotId] = useState<string | null>(null);
+  // マイクラシステム（選択すると全サーバーの接続状況を表示）
+  const [mcOpen, setMcOpen] = useState(false);
+  const [mcOverview, setMcOverview] = useState<McOverview | null>(null);
+  const [mcLoading, setMcLoading] = useState(false);
+  const [mcError, setMcError] = useState('');
 
   useEffect(() => {
     fetch('/api/system/status')
@@ -75,24 +74,27 @@ export default function Home() {
 
   const inviteClientId = status?.clientId || clientId;
 
-  // 登録済みBot一覧を取得
-  const fetchBots = useCallback(async () => {
+  const fetchMcOverview = useCallback(async () => {
+    setMcLoading(true);
     try {
-      const res = await fetch('/api/bots');
-      if (res.ok) {
-        const data = await res.json();
-        setRegisteredBots(Array.isArray(data) ? data : []);
-      }
-    } catch {
-      setRegisteredBots([]);
+      const res = await fetch('/api/minecraft-overview', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setMcOverview(data);
+      setMcError('');
+    } catch (e: any) {
+      setMcError(`接続状況を取得できませんでした: ${e.message}`);
     } finally {
-      setBotsLoading(false);
+      setMcLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchBots();
-  }, [fetchBots]);
+    if (!mcOpen) return;
+    fetchMcOverview();
+    const t = setInterval(fetchMcOverview, 30_000);
+    return () => clearInterval(t);
+  }, [mcOpen, fetchMcOverview]);
 
   useEffect(() => {
     // Check authentication status to handle sub-account redirection
@@ -129,18 +131,6 @@ export default function Home() {
 
   const handleSelectGuild = (guildId: string) => {
     router.push(`/dashboard/${guildId}`);
-  };
-
-  const handleDeleteBot = async (bot: RegisteredBot) => {
-    if (!confirm(`「${bot.bot_name}」の登録を削除しますか？\nこの操作は取り消せません。`)) return;
-    setDeletingBotId(bot.bot_id);
-    try {
-      const res = await fetch(`/api/bots/${bot.bot_id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setRegisteredBots(prev => prev.filter(b => b.bot_id !== bot.bot_id));
-      }
-    } catch {}
-    setDeletingBotId(null);
   };
 
   return (
@@ -310,139 +300,152 @@ export default function Home() {
         </div>
 
         {/* ============================================
-            登録済みの別Bot セクション
+            マイクラシステム セクション
         ============================================ */}
         <div className="mt-8">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <div className="font-tech text-[10px] tracking-[0.2em] text-violet-400/80 uppercase mb-0.5">
-                Bot Registry // Multi-Bot
+              <div className="font-tech text-[10px] tracking-[0.2em] text-emerald-400/80 uppercase mb-0.5">
+                Minecraft System // Bridge
               </div>
               <h2 className="font-mecha text-base font-bold text-white flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"></span>
-                登録済みの別Bot
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                マイクラシステム
               </h2>
             </div>
-            <div className="flex items-center gap-2">
+            {mcOpen && (
               <button
-                onClick={fetchBots}
+                onClick={fetchMcOverview}
                 className="font-tech text-xs text-zinc-500 hover:text-white flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
                 title="更新"
               >
-                <RefreshCw className="w-3.5 h-3.5" /> 更新
+                <RefreshCw className={`w-3.5 h-3.5 ${mcLoading ? 'animate-spin' : ''}`} /> 更新
               </button>
-              <button
-                onClick={() => setIsAddBotModalOpen(true)}
-                className="font-mecha font-bold text-sm bg-gradient-to-r from-violet-600 to-violet-800 hover:from-violet-500 hover:to-violet-700 text-white px-4 py-2 rounded-lg border border-violet-500/30 shadow-lg shadow-violet-900/20 transition-all flex items-center gap-2"
-              >
-                <PlusCircle className="w-4 h-4" />
-                別のBotを追加
-              </button>
-            </div>
-          </div>
-
-          <div className="mecha-corners bg-neutral-900/80 border border-violet-900/30 mecha-clip shadow-[0_0_25px_-10px_rgba(139,92,246,0.3)] p-5">
-            {botsLoading ? (
-              <div className="text-center py-10 text-zinc-500 flex flex-col items-center gap-3 font-tech text-sm">
-                <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
-                読み込み中...
-              </div>
-            ) : registeredBots.length === 0 ? (
-              <div className="text-center py-10 space-y-3">
-                <div className="w-12 h-12 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center mx-auto">
-                  <Bot className="w-5 h-5 text-zinc-500" />
-                </div>
-                <div className="font-tech text-sm text-zinc-500">登録済みのBotはまだありません</div>
-                <button
-                  onClick={() => setIsAddBotModalOpen(true)}
-                  className="font-tech text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1.5 mx-auto"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" /> 最初のBotを追加する
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {registeredBots.map((bot) => (
-                  <div
-                    key={bot.bot_id}
-                    className="mecha-clip-sm bg-black/40 border border-zinc-800 hover:border-violet-700/40 transition-all group"
-                  >
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-700/60 to-violet-900/60 border border-violet-700/40 flex items-center justify-center flex-shrink-0">
-                            <Bot className="w-4 h-4 text-violet-300" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-mecha font-bold text-sm text-white truncate">
-                              {bot.bot_name}
-                            </div>
-                            <div className="font-mono text-[10px] text-zinc-600">
-                              {bot.bot_id}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          {bot.has_dedicated_db && (
-                            <span className="font-tech text-[10px] bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 px-1.5 py-0.5 rounded">
-                              専用DB
-                            </span>
-                          )}
-                          <button
-                            onClick={() => handleDeleteBot(bot)}
-                            disabled={deletingBotId === bot.bot_id}
-                            className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-red-950/60 hover:border-red-800 border border-transparent flex items-center justify-center text-zinc-500 hover:text-red-400 transition-all"
-                            title="削除"
-                          >
-                            {deletingBotId === bot.bot_id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* GitHub情報 */}
-                      {bot.github_repo && (
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <GitBranch className="w-3 h-3 text-zinc-500 flex-shrink-0" />
-                          <span className="font-tech text-[11px] text-zinc-500 truncate">{bot.github_repo}</span>
-                        </div>
-                      )}
-
-                      {/* 最新コミット */}
-                      {bot.last_commit_sha && (
-                        <div className="flex items-center gap-1.5 mb-3">
-                          <GitCommit className="w-3 h-3 text-zinc-600 flex-shrink-0" />
-                          <span className="font-mono text-[10px] text-zinc-600">{bot.last_commit_sha}</span>
-                          <span className="font-tech text-[11px] text-zinc-500 truncate">{bot.last_commit_message}</span>
-                        </div>
-                      )}
-
-                      {/* サーバー管理へボタン */}
-                      <button
-                        onClick={() => router.push(`/dashboard/bot/${bot.bot_id}`)}
-                        className="w-full font-tech text-xs text-violet-400 hover:text-violet-300 bg-violet-950/30 hover:bg-violet-950/50 border border-violet-900/40 hover:border-violet-700/60 rounded-lg py-2 transition-all flex items-center justify-center gap-1.5"
-                      >
-                        サーバーを選択・管理
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
             )}
           </div>
+
+          <button
+            onClick={() => setMcOpen((v) => !v)}
+            className={`w-full mecha-clip-sm flex items-center gap-4 p-4 text-left border transition-all ${
+              mcOpen
+                ? 'bg-emerald-950/30 border-emerald-700/60'
+                : 'bg-black/40 border-zinc-800 hover:border-emerald-800/60 hover:bg-emerald-950/20'
+            }`}
+          >
+            <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-emerald-600/60 to-emerald-900/60 border border-emerald-700/40 flex items-center justify-center flex-shrink-0">
+              <Pickaxe className="w-5 h-5 text-emerald-200" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-mecha font-bold text-sm text-white">マイクラシステム（統合版 BDS 連携）</div>
+              <div className="font-tech text-[11px] text-zinc-500">
+                サーバー・アドオンの接続状況 / 入退出ログ / マイクラ内通貨 ＝ 鯖内通貨
+              </div>
+            </div>
+            {mcOverview && (
+              <div className="hidden sm:flex items-center gap-2 font-tech text-[11px]">
+                <span className="text-green-400">接続中 {mcOverview.servers.filter((s) => s.online).length}</span>
+                <span className="text-zinc-600">/</span>
+                <span className="text-zinc-400">連携 {mcOverview.servers.length}</span>
+              </div>
+            )}
+            <ChevronRight className={`w-4 h-4 text-zinc-500 transition-transform flex-shrink-0 ${mcOpen ? 'rotate-90' : ''}`} />
+          </button>
+
+          {mcOpen && (
+            <div className="mt-3 mecha-corners bg-neutral-900/80 border border-emerald-900/30 mecha-clip shadow-[0_0_25px_-10px_rgba(16,185,129,0.3)] p-5">
+              {mcLoading && !mcOverview ? (
+                <div className="text-center py-10 text-zinc-500 flex flex-col items-center gap-3 font-tech text-sm">
+                  <Loader2 className="w-5 h-5 animate-spin text-emerald-500" />
+                  接続状況を確認中...
+                </div>
+              ) : mcError ? (
+                <div className="font-tech text-sm text-red-300">{mcError}</div>
+              ) : (
+                <div className="space-y-3">
+                  {(mcOverview?.servers ?? []).length === 0 && (
+                    <div className="font-tech text-sm text-zinc-500 text-center py-4">
+                      まだマイクラ連携しているサーバーはありません。下からサーバーを選んで設定してください。
+                    </div>
+                  )}
+                  {(mcOverview?.servers ?? []).map((s) => {
+                    const guild = guilds.find((g) => String(g.id) === s.guild_id);
+                    const outdated = !!s.addon_version && s.addon_version !== mcOverview?.latest_addon_version;
+                    return (
+                      <button
+                        key={s.guild_id}
+                        onClick={() => router.push(`/dashboard/${s.guild_id}/minecraft`)}
+                        className="w-full mecha-clip-sm bg-black/40 border border-zinc-800 hover:border-emerald-700/50 p-4 text-left transition-all group"
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <div className="min-w-0">
+                            <div className="font-mecha font-bold text-sm text-white truncate">{guild?.name ?? s.guild_id}</div>
+                            <div className="font-tech text-[10px] text-zinc-600 truncate">{s.server_name || 'Minecraft'}</div>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-emerald-400 flex-shrink-0" />
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 font-tech text-[11px]">
+                          <div>
+                            <div className="text-zinc-600">サーバー連携</div>
+                            {!s.is_enabled ? (
+                              <span className="text-zinc-500">OFF</span>
+                            ) : !s.has_api_key ? (
+                              <span className="text-zinc-500">APIキー未発行</span>
+                            ) : s.online ? (
+                              <span className="text-green-400 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> 接続中</span>
+                            ) : (
+                              <span className="text-red-400 flex items-center gap-1"><XCircle className="w-3 h-3" /> オフライン</span>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-zinc-600">アドオン</div>
+                            {s.addon_version ? (
+                              <span className={outdated ? 'text-amber-400' : 'text-zinc-300'}>
+                                v{s.addon_version}{outdated ? '（更新あり）' : ''}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-500">未検出</span>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-zinc-600">プレイヤー</div>
+                            <span className="text-zinc-300">
+                              {s.online ? `${s.online_players.length}${s.max_players ? ` / ${s.max_players}` : ''}人` : '—'}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="text-zinc-600">入退出ログ</div>
+                            <span className={s.join_leave_log ? 'text-zinc-300' : 'text-zinc-500'}>{s.join_leave_log ? '設定済み' : '未設定'}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {guilds.some((g) => !mcOverview?.servers.some((s) => s.guild_id === String(g.id))) && (
+                    <div className="pt-2">
+                      <div className="font-tech text-[11px] text-zinc-500 mb-2">マイクラ連携を設定するサーバー</div>
+                      <div className="flex flex-wrap gap-2">
+                        {guilds
+                          .filter((g) => !mcOverview?.servers.some((s) => s.guild_id === String(g.id)))
+                          .map((g) => (
+                            <button
+                              key={g.id}
+                              onClick={() => router.push(`/dashboard/${g.id}/minecraft`)}
+                              className="font-tech text-xs text-emerald-300 hover:text-white bg-emerald-950/30 hover:bg-emerald-900/40 border border-emerald-900/50 rounded-lg px-3 py-1.5 transition-colors"
+                            >
+                              + {g.name}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* AddBotModal */}
-      <AddBotModal
-        isOpen={isAddBotModalOpen}
-        onClose={() => setIsAddBotModalOpen(false)}
-        onSuccess={fetchBots}
-      />
     </main>
   );
 }
