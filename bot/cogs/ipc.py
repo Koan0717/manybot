@@ -103,6 +103,7 @@ class IPC(commands.Cog):
                         elif panel_type == "reload_antigrief":
                             try:
                                 self.bot.bot_settings = await database.load_settings()
+                                await self.bot.fetch_and_cache_antigrief_config(guild_id)
                                 print(f"[IPC] Reloaded antigrief settings for guild {guild_id}")
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload antigrief settings: {e}")

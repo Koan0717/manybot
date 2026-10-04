@@ -8,12 +8,8 @@ import os
 import hashlib
 import re
 from helpers import get_setting
+from antigrief import handle_antigrief
 
-# Discord招待URL検知用パターン（毎メッセージでのコンパイルを避けるためモジュールレベルで定義）
-DISCORD_INVITE_PATTERN = re.compile(
-    r'(?:https?://)?(?:www\.)?(?:discord\.gg|discord\.com/invite|discordapp\.com/invite)/[a-zA-Z0-9-]+',
-    re.IGNORECASE
-)
 
 class Logging(commands.Cog):
     def __init__(self, bot):
@@ -28,6 +24,11 @@ class Logging(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
+            return
+
+        # 荒らし対策: NGキーワード、連続同じメッセージ、@everyone/URLスパム、メンションスパム
+        # （転送や常設テンプレートより先に判定し、荒らしならここで処理終了）
+        if await handle_antigrief(self.bot, message):
             return
 
         # 匿名チャットの転送処理（受信場所 -> 設置場所）
@@ -81,105 +82,7 @@ class Logging(commands.Cog):
                     new_msg = await message.channel.send(content=text_content)
                     await database.update_sticky_last_message(channel_id, new_msg.id, None)
 
-        user_id = message.author.id
-        now = datetime.datetime.now(config.JST)
-
-        # 2. 荒らし対策: 連続同じメッセージ、@everyone/URLスパム、メンションスパム
-        if isinstance(message.author, discord.Member):
-            # 適用対象および免除ロールの確認
-            guild = message.guild
-            if guild:
-                enable_antigrief = get_setting(self.bot, "ENABLE_ANTIGRIEF", guild.id)
-                if enable_antigrief is None:
-                    enable_antigrief = True
-                elif isinstance(enable_antigrief, str):
-                    enable_antigrief = enable_antigrief.lower() == "true"
-                
-                is_grief_monitored = enable_antigrief
-                if is_grief_monitored:
-                    cfg = self.bot.get_antigrief_config(guild.id)
-                    
-                    # 免除ロールチェック
-                    exempt_roles = cfg.get("exempt_roles", set())
-                    author_role_ids = {role.id for role in message.author.roles}
-                    
-                    # 対象カテゴリー/チャンネルチェック
-                    target_categories = cfg.get("categories", set())
-                    target_channels = cfg.get("channels", set())
-                    
-                    if exempt_roles & author_role_ids:
-                        is_grief_monitored = False
-                    elif target_categories or target_channels:
-                        in_target_channel = message.channel.id in target_channels
-                        in_target_category = message.channel.category and message.channel.category.id in target_categories
-                        if not in_target_channel and not in_target_category:
-                            is_grief_monitored = False
-                
-                if is_grief_monitored:
-                    user_tracker = self.bot.spam_tracker.setdefault(user_id, {
-                        "last_content": None,
-                        "content_count": 0,
-                        "everyone_url_count": 0,
-                        "mention_count": 0,
-                        "last_time": now
-                    })
-
-                    # 3秒以上経過していればリセット
-                    if (now - user_tracker["last_time"]).total_seconds() > 3:
-                        user_tracker["content_count"] = 0
-                        user_tracker["everyone_url_count"] = 0
-                        user_tracker["mention_count"] = 0
-
-                    user_tracker["last_time"] = now
-                    timeout_reason = None
-
-                    # 同じメッセージの連続検知 (内容が存在する場合)
-                    if message.content and message.content == user_tracker["last_content"]:
-                        user_tracker["content_count"] += 1
-                        if user_tracker["content_count"] >= 3:
-                            timeout_reason = "連続で同じメッセージを送信したため"
-                    else:
-                        user_tracker["last_content"] = message.content
-                        user_tracker["content_count"] = 1
-
-                    # @everyone / @here メンション、またはDiscord招待URL送信の検知 (3秒以内累計5回以上)
-                    if message.mention_everyone or DISCORD_INVITE_PATTERN.search(message.content):
-                        user_tracker["everyone_url_count"] += 1
-                        if user_tracker["everyone_url_count"] >= 5:
-                            timeout_reason = "短時間にDiscord招待リンクまたは@everyoneメンションを複数回送信したため"
-
-                    # メンションスパムの検知 (ユーザーメンション + 役職メンション)
-                    msg_mentions = len(message.mentions) + len(message.role_mentions)
-                    if msg_mentions >= 5:
-                        timeout_reason = "1つのメッセージで大量のメンションを送信したため"
-                    elif msg_mentions > 0:
-                        user_tracker["mention_count"] += msg_mentions
-                        if user_tracker["mention_count"] >= 10:
-                            timeout_reason = "短時間に連続してメンションを送信したため"
-
-                    if timeout_reason:
-                        try:
-                            # トリガーとなったメッセージの自動削除を試みる
-                            try:
-                                await message.delete()
-                            except discord.Forbidden:
-                                print(f"[WARNING] Cannot delete message. Missing permissions.")
-                            except Exception as de:
-                                print(f"[ERROR] Message deletion failed: {de}")
-
-                            timeout_duration = datetime.timedelta(hours=1)
-                            await message.author.timeout(timeout_duration, reason=timeout_reason)
-                            await message.channel.send(f"🚨 {message.author.mention} がスパム行為（{timeout_reason}）によりタイムアウトされました。")
-                            
-                            user_tracker["content_count"] = 0
-                            user_tracker["everyone_url_count"] = 0
-                            user_tracker["mention_count"] = 0
-                            return # スパムなら処理終了
-                        except Exception as e:
-                            print(f"[ERROR] Timeout failed for {message.author.display_name}: {e}")
-
-
-        # 3. 自己紹介チャンネルでの評価スレッド自動作成は evaluation.py の on_message で一元管理
+        # 2. 自己紹介チャンネルでの評価スレッド自動作成は evaluation.py の on_message で一元管理
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):

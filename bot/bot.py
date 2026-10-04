@@ -37,7 +37,7 @@ class EconomyBot(commands.Bot):
         self.role_room_prices = {}     # {(role_key, room_type, duration): price}
         self.spam_tracker = {}         # {user_id: {"last_content": str, "content_count": int, "everyone_count": int, "last_time": datetime}}
         self.invite_cache = {}         # {guild_id: {invite_code: uses}}
-        self.antigrief_settings_cache = {} # {guild_id: {"categories": set, "channels": set, "exempt_roles": set}}
+        self.antigrief_settings_cache = {} # {guild_id: {"categories": set, "channels": set, "exempt_roles": set, "ng_keywords": list, "admin_channel_id": int|None}}
 
     def get_evaluation_config(self, guild_id: int) -> dict:
         if guild_id not in self.evaluation_settings:
@@ -126,7 +126,9 @@ class EconomyBot(commands.Bot):
             self.antigrief_settings_cache[guild_id] = {
                 "categories": set(),
                 "channels": set(),
-                "exempt_roles": set()
+                "exempt_roles": set(),
+                "ng_keywords": [],
+                "admin_channel_id": None
             }
         return self.antigrief_settings_cache[guild_id]
 
@@ -135,7 +137,9 @@ class EconomyBot(commands.Bot):
         self.antigrief_settings_cache[guild_id] = {
             "categories": set(data.get("categories", [])),
             "channels": set(data.get("channels", [])),
-            "exempt_roles": set(data.get("exempt_roles", []))
+            "exempt_roles": set(data.get("exempt_roles", [])),
+            "ng_keywords": list(data.get("ng_keywords", [])),
+            "admin_channel_id": data.get("admin_channel_id")
         }
         return self.antigrief_settings_cache[guild_id]
 
@@ -165,7 +169,9 @@ class EconomyBot(commands.Bot):
                 self.antigrief_settings_cache[s["guild_id"]] = {
                     "categories": set(s.get("categories", [])),
                     "channels": set(s.get("channels", [])),
-                    "exempt_roles": set(s.get("exempt_roles", []))
+                    "exempt_roles": set(s.get("exempt_roles", [])),
+                    "ng_keywords": list(s.get("ng_keywords", [])),
+                    "admin_channel_id": s.get("admin_channel_id")
                 }
         except Exception as e:
             print(f"[ERROR] Failed to load antigrief settings from DB: {e}")

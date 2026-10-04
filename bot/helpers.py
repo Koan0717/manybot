@@ -899,9 +899,60 @@ async def check_and_assign_level_coins(bot, member: discord.Member, level_type: 
             print(f"[ERROR] check_and_assign_level_coins for {member.display_name}: {e}")
 
 # --- ログ用ヘルパー ---
+# ログ内のユーザーメンション（直後の「(ID)」「(ID: ID)」「(`ID`)」表記も含む）
+_LOG_USER_MENTION_PATTERN = re.compile(r"<@!?(\d{15,20})>(?:[ \t]*[（(](?:ID:\s*)?`?(\d{15,20})`?[)）])?")
+
+
+def add_member_names_to_text(guild: discord.Guild, text: str) -> str:
+    """ログ本文の <@ユーザーID> に、サーバー内にいるメンバーなら表示名を書き添える。
+
+    Discord はキャッシュにないユーザーのメンションを数字のまま表示することがあるため、
+    名前が分かるよう「<@ID> (**表示名** / ID: ID)」の形にする。サーバーにいないユーザーはそのまま。
+    """
+    if not guild or not text or "<@" not in text:
+        return text
+
+    def _replace(m: re.Match) -> str:
+        user_id = int(m.group(1))
+        member = guild.get_member(user_id)
+        if member is None:
+            return m.group(0)
+        name = member.display_name
+        # 既に名前が書き添えられている場合は二重にしない
+        following = m.string[m.end():].lstrip()
+        if following.startswith(f"({name}") or following.startswith(f"（{name}") or following.startswith(f"(`{name}") or following.startswith(f"(**{discord.utils.escape_markdown(name)}**"):
+            return m.group(0)
+        label = discord.utils.escape_markdown(name)
+        if m.group(2):
+            return f"<@{user_id}> (**{label}** / ID: {user_id})"
+        return f"<@{user_id}> (**{label}**)"
+
+    return _LOG_USER_MENTION_PATTERN.sub(_replace, text)
+
+
+def add_member_names_to_embed(guild: discord.Guild, embed: discord.Embed) -> discord.Embed:
+    """埋め込みの説明文・各フィールドのユーザーメンションに表示名を書き添える"""
+    if not guild:
+        return embed
+    try:
+        if embed.description:
+            desc = add_member_names_to_text(guild, embed.description)
+            embed.description = desc if len(desc) <= 4096 else desc[:4093] + "..."
+        for i, field in enumerate(embed.fields):
+            value = add_member_names_to_text(guild, field.value)
+            if value != field.value:
+                if len(value) > 1024:
+                    value = value[:1021] + "..."
+                embed.set_field_at(i, name=field.name, value=value, inline=field.inline)
+    except Exception as e:
+        print(f"[WARNING] Failed to add member names to log embed: {e}")
+    return embed
+
+
 async def send_log(bot, guild: discord.Guild, log_type: str, embed: discord.Embed):
     if not guild:
         return
+    embed = add_member_names_to_embed(guild, embed)
     channel_id = await database.get_log_channel(guild.id, log_type)
     if channel_id:
         channel = guild.get_channel(channel_id)

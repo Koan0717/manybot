@@ -12,7 +12,7 @@ export async function GET(
     await ensureAntigriefSettingsSchema(pool);
     // Fetch antigrief settings
     const antigriefResult = await pool.query(
-      'SELECT target_category_ids, target_channel_ids, exempt_role_ids FROM antigrief_settings WHERE guild_id = $1',
+      'SELECT target_category_ids, target_channel_ids, exempt_role_ids, ng_keywords, admin_channel_id FROM antigrief_settings WHERE guild_id = $1',
       [guildId]
     );
 
@@ -34,14 +34,18 @@ export async function GET(
     const antigriefSettings = antigriefResult.rows.length > 0 ? antigriefResult.rows[0] : {
       target_category_ids: [],
       target_channel_ids: [],
-      exempt_role_ids: []
+      exempt_role_ids: [],
+      ng_keywords: [],
+      admin_channel_id: null
     };
 
     return NextResponse.json({
       ENABLE_ANTIGRIEF: enableAntigrief,
       target_category_ids: antigriefSettings.target_category_ids?.map(String) || [],
       target_channel_ids: antigriefSettings.target_channel_ids?.map(String) || [],
-      exempt_role_ids: antigriefSettings.exempt_role_ids?.map(String) || []
+      exempt_role_ids: antigriefSettings.exempt_role_ids?.map(String) || [],
+      ng_keywords: antigriefSettings.ng_keywords || [],
+      admin_channel_id: antigriefSettings.admin_channel_id ? String(antigriefSettings.admin_channel_id) : ''
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -55,13 +59,22 @@ export async function POST(
   const guildId = params.guild_id;
   const pool = await getPool(guildId);
   try {
+    await ensureAntigriefSettingsSchema(pool);
     const body = await request.json();
     const { 
       ENABLE_ANTIGRIEF, 
       target_category_ids, 
       target_channel_ids, 
-      exempt_role_ids 
+      exempt_role_ids,
+      ng_keywords,
+      admin_channel_id
     } = body;
+
+    // NGキーワード: 前後の空白を除去し、空・重複を取り除く
+    const keywords: string[] = Array.isArray(ng_keywords)
+      ? Array.from(new Set(ng_keywords.map((k: any) => String(k).trim()).filter((k: string) => k.length > 0)))
+      : [];
+    const adminChannelId = admin_channel_id && String(admin_channel_id) !== '' ? String(admin_channel_id) : null;
 
     const client = await pool.connect();
     try {
@@ -78,15 +91,18 @@ export async function POST(
       }
 
       await client.query(
-        `INSERT INTO antigrief_settings (guild_id, target_category_ids, target_channel_ids, exempt_role_ids)
-         VALUES ($1, $2::bigint[], $3::bigint[], $4::bigint[])
+        `INSERT INTO antigrief_settings (guild_id, target_category_ids, target_channel_ids, exempt_role_ids, ng_keywords, admin_channel_id)
+         VALUES ($1, $2::bigint[], $3::bigint[], $4::bigint[], $5::text[], $6::bigint)
          ON CONFLICT (guild_id) DO UPDATE SET 
-         target_category_ids = $2::bigint[], target_channel_ids = $3::bigint[], exempt_role_ids = $4::bigint[]`,
+         target_category_ids = $2::bigint[], target_channel_ids = $3::bigint[], exempt_role_ids = $4::bigint[],
+         ng_keywords = $5::text[], admin_channel_id = $6::bigint`,
         [
           guildId, 
           target_category_ids?.map(String) || [], 
           target_channel_ids?.map(String) || [], 
-          exempt_role_ids?.map(String) || []
+          exempt_role_ids?.map(String) || [],
+          keywords,
+          adminChannelId
         ]
       );
 

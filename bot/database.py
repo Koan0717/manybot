@@ -669,6 +669,8 @@ async def setup_db_schema(p):
             await conn.execute('ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS target_category_ids BIGINT[] DEFAULT \'{}\'')
             await conn.execute('ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS target_channel_ids BIGINT[] DEFAULT \'{}\'')
             await conn.execute('ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS exempt_role_ids BIGINT[] DEFAULT \'{}\'')
+            await conn.execute('ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS ng_keywords TEXT[] DEFAULT \'{}\'')
+            await conn.execute('ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS admin_channel_id BIGINT')
         except Exception as e:
             print(f"[Migration] antigrief_settings migration warning: {e}")
 
@@ -4310,7 +4312,7 @@ async def get_antigrief_settings(guild_id: int) -> dict:
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT target_category_ids, target_channel_ids, exempt_role_ids FROM antigrief_settings WHERE guild_id = $1', guild_id)
+        row = await conn.fetchrow('SELECT target_category_ids, target_channel_ids, exempt_role_ids, ng_keywords, admin_channel_id FROM antigrief_settings WHERE guild_id = $1', guild_id)
 
         if row:
 
@@ -4320,7 +4322,11 @@ async def get_antigrief_settings(guild_id: int) -> dict:
 
                 "channels": row["target_channel_ids"] or [],
 
-                "exempt_roles": row["exempt_role_ids"] or []
+                "exempt_roles": row["exempt_role_ids"] or [],
+
+                "ng_keywords": row["ng_keywords"] or [],
+
+                "admin_channel_id": row["admin_channel_id"]
 
             }
 
@@ -4328,7 +4334,7 @@ async def get_antigrief_settings(guild_id: int) -> dict:
 
             await conn.execute('INSERT INTO antigrief_settings (guild_id, target_category_ids, target_channel_ids, exempt_role_ids) VALUES ($1, $2, $3, $4) ON CONFLICT (guild_id) DO NOTHING', guild_id, [], [], [])
 
-            return {"categories": [], "channels": [], "exempt_roles": []}
+            return {"categories": [], "channels": [], "exempt_roles": [], "ng_keywords": [], "admin_channel_id": None}
 
 
 
@@ -4344,7 +4350,7 @@ async def get_all_antigrief_settings() -> list[dict]:
 
             async with p.acquire() as conn:
 
-                rows = await conn.fetch('SELECT guild_id, target_category_ids, target_channel_ids, exempt_role_ids FROM antigrief_settings')
+                rows = await conn.fetch('SELECT guild_id, target_category_ids, target_channel_ids, exempt_role_ids, ng_keywords, admin_channel_id FROM antigrief_settings')
 
                 all_settings.extend([
 
@@ -4356,7 +4362,11 @@ async def get_all_antigrief_settings() -> list[dict]:
 
                         "channels": r["target_channel_ids"] or [],
 
-                        "exempt_roles": r["exempt_role_ids"] or []
+                        "exempt_roles": r["exempt_role_ids"] or [],
+
+                        "ng_keywords": r["ng_keywords"] or [],
+
+                        "admin_channel_id": r["admin_channel_id"]
 
                     }
 
