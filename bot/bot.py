@@ -37,7 +37,7 @@ class EconomyBot(commands.Bot):
         self.role_room_prices = {}     # {(role_key, room_type, duration): price}
         self.spam_tracker = {}         # {user_id: {"last_content": str, "content_count": int, "everyone_count": int, "last_time": datetime}}
         self.invite_cache = {}         # {guild_id: {invite_code: uses}}
-        self.antigrief_settings_cache = {} # {guild_id: {"categories": set, "channels": set, "exempt_roles": set, "ng_keywords": list, "admin_channel_id": int|None}}
+        self.antigrief_settings_cache = {} # {guild_id: {"categories": set, "channels": set, "exempt_roles": set, "admin_channel_id": int|None, "ng_rules": list(未読込なら無し)}}
 
     def get_evaluation_config(self, guild_id: int) -> dict:
         if guild_id not in self.evaluation_settings:
@@ -127,19 +127,27 @@ class EconomyBot(commands.Bot):
                 "categories": set(),
                 "channels": set(),
                 "exempt_roles": set(),
-                "ng_keywords": [],
                 "admin_channel_id": None
             }
         return self.antigrief_settings_cache[guild_id]
 
     async def fetch_and_cache_antigrief_config(self, guild_id: int) -> dict:
         data = await database.get_antigrief_settings(guild_id)
+        ng_rules = await database.get_antigrief_ng_rules(guild_id)
         self.antigrief_settings_cache[guild_id] = {
             "categories": set(data.get("categories", [])),
             "channels": set(data.get("channels", [])),
             "exempt_roles": set(data.get("exempt_roles", [])),
-            "ng_keywords": list(data.get("ng_keywords", [])),
-            "admin_channel_id": data.get("admin_channel_id")
+            "admin_channel_id": data.get("admin_channel_id"),
+            "ng_rules": [
+                {
+                    **r,
+                    "categories": set(r["categories"]),
+                    "channels": set(r["channels"]),
+                    "exempt_roles": set(r["exempt_roles"]),
+                }
+                for r in ng_rules
+            ]
         }
         return self.antigrief_settings_cache[guild_id]
 
@@ -170,7 +178,6 @@ class EconomyBot(commands.Bot):
                     "categories": set(s.get("categories", [])),
                     "channels": set(s.get("channels", [])),
                     "exempt_roles": set(s.get("exempt_roles", [])),
-                    "ng_keywords": list(s.get("ng_keywords", [])),
                     "admin_channel_id": s.get("admin_channel_id")
                 }
         except Exception as e:

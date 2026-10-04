@@ -112,6 +112,48 @@ export async function ensureAntigriefSettingsSchema(pool: any) {
 }
 
 /**
+ * NGワードルール（antigrief_ng_rules）テーブルを保証し、旧形式のNGキーワードを移行する
+ */
+export async function ensureAntigriefNgRulesSchema(pool: any) {
+  await ensureAntigriefSettingsSchema(pool);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS antigrief_ng_rules (
+      id SERIAL PRIMARY KEY,
+      guild_id BIGINT NOT NULL,
+      name TEXT NOT NULL DEFAULT '',
+      keywords TEXT[] NOT NULL DEFAULT '{}',
+      target_category_ids BIGINT[] NOT NULL DEFAULT '{}',
+      target_channel_ids BIGINT[] NOT NULL DEFAULT '{}',
+      exempt_role_ids BIGINT[] NOT NULL DEFAULT '{}',
+      enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS antigrief_ng_rules_guild_idx ON antigrief_ng_rules (guild_id)`);
+
+  // 旧形式（antigrief_settings.ng_keywords）を1つのルールとして移行（Bot側と同じ処理）
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`
+      INSERT INTO antigrief_ng_rules (guild_id, name, keywords, target_category_ids, target_channel_ids, exempt_role_ids)
+      SELECT s.guild_id, 'NGワード（移行）', s.ng_keywords,
+             COALESCE(s.target_category_ids, '{}'), COALESCE(s.target_channel_ids, '{}'), COALESCE(s.exempt_role_ids, '{}')
+      FROM antigrief_settings s
+      WHERE cardinality(COALESCE(s.ng_keywords, '{}')) > 0
+        AND NOT EXISTS (SELECT 1 FROM antigrief_ng_rules r WHERE r.guild_id = s.guild_id)
+    `);
+    await client.query(`UPDATE antigrief_settings SET ng_keywords = '{}' WHERE cardinality(COALESCE(ng_keywords, '{}')) > 0`);
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('Failed to migrate legacy NG keywords:', e);
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * vc_coins_settings テーブルの全カラムを保証する
  */
 export async function ensureVcCoinsSettingsSchema(pool: any) {

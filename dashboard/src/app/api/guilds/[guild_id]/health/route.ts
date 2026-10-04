@@ -324,6 +324,17 @@ export async function GET(
           checks.push(await checkChannel(ag.rows[0].admin_channel_id.toString(), '管理者チャット（タイムアウト通知先）'));
         }
       }
+      try {
+        const rules = await pool.query(`SELECT name, target_channel_ids, exempt_role_ids FROM antigrief_ng_rules WHERE guild_id = $1 AND enabled = TRUE`, [guildId]);
+        for (const rule of rules.rows) {
+          for (const cid of rule.target_channel_ids || []) {
+            checks.push(await checkChannel(cid?.toString(), `NGワードルール「${rule.name}」: 監視対象チャンネル`));
+          }
+          for (const rid of rule.exempt_role_ids || []) {
+            checks.push(checkRoleExists(rid?.toString(), roleMap, `NGワードルール「${rule.name}」: 免除ロール`));
+          }
+        }
+      } catch {}
       result['antigrief'] = finalize(checks);
     } catch (e: any) {
       result['antigrief'] = { ok: false, checks: [{ label: '荒らし対策設定', ok: false, detail: e.message }] };

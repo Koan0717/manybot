@@ -674,6 +674,26 @@ async def setup_db_schema(p):
         except Exception as e:
             print(f"[Migration] antigrief_settings migration warning: {e}")
 
+        # NGワードルール（荒らし対策とは別の監視対象・免除設定を持つ）
+        try:
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS antigrief_ng_rules (
+                    id SERIAL PRIMARY KEY,
+                    guild_id BIGINT NOT NULL,
+                    name TEXT NOT NULL DEFAULT '',
+                    keywords TEXT[] NOT NULL DEFAULT '{}',
+                    target_category_ids BIGINT[] NOT NULL DEFAULT '{}',
+                    target_channel_ids BIGINT[] NOT NULL DEFAULT '{}',
+                    exempt_role_ids BIGINT[] NOT NULL DEFAULT '{}',
+                    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            ''')
+            await conn.execute('CREATE INDEX IF NOT EXISTS antigrief_ng_rules_guild_idx ON antigrief_ng_rules (guild_id)')
+            await migrate_legacy_ng_keywords(conn)
+        except Exception as e:
+            print(f"[Migration] antigrief_ng_rules migration warning: {e}")
+
         try:
             await conn.execute('ALTER TABLE level_role_rewards ADD COLUMN IF NOT EXISTS condition_role_id BIGINT DEFAULT NULL')
             await conn.execute('ALTER TABLE level_role_rewards DROP CONSTRAINT IF EXISTS level_role_rewards_pkey')
@@ -4312,7 +4332,7 @@ async def get_antigrief_settings(guild_id: int) -> dict:
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT target_category_ids, target_channel_ids, exempt_role_ids, ng_keywords, admin_channel_id FROM antigrief_settings WHERE guild_id = $1', guild_id)
+        row = await conn.fetchrow('SELECT target_category_ids, target_channel_ids, exempt_role_ids, admin_channel_id FROM antigrief_settings WHERE guild_id = $1', guild_id)
 
         if row:
 
@@ -4324,9 +4344,7 @@ async def get_antigrief_settings(guild_id: int) -> dict:
 
                 "exempt_roles": row["exempt_role_ids"] or [],
 
-                "ng_keywords": row["ng_keywords"] or [],
-
-                "admin_channel_id": row["admin_channel_id"]
+                                "admin_channel_id": row["admin_channel_id"]
 
             }
 
@@ -4334,8 +4352,42 @@ async def get_antigrief_settings(guild_id: int) -> dict:
 
             await conn.execute('INSERT INTO antigrief_settings (guild_id, target_category_ids, target_channel_ids, exempt_role_ids) VALUES ($1, $2, $3, $4) ON CONFLICT (guild_id) DO NOTHING', guild_id, [], [], [])
 
-            return {"categories": [], "channels": [], "exempt_roles": [], "ng_keywords": [], "admin_channel_id": None}
+            return {"categories": [], "channels": [], "exempt_roles": [], "admin_channel_id": None}
 
+
+
+def _ng_rule_row_to_dict(r) -> dict:
+    return {
+        "id": r["id"],
+        "guild_id": r["guild_id"],
+        "name": r["name"] or "",
+        "keywords": list(r["keywords"] or []),
+        "categories": list(r["target_category_ids"] or []),
+        "channels": list(r["target_channel_ids"] or []),
+        "exempt_roles": list(r["exempt_role_ids"] or []),
+        "enabled": r["enabled"] if r["enabled"] is not None else True,
+    }
+
+
+async def migrate_legacy_ng_keywords(conn):
+    """旧形式（antigrief_settings.ng_keywords）のNGキーワードを NGワードルールへ移行する"""
+    async with conn.transaction():
+        await conn.execute('''
+            INSERT INTO antigrief_ng_rules (guild_id, name, keywords, target_category_ids, target_channel_ids, exempt_role_ids)
+            SELECT s.guild_id, 'NGワード（移行）', s.ng_keywords,
+                   COALESCE(s.target_category_ids, '{}'), COALESCE(s.target_channel_ids, '{}'), COALESCE(s.exempt_role_ids, '{}')
+            FROM antigrief_settings s
+            WHERE cardinality(COALESCE(s.ng_keywords, '{}')) > 0
+              AND NOT EXISTS (SELECT 1 FROM antigrief_ng_rules r WHERE r.guild_id = s.guild_id)
+        ''')
+        await conn.execute("UPDATE antigrief_settings SET ng_keywords = '{}' WHERE cardinality(COALESCE(ng_keywords, '{}')) > 0")
+
+
+async def get_antigrief_ng_rules(guild_id: int) -> list[dict]:
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        rows = await conn.fetch('SELECT * FROM antigrief_ng_rules WHERE guild_id = $1 ORDER BY id', guild_id)
+        return [_ng_rule_row_to_dict(r) for r in rows]
 
 
 async def get_all_antigrief_settings() -> list[dict]:
@@ -4350,7 +4402,7 @@ async def get_all_antigrief_settings() -> list[dict]:
 
             async with p.acquire() as conn:
 
-                rows = await conn.fetch('SELECT guild_id, target_category_ids, target_channel_ids, exempt_role_ids, ng_keywords, admin_channel_id FROM antigrief_settings')
+                rows = await conn.fetch('SELECT guild_id, target_category_ids, target_channel_ids, exempt_role_ids, admin_channel_id FROM antigrief_settings')
 
                 all_settings.extend([
 
@@ -4364,9 +4416,7 @@ async def get_all_antigrief_settings() -> list[dict]:
 
                         "exempt_roles": r["exempt_role_ids"] or [],
 
-                        "ng_keywords": r["ng_keywords"] or [],
-
-                        "admin_channel_id": r["admin_channel_id"]
+                                                "admin_channel_id": r["admin_channel_id"]
 
                     }
 
