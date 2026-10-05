@@ -5,6 +5,7 @@ import datetime
 import asyncio
 import re
 import database
+import server_template
 from helpers import (
     JST, get_setting, get_role_by_setting, get_new_member_roles, has_admin_role, is_admin, is_admin_or_interviewer, is_admin_or_banker, send_log,
     NEW_MEMBER_ROLE_NAME, INTERVIEWER_ROLE_NAMES, FREE_INN_ROLE_NAMES,
@@ -398,6 +399,49 @@ async def build_db_merge_embed(guild_id: int, strategy: str, dry_run: bool) -> d
     return embed
 
 
+class ServerBuildConfirmView(discord.ui.View):
+    def __init__(self, bot, author_id: int, template: dict, apply_settings: bool):
+        super().__init__(timeout=120)
+        self.bot = bot
+        self.author_id = author_id
+        self.template = template
+        self.apply_settings = apply_settings
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("コマンドを実行した人だけが操作できます。", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="構築する", style=discord.ButtonStyle.danger, emoji="🏗️")
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.edit_message(content="🏗️ 構築を開始しました…", embed=None, view=None)
+
+        async def progress(msg):
+            await interaction.edit_original_response(content=f"🏗️ {msg}")
+
+        result = await server_template.build(self.bot, interaction.guild, self.template, self.apply_settings, progress)
+
+        embed = discord.Embed(
+            title=f"✅ 「{self.template['name']}」の構築が完了しました",
+            color=discord.Color.green() if not result["errors"] else discord.Color.orange(),
+        )
+        embed.add_field(name="ロール", value=f"新規 {len(result['created_roles'])} 個 / 既存を使用 {len(result['reused_roles'])} 個", inline=False)
+        embed.add_field(name="カテゴリー・チャンネル", value=f"新規 {len(result['created_channels'])} 個 / 既存を使用 {len(result['reused_channels'])} 個", inline=False)
+        if self.apply_settings:
+            embed.add_field(name="Bot の設定", value=f"{len(result['settings'])} 項目に反映しました（ロール設定・評価カテゴリー・自己紹介・レベルアップ通知・VC作成）", inline=False)
+        if result["errors"]:
+            embed.add_field(name="⚠️ 失敗したもの", value="\n".join(result["errors"])[:1024], inline=False)
+        embed.set_footer(text="Bot のロールはサーバー設定で作成したロールより上に置いてください")
+        await interaction.edit_original_response(content=None, embed=embed)
+
+    @discord.ui.button(label="やめる", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.stop()
+        await interaction.response.edit_message(content="キャンセルしました。", embed=None, view=None)
+
+
 # --- コマンドグループ ---
 class AdminGroup(app_commands.Group):
     def __init__(self, bot):
@@ -419,6 +463,32 @@ class AdminGroup(app_commands.Group):
             await interaction.followup.send("❌ エラー: ボットの名前を変更する権限がありません。（ボットのロールが一番上にあるか確認してください）", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
+
+    @app_commands.command(name="サーバー構築", description="【運営専用】テンプレートからロール・カテゴリー・チャンネルを一括作成します")
+    @app_commands.describe(template="作るサーバーの種類", apply_settings="作ったロール・チャンネルを Bot の設定（評価・面接など）に反映するか")
+    @app_commands.choices(template=[
+        app_commands.Choice(name=f"{t['name']}（{t['description']}）", value=k) for k, t in server_template.TEMPLATES.items()
+    ])
+    @app_commands.rename(template="テンプレート", apply_settings="設定に反映")
+    @is_admin()
+    async def build_server(self, interaction: discord.Interaction, template: app_commands.Choice[str], apply_settings: bool = True):
+        me = interaction.guild.me.guild_permissions
+        if not (me.manage_roles and me.manage_channels):
+            return await interaction.response.send_message("❌ Bot に「ロールの管理」と「チャンネルの管理」の権限が必要です。", ephemeral=True)
+        tpl = server_template.TEMPLATES[template.value]
+        embed = discord.Embed(
+            title=f"🏗️ 「{tpl['name']}」を構築しますか？",
+            description=(
+                f"{server_template.plan_summary(tpl)} を作成します。\n"
+                "同じ名前のものが既にあれば作らずにそのまま使います（既存の権限は変更しません）。"
+            ),
+            color=discord.Color.gold(),
+        )
+        for cat in tpl["categories"]:
+            embed.add_field(name=cat["name"], value="\n".join(c["name"] for c in cat["channels"])[:1024], inline=True)
+        embed.add_field(name="ロール", value="\n".join(r["name"] for r in tpl["roles"])[:1024], inline=False)
+        await interaction.response.send_message(
+            embed=embed, view=ServerBuildConfirmView(self.bot, interaction.user.id, tpl, apply_settings), ephemeral=True)
 
     @app_commands.command(name="データベース診断", description="【運営専用】このサーバーのデータがどのデータベースに入っているかを確認します")
     @app_commands.describe(refresh="接続先のキャッシュを破棄してから確認します")
