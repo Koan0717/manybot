@@ -83,7 +83,8 @@ ZERO_TENGETSU = {
     # topic: チャンネルの説明 / logs: そのチャンネルに流す Bot のログ種類（未設定のものだけ登録）
     # 既に構築済みのサーバーで再実行すると、足りないカテゴリー・チャンネルだけが追加される
     "categories": [
-        {"name": "🌙 ── 天月への門 ──", "access": {"everyone": READ, "staff": WRITE}, "channels": [
+        # 違反者は違反者・窓口カテゴリー以外見えない（@everyone より違反者ロールの設定が優先される）
+        {"name": "🌙 ── 天月への門 ──", "access": {"everyone": READ, "violator": HIDDEN, "staff": WRITE}, "channels": [
             {"name": "🌙｜ようこそ"},
             {"name": "📜｜鯖ルール"},
             {"name": "📖｜世界観・設定"},
