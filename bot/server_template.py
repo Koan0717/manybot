@@ -9,7 +9,8 @@ import database
 
 # --- 権限レベル ---
 # hidden: 見えない / read: 見るだけ（リアクション・VC参加は可、発言不可） / write: 発言・通話可
-HIDDEN, READ, WRITE = "hidden", "read", "write"
+# manage: write ＋ チャンネルの管理（各統括が担当カテゴリーで使う）
+HIDDEN, READ, WRITE, MANAGE = "hidden", "read", "write", "manage"
 
 # 権限グループ（ロールキーの集まり）。everyone は @everyone
 GROUPS = {
@@ -26,6 +27,7 @@ GROUPS = {
     "failed": ["failed"],
     "violator": ["violator"],
     "rp_master": ["rp_master"],
+    "priests": ["priest_lead", "priest"],
     "mc_staff": ["mc_staff"],
 }
 
@@ -46,10 +48,22 @@ ZERO_TENGETSU = {
          "perms": _STAFF_PERMS, "settings": ["ADMIN_ROLE_IDS"]},
         {"key": "eval_lead", "name": "⚖️ 評価統括", "color": 0x9B59B6, "hoist": True,
          "perms": {"manage_messages": True, "move_members": True}, "settings": ["EVALUATOR_TIER3_ROLE_IDS"]},
+        # 各統括: 担当カテゴリーのチャンネル管理権限を持つ（カテゴリーの access で MANAGE を付ける）
+        {"key": "interview_lead", "name": "🚪 面接統括", "color": 0x2E86C1, "hoist": True,
+         "perms": {"move_members": True}, "settings": ["INTERVIEWER_ROLE_IDS"]},
+        {"key": "event_lead", "name": "🎉 イベント統括", "color": 0xE67E22, "hoist": True,
+         "perms": {"move_members": True}, "settings": ["EVENT_MANAGER_ROLE_IDS"]},
+        {"key": "casino_lead", "name": "🎰 賭博統括", "color": 0xD68910, "hoist": True,
+         "settings": ["GAMBLE_MANAGER_ROLE_IDS"]},
+        {"key": "priest_lead", "name": "⛪ 司祭統括", "color": 0xF7DC6F, "hoist": True,
+         "settings": ["CONFESSION_PRIEST_ROLE_ID"]},
+        {"key": "failed_lead", "name": "⛓️ 評価落ち統括", "color": 0x5D6D7E, "hoist": True},
+        {"key": "violator_lead", "name": "🚫 違反者統括", "color": 0x922B21, "hoist": True},
         {"key": "evaluator", "name": "📋 評価員", "color": 0xAF7AC5, "hoist": True,
          "perms": {"move_members": True}, "settings": ["EVALUATOR_ROLE_IDS"]},
         {"key": "interviewer", "name": "🚪 面接官", "color": 0x5DADE2, "hoist": True,
          "perms": {"move_members": True}, "settings": ["INTERVIEWER_ROLE_IDS"]},
+        {"key": "priest", "name": "🕯️ 司祭", "color": 0xFCF3CF, "settings": ["PRIEST_ROLE_ID"]},
         {"key": "banker", "name": "🏦 銀行員", "color": 0x48C9B0, "settings": ["BANKER_ROLE_IDS"]},
         {"key": "casino_staff", "name": "🎰 カジノ従業員", "color": 0xF39C12, "settings": ["GAMBLE_EMPLOYEE_ROLE_IDS"]},
         {"key": "rp_master", "name": "🎭 RP進行役（GM）", "color": 0xEC7063, "hoist": True,
@@ -89,15 +103,15 @@ ZERO_TENGETSU = {
             {"name": "📜｜鯖ルール"},
             {"name": "📖｜世界観・設定"},
             {"name": "📢｜お知らせ"},
-            {"name": "🔰｜入界手続き", "access": {"pending": WRITE, "interviewer": WRITE},
+            {"name": "🔰｜入界手続き", "access": {"pending": WRITE, "interviewer": WRITE, "interview_lead": MANAGE},
              "topic": "ダッシュボード「面接」から面接チケットのパネルを設置"},
         ]},
-        {"name": "🚪 ── 面接 ──", "access": {"pending": WRITE, "interviewer": WRITE, "staff": WRITE}, "channels": [
+        {"name": "🚪 ── 面接 ──", "access": {"pending": WRITE, "interviewer": WRITE, "staff": WRITE, "interview_lead": MANAGE}, "channels": [
             {"name": "💬｜面接待合室"},
             {"name": "面接室", "type": "voice"},
         ]},
         {"name": "🌑 ── 評価の間 ──", "setting": "EVALUATION_CATEGORY_ID",
-         "access": {"candidate": WRITE, "members": WRITE, "eval_staff": WRITE, "staff": WRITE}, "channels": [
+         "access": {"candidate": WRITE, "members": WRITE, "eval_staff": WRITE, "staff": WRITE, "eval_lead": MANAGE}, "channels": [
             {"name": "📋｜評価の流れ", "access": {"candidate": READ, "members": READ}},
             {"name": "🙋｜自己紹介", "setting": "SELF_INTRO_CHANNEL_IDS"},
             {"name": "💬｜評価雑談"},
@@ -179,7 +193,24 @@ ZERO_TENGETSU = {
             {"name": "🛏️｜宿・部屋作成", "access": {"residents": READ},
              "topic": "ダッシュボード「部屋」から一般宿・高級宿・カスタムVCの作成パネルを設置（部屋はこのカテゴリーに作られる）"},
         ]},
-        {"name": "🎲 ── 娯楽 ──", "access": {"residents": WRITE, "staff": WRITE}, "channels": [
+        {"name": "🎉 ── イベント ──", "access": {"residents": WRITE, "staff": WRITE, "event_lead": MANAGE}, "channels": [
+            {"name": "📢｜イベント告知", "access": {"residents": READ}},
+            {"name": "🙋｜参加受付"},
+            {"name": "🏆｜結果発表", "access": {"residents": READ}},
+            {"name": "💬｜イベント雑談"},
+            {"name": "📝｜イベント企画", "access": {"residents": HIDDEN}, "topic": "イベント統括・運営だけが見られる"},
+            {"name": "イベントVC", "type": "voice"},
+        ]},
+        {"name": "⛪ ── 教会 ──", "access": {"residents": WRITE, "priests": WRITE, "staff": WRITE, "priest_lead": MANAGE}, "channels": [
+            {"name": "📜｜教会の案内", "access": {"residents": READ}},
+            {"name": "⛪｜告解室", "access": {"residents": READ},
+             "topic": "ダッシュボード「チケット」から告解チケットのパネルを設置（司祭統括・司祭が担当）"},
+            {"name": "📖｜教義・聖典", "access": {"residents": READ}},
+            {"name": "🙏｜祈りの間"},
+            {"name": "📝｜司祭会議", "access": {"residents": HIDDEN}, "topic": "司祭統括・司祭・運営だけが見られる"},
+            {"name": "礼拝堂VC", "type": "voice"},
+        ]},
+        {"name": "🎲 ── 娯楽 ──", "access": {"residents": WRITE, "staff": WRITE, "casino_staff": WRITE, "casino_lead": MANAGE}, "channels": [
             {"name": "🎰｜カジノ"},
             {"name": "🎁｜ガチャ", "topic": "/運営 福引パネル設置"},
             {"name": "♟️｜ボードゲーム", "topic": "オセロ・チェス・将棋"},
@@ -188,21 +219,21 @@ ZERO_TENGETSU = {
             {"name": "🎮｜ゲームvc作成", "access": {"residents": READ},
              "topic": "ダッシュボード「部屋」からゲームVC・賭博VCの作成パネルを設置"},
         ]},
-        {"name": "⚖️ ── 評価員室 ──", "access": {"eval_staff": WRITE, "staff": WRITE}, "channels": [
+        {"name": "⚖️ ── 評価員室 ──", "access": {"eval_staff": WRITE, "staff": WRITE, "eval_lead": MANAGE}, "channels": [
             {"name": "📋｜評価会議"},
             {"name": "📝｜評価記録"},
             {"name": "📊｜評価対象一覧"},
             {"name": "評価員会議", "type": "voice"},
         ]},
         # 評価落ち専用
-        {"name": "⛓️ ── 再評価 ──", "access": {"failed": WRITE, "eval_staff": WRITE, "staff": WRITE}, "channels": [
+        {"name": "⛓️ ── 再評価 ──", "access": {"failed": WRITE, "eval_staff": WRITE, "staff": WRITE, "failed_lead": MANAGE}, "channels": [
             {"name": "📜｜評価落ちの案内", "access": {"failed": READ}},
             {"name": "📮｜再評価申請"},
             {"name": "💬｜評価落ち待機所"},
             {"name": "評価落ちVC", "type": "voice"},
         ]},
         # 違反者専用
-        {"name": "🚫 ── 違反者 ──", "access": {"violator": WRITE, "staff": WRITE}, "channels": [
+        {"name": "🚫 ── 違反者 ──", "access": {"violator": WRITE, "staff": WRITE, "violator_lead": MANAGE}, "channels": [
             {"name": "📜｜違反者の案内", "access": {"violator": READ}},
             {"name": "⚠️｜処分通知", "access": {"violator": READ}},
             {"name": "📝｜反省文"},
@@ -234,10 +265,17 @@ _LIST_SETTINGS = {
     "ADMIN_ROLE_IDS", "EVALUATOR_ROLE_IDS", "EVALUATOR_TIER3_ROLE_IDS", "INTERVIEWER_ROLE_IDS",
     "BANKER_ROLE_IDS", "MAIN_SUB_MEMBER_ROLE_IDS", "MAIN_MEMBER_ROLE_IDS", "SUB_MEMBER_ROLE_IDS",
     "NEW_MEMBER_ROLE_IDS", "GAMBLE_VIOLATOR_ROLE_IDS", "GAMBLE_EMPLOYEE_ROLE_IDS", "SELF_INTRO_CHANNEL_IDS",
+    "EVENT_MANAGER_ROLE_IDS", "GAMBLE_MANAGER_ROLE_IDS",
 }
 
 
 def _overwrite(level: str) -> discord.PermissionOverwrite:
+    if level == MANAGE:
+        return discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, send_messages_in_threads=True, add_reactions=True,
+            attach_files=True, embed_links=True, read_message_history=True, connect=True, speak=True, stream=True,
+            manage_channels=True, manage_messages=True, manage_threads=True, move_members=True, mute_members=True,
+        )
     if level == WRITE:
         return discord.PermissionOverwrite(
             view_channel=True, send_messages=True, send_messages_in_threads=True, add_reactions=True,
@@ -263,8 +301,9 @@ def _build_overwrites(guild: discord.Guild, access: dict, roles: dict) -> dict:
                 overwrites[role] = _overwrite(level)
     # Bot 自身は全カテゴリーで操作できるようにする
     overwrites[guild.me] = discord.PermissionOverwrite(
-        view_channel=True, send_messages=True, manage_channels=True, manage_messages=True,
+        view_channel=True, send_messages=True, manage_channels=True, manage_messages=True, manage_threads=True,
         embed_links=True, attach_files=True, read_message_history=True, connect=True, move_members=True,
+        mute_members=True,
     )
     return overwrites
 
@@ -281,6 +320,20 @@ def _role_permissions(guild: discord.Guild, perms: dict) -> discord.Permissions:
 def plan_summary(template: dict) -> str:
     n_ch = sum(len(c["channels"]) for c in template["categories"])
     return f"ロール {len(template['roles'])} 個・カテゴリー {len(template['categories'])} 個・チャンネル {n_ch} 個"
+
+
+async def _reorder_roles(guild: discord.Guild, ordered: list, errors: list):
+    """テンプレートのロールが今いる位置の中で、テンプレートの順（上から）に並べ直す。Bot より上のロールは動かさない。"""
+    top = guild.me.top_role.position
+    movable = [r for r in ordered if r.position < top]
+    slots = sorted((r.position for r in movable), reverse=True)
+    positions = {r: pos for r, pos in zip(movable, slots) if r.position != pos}
+    if not positions:
+        return
+    try:
+        await guild.edit_role_positions(positions=positions, reason="サーバー構築テンプレート: ロールの並べ替え")
+    except discord.HTTPException as e:
+        errors.append(f"ロールの並べ替え: {e}")
 
 
 async def _sync_overwrites(guild: discord.Guild, target, overwrites: dict, roles: dict, reason: str) -> bool:
@@ -332,6 +385,11 @@ async def build(bot, guild: discord.Guild, template: dict, apply_settings: bool 
         roles[spec["key"]] = role
         for key in spec.get("settings", []):
             result["settings"].setdefault(key, []).append(role.id)
+
+    # 既に構築済みのサーバーに新しいロールを足すと一番下に作られるので、テンプレートの順に並べ直す
+    if result["created_roles"] and len(result["created_roles"]) < len(roles):
+        await report("ロールの順番を整えています…")
+        await _reorder_roles(guild, [roles[r["key"]] for r in template["roles"] if r["key"] in roles], result["errors"])
 
     # --- カテゴリー・チャンネル ---
     auto_vc_ids = []
