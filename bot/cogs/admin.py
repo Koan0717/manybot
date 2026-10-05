@@ -400,12 +400,13 @@ async def build_db_merge_embed(guild_id: int, strategy: str, dry_run: bool) -> d
 
 
 class ServerBuildConfirmView(discord.ui.View):
-    def __init__(self, bot, author_id: int, template: dict, apply_settings: bool):
+    def __init__(self, bot, author_id: int, template: dict, apply_settings: bool, sync_permissions: bool = False):
         super().__init__(timeout=120)
         self.bot = bot
         self.author_id = author_id
         self.template = template
         self.apply_settings = apply_settings
+        self.sync_permissions = sync_permissions
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
@@ -421,7 +422,8 @@ class ServerBuildConfirmView(discord.ui.View):
         async def progress(msg):
             await interaction.edit_original_response(content=f"🏗️ {msg}")
 
-        result = await server_template.build(self.bot, interaction.guild, self.template, self.apply_settings, progress)
+        result = await server_template.build(
+            self.bot, interaction.guild, self.template, self.apply_settings, progress, self.sync_permissions)
 
         embed = discord.Embed(
             title=f"✅ 「{self.template['name']}」の構築が完了しました",
@@ -429,6 +431,8 @@ class ServerBuildConfirmView(discord.ui.View):
         )
         embed.add_field(name="ロール", value=f"新規 {len(result['created_roles'])} 個 / 既存を使用 {len(result['reused_roles'])} 個", inline=False)
         embed.add_field(name="カテゴリー・チャンネル", value=f"新規 {len(result['created_channels'])} 個 / 既存を使用 {len(result['reused_channels'])} 個", inline=False)
+        if self.sync_permissions:
+            embed.add_field(name="権限の更新", value=f"既存の {len(result['synced'])} 個のカテゴリー・チャンネルの権限をテンプレートに合わせました", inline=False)
         if self.apply_settings:
             embed.add_field(name="Bot の設定", value=f"{len(result['settings'])} 項目に反映しました（ロール設定・評価カテゴリー・自己紹介・レベルアップ通知・VC作成）\nログの送信先: {len(result.get('logs', []))} 種類を登録しました（設定済みのものはそのまま）", inline=False)
         if result["errors"]:
@@ -465,13 +469,17 @@ class AdminGroup(app_commands.Group):
             await interaction.followup.send(f"❌ エラーが発生しました: {e}", ephemeral=True)
 
     @app_commands.command(name="サーバー構築", description="【運営専用】テンプレートからロール・カテゴリー・チャンネルを一括作成します")
-    @app_commands.describe(template="作るサーバーの種類", apply_settings="作ったロール・チャンネルを Bot の設定（評価・面接など）に反映するか")
+    @app_commands.describe(
+        template="作るサーバーの種類",
+        apply_settings="作ったロール・チャンネルを Bot の設定（評価・面接など）に反映するか",
+        sync_permissions="既にあるカテゴリー・チャンネルの見える範囲もテンプレートに合わせて更新するか",
+    )
     @app_commands.choices(template=[
         app_commands.Choice(name=f"{t['name']}（{t['description']}）", value=k) for k, t in server_template.TEMPLATES.items()
     ])
-    @app_commands.rename(template="テンプレート", apply_settings="設定に反映")
+    @app_commands.rename(template="テンプレート", apply_settings="設定に反映", sync_permissions="権限を更新")
     @is_admin()
-    async def build_server(self, interaction: discord.Interaction, template: app_commands.Choice[str], apply_settings: bool = True):
+    async def build_server(self, interaction: discord.Interaction, template: app_commands.Choice[str], apply_settings: bool = True, sync_permissions: bool = False):
         me = interaction.guild.me.guild_permissions
         if not (me.manage_roles and me.manage_channels):
             return await interaction.response.send_message("❌ Bot に「ロールの管理」と「チャンネルの管理」の権限が必要です。", ephemeral=True)
@@ -480,7 +488,9 @@ class AdminGroup(app_commands.Group):
             title=f"🏗️ 「{tpl['name']}」を構築しますか？",
             description=(
                 f"{server_template.plan_summary(tpl)} を作成します。\n"
-                "同じ名前のものが既にあれば作らずにそのまま使います（既存の権限は変更しません）。"
+                + ("同じ名前のものが既にあれば作らずにそのまま使います。"
+                 + ("\n**既存のカテゴリー・チャンネルの権限もテンプレートに合わせて更新します**（テンプレートのロール以外の個別設定は残します）。"
+                    if sync_permissions else "（既存の権限は変更しません）"))
             ),
             color=discord.Color.gold(),
         )
@@ -488,7 +498,7 @@ class AdminGroup(app_commands.Group):
             embed.add_field(name=cat["name"], value="\n".join(c["name"] for c in cat["channels"])[:1024], inline=True)
         embed.add_field(name="ロール", value="\n".join(r["name"] for r in tpl["roles"])[:1024], inline=False)
         await interaction.response.send_message(
-            embed=embed, view=ServerBuildConfirmView(self.bot, interaction.user.id, tpl, apply_settings), ephemeral=True)
+            embed=embed, view=ServerBuildConfirmView(self.bot, interaction.user.id, tpl, apply_settings, sync_permissions), ephemeral=True)
 
     @app_commands.command(name="データベース診断", description="【運営専用】このサーバーのデータがどのデータベースに入っているかを確認します")
     @app_commands.describe(refresh="接続先のキャッシュを破棄してから確認します")
