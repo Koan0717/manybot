@@ -430,7 +430,7 @@ class ServerBuildConfirmView(discord.ui.View):
         embed.add_field(name="ロール", value=f"新規 {len(result['created_roles'])} 個 / 既存を使用 {len(result['reused_roles'])} 個", inline=False)
         embed.add_field(name="カテゴリー・チャンネル", value=f"新規 {len(result['created_channels'])} 個 / 既存を使用 {len(result['reused_channels'])} 個", inline=False)
         if self.apply_settings:
-            embed.add_field(name="Bot の設定", value=f"{len(result['settings'])} 項目に反映しました（ロール設定・評価カテゴリー・自己紹介・レベルアップ通知・VC作成）", inline=False)
+            embed.add_field(name="Bot の設定", value=f"{len(result['settings'])} 項目に反映しました（ロール設定・評価カテゴリー・自己紹介・レベルアップ通知・VC作成）\nログの送信先: {len(result.get('logs', []))} 種類を登録しました（設定済みのものはそのまま）", inline=False)
         if result["errors"]:
             embed.add_field(name="⚠️ 失敗したもの", value="\n".join(result["errors"])[:1024], inline=False)
         embed.set_footer(text="Bot のロールはサーバー設定で作成したロールより上に置いてください")

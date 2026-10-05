@@ -47,6 +47,7 @@ ZERO_TENGETSU = {
         {"key": "interviewer", "name": "🚪 面接官", "color": 0x5DADE2, "hoist": True,
          "perms": {"move_members": True}, "settings": ["INTERVIEWER_ROLE_IDS"]},
         {"key": "banker", "name": "🏦 銀行員", "color": 0x48C9B0, "settings": ["BANKER_ROLE_IDS"]},
+        {"key": "casino_staff", "name": "🎰 カジノ従業員", "color": 0xF39C12, "settings": ["GAMBLE_EMPLOYEE_ROLE_IDS"]},
         {"key": "rp_master", "name": "🎭 RP進行役（GM）", "color": 0xEC7063, "hoist": True,
          "perms": {"manage_messages": True}},
         {"key": "mc_staff", "name": "⛏️ マイクラ管理", "color": 0x58D68D},
@@ -66,6 +67,8 @@ ZERO_TENGETSU = {
         {"key": "guild_farmer", "name": "🌾 農耕ギルド", "color": 0x7DCEA0},
         {"key": "guild_builder", "name": "🔨 建築ギルド", "color": 0xDC7633},
         {"key": "guild_mage", "name": "📜 魔導書院", "color": 0x7D3C98},
+        # PvP に参加する人（自由選択。決闘・戦争の呼びかけ用）
+        {"key": "pvp", "name": "⚔️ PvP参加", "color": 0xA93226, "mentionable": True},
         # 通知ロール
         {"key": "notify_news", "name": "🔔 お知らせ通知", "mentionable": True},
         {"key": "notify_event", "name": "🎉 イベント通知", "mentionable": True},
@@ -73,13 +76,16 @@ ZERO_TENGETSU = {
     ],
     # access: 権限グループ → レベル（書いていないグループと @everyone は hidden）
     # チャンネルの access はカテゴリーの access を上書きする
+    # topic: チャンネルの説明 / logs: そのチャンネルに流す Bot のログ種類（未設定のものだけ登録）
+    # 既に構築済みのサーバーで再実行すると、足りないカテゴリー・チャンネルだけが追加される
     "categories": [
         {"name": "🌙 ── 天月への門 ──", "access": {"everyone": READ, "staff": WRITE}, "channels": [
             {"name": "🌙｜ようこそ"},
             {"name": "📜｜鯖ルール"},
             {"name": "📖｜世界観・設定"},
             {"name": "📢｜お知らせ"},
-            {"name": "🔰｜入界手続き", "access": {"pending": WRITE, "interviewer": WRITE}},
+            {"name": "🔰｜入界手続き", "access": {"pending": WRITE, "interviewer": WRITE},
+             "topic": "ダッシュボード「面接」から面接チケットのパネルを設置"},
         ]},
         {"name": "🚪 ── 面接 ──", "access": {"pending": WRITE, "interviewer": WRITE, "staff": WRITE}, "channels": [
             {"name": "💬｜面接待合室"},
@@ -98,35 +104,84 @@ ZERO_TENGETSU = {
             {"name": "💬｜雑談"},
             {"name": "📸｜画像・スクショ"},
             {"name": "🤖｜コマンド"},
+            {"name": "📞｜通話募集", "topic": "ダッシュボード「通話募集掲示板」からパネルを設置"},
+            {"name": "🏷️｜ロール選択", "access": {"members": READ, "candidate": READ},
+             "topic": "/運営 任意ロールパネル設置 でギルド・通知・PvP参加ロールのパネルを置く"},
             {"name": "🎉｜レベルアップ", "setting": "LEVEL_UP_CHANNEL_ID", "access": {"members": READ}},
             {"name": "雑談VC", "type": "voice"},
             {"name": "➕ VC作成", "type": "voice", "auto_vc": True},
         ]},
+        {"name": "🎫 ── 窓口 ──",
+         "access": {"members": READ, "candidate": READ, "failed": READ, "violator": READ, "staff": WRITE}, "channels": [
+            {"name": "🎫｜お問い合わせ", "topic": "ダッシュボード「チケット」からお問い合わせパネルを設置"},
+            {"name": "🎭｜匿名チャット", "topic": "ダッシュボード「チケット」から匿名チャットパネルを設置"},
+            {"name": "🎨｜スタンプ依頼", "topic": "ダッシュボード「チケット」からスタンプ制作依頼パネルを設置"},
+        ]},
         {"name": "⛏️ ── マインクラフト ──",
          "access": {"members": WRITE, "candidate": WRITE, "mc_staff": WRITE, "staff": WRITE}, "channels": [
-            {"name": "🗺️｜鯖情報", "access": {"members": READ, "candidate": READ}},
+            {"name": "🗺️｜鯖情報", "access": {"members": READ, "candidate": READ},
+             "topic": "サーバーアドレス・ポート・参加方法・必要なバージョン"},
+            {"name": "🔗｜連携方法", "access": {"members": READ, "candidate": READ},
+             "topic": "/manybot:link で出る6桁コードを Web のメンバー画面（プロフィール → マイクラ連携）に入力"},
             {"name": "📣｜鯖ステータス", "access": {"members": READ, "candidate": READ}},
+            {"name": "🟢｜入退出ログ", "access": {"members": READ, "candidate": READ},
+             "topic": "ダッシュボード「マイクラ連携の設定」→ ログ送信設定 でこのチャンネルを選ぶ"},
             {"name": "💬｜マイクラ雑談"},
             {"name": "🏗️｜建築報告"},
-            {"name": "🛒｜取引所"},
             {"name": "🐛｜不具合報告"},
             {"name": "マイクラVC", "type": "voice"},
+        ]},
+        {"name": "💰 ── 交易・経済 ──",
+         "access": {"members": WRITE, "candidate": WRITE, "mc_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "📜｜取引ルール", "access": {"members": READ, "candidate": READ}},
+            {"name": "💹｜取引ログ", "access": {"members": READ, "candidate": READ},
+             "topic": "ダッシュボード「マイクラ連携の設定」→ ログ送信設定 の取引ログに選ぶ（ゲーム内ショップの売買）"},
+            {"name": "🛒｜売ります"},
+            {"name": "🛍️｜買います"},
+            {"name": "🤝｜取引交渉"},
+            {"name": "📈｜相場情報"},
+            {"name": "📦｜依頼掲示板", "topic": "採掘・建築・護衛などの依頼と報酬"},
+            {"name": "🏦｜銀行・送金", "topic": "/balance・/pay（マイクラ内の通貨と共通）"},
+            {"name": "⚖️｜取引トラブル相談"},
+            {"name": "商談VC", "type": "voice"},
+        ]},
+        {"name": "⚔️ ── PvP・戦争 ──",
+         "access": {"members": WRITE, "candidate": WRITE, "rp_master": WRITE, "staff": WRITE}, "channels": [
+            {"name": "📜｜pvpルール", "access": {"members": READ, "candidate": READ},
+             "topic": "PvP可能エリア・禁止行為・キル後のアイテムの扱い・戦争のルール"},
+            {"name": "⚔️｜決闘申請"},
+            {"name": "🏰｜宣戦布告", "topic": "勢力間の戦争・抗争の宣言（RP進行役が承認）"},
+            {"name": "🕊️｜同盟・停戦"},
+            {"name": "📊｜戦績報告"},
+            {"name": "🚨｜pvp違反報告"},
+            {"name": "作戦会議VC①", "type": "voice"},
+            {"name": "作戦会議VC②", "type": "voice"},
+            {"name": "戦場VC", "type": "voice"},
         ]},
         {"name": "🎭 ── ロールプレイ ──",
          "access": {"members": WRITE, "candidate": WRITE, "rp_master": WRITE, "staff": WRITE}, "channels": [
             {"name": "📖｜rpルール", "access": {"members": READ, "candidate": READ}},
             {"name": "📰｜天月新聞", "access": {"members": READ, "candidate": READ}},
+            {"name": "🏛️｜国家・勢力"},
+            {"name": "🗺️｜土地申請"},
             {"name": "🪪｜キャラシート"},
             {"name": "🎭｜rp本編"},
             {"name": "🗣️｜中の人雑談"},
             {"name": "⚔️｜ギルド募集"},
             {"name": "RP-VC", "type": "voice"},
         ]},
+        {"name": "🛏️ ── 宿 ──", "access": {"members": WRITE, "staff": WRITE}, "channels": [
+            {"name": "🛏️｜宿・部屋作成", "access": {"members": READ},
+             "topic": "ダッシュボード「部屋」から一般宿・高級宿・カスタムVCの作成パネルを設置（部屋はこのカテゴリーに作られる）"},
+        ]},
         {"name": "🎲 ── 娯楽 ──", "access": {"members": WRITE, "staff": WRITE}, "channels": [
             {"name": "🎰｜カジノ"},
-            {"name": "🎁｜ガチャ"},
-            {"name": "♟️｜ボードゲーム"},
+            {"name": "🎁｜ガチャ", "topic": "/運営 福引パネル設置"},
+            {"name": "♟️｜ボードゲーム", "topic": "オセロ・チェス・将棋"},
+            {"name": "🃏｜ポーカー"},
             {"name": "🛍️｜ショップ"},
+            {"name": "🎮｜ゲームvc作成", "access": {"members": READ},
+             "topic": "ダッシュボード「部屋」からゲームVC・賭博VCの作成パネルを設置"},
         ]},
         {"name": "⚖️ ── 評価員室 ──", "access": {"eval_staff": WRITE, "staff": WRITE}, "channels": [
             {"name": "📋｜評価会議"},
@@ -134,7 +189,7 @@ ZERO_TENGETSU = {
             {"name": "📊｜評価対象一覧"},
             {"name": "評価員会議", "type": "voice"},
         ]},
-        # 評価落ち専用（既に構築済みのサーバーでも、このカテゴリーに足りないチャンネルだけ追加される）
+        # 評価落ち専用
         {"name": "⛓️ ── 再評価 ──", "access": {"failed": WRITE, "eval_staff": WRITE, "staff": WRITE}, "channels": [
             {"name": "📜｜評価落ちの案内", "access": {"failed": READ}},
             {"name": "📮｜再評価申請"},
@@ -151,9 +206,19 @@ ZERO_TENGETSU = {
         ]},
         {"name": "🛡️ ── 運営 ──", "access": {"staff": WRITE}, "channels": [
             {"name": "🛡️｜運営連絡"},
-            {"name": "📂｜ログ"},
-            {"name": "🧾｜通貨ログ"},
+            {"name": "📌｜運営メモ"},
             {"name": "運営会議", "type": "voice"},
+        ]},
+        {"name": "📂 ── ログ ──", "access": {"staff": WRITE}, "channels": [
+            {"name": "📥｜入退室ログ", "logs": ["member_join_leave"]},
+            {"name": "✏️｜メッセージログ", "logs": ["message_edit", "message_delete"]},
+            {"name": "🔊｜vcログ", "logs": ["vc_join_leave"]},
+            {"name": "🧾｜通貨ログ", "logs": ["currency", "role_salary", "member_transfer"]},
+            {"name": "🛍️｜ショップ・ガチャログ", "logs": ["shop", "shop_extend", "gacha"]},
+            {"name": "🎰｜カジノログ", "logs": ["gambling"]},
+            {"name": "📋｜評価・面接ログ", "logs": ["evaluation_failure", "interviewer"]},
+            {"name": "🛡️｜荒らし対策ログ", "logs": ["antigrief"]},
+            {"name": "⛏️｜マイクラ管理ログ"},
         ]},
     ],
 }
@@ -163,7 +228,7 @@ TEMPLATES = {"zero_tengetsu": ZERO_TENGETSU}
 _LIST_SETTINGS = {
     "ADMIN_ROLE_IDS", "EVALUATOR_ROLE_IDS", "EVALUATOR_TIER3_ROLE_IDS", "INTERVIEWER_ROLE_IDS",
     "BANKER_ROLE_IDS", "MAIN_SUB_MEMBER_ROLE_IDS", "MAIN_MEMBER_ROLE_IDS", "SUB_MEMBER_ROLE_IDS",
-    "NEW_MEMBER_ROLE_IDS", "GAMBLE_VIOLATOR_ROLE_IDS", "SELF_INTRO_CHANNEL_IDS",
+    "NEW_MEMBER_ROLE_IDS", "GAMBLE_VIOLATOR_ROLE_IDS", "GAMBLE_EMPLOYEE_ROLE_IDS", "SELF_INTRO_CHANNEL_IDS",
 }
 
 
@@ -253,6 +318,7 @@ async def build(bot, guild: discord.Guild, template: dict, apply_settings: bool 
 
     # --- カテゴリー・チャンネル ---
     auto_vc_ids = []
+    log_channels = {}
     for cat_spec in template["categories"]:
         await report(f"「{cat_spec['name']}」を作成しています…")
         category = discord.utils.get(guild.categories, name=cat_spec["name"])
@@ -282,7 +348,8 @@ async def build(bot, guild: discord.Guild, template: dict, apply_settings: bool 
                     if is_voice:
                         channel = await category.create_voice_channel(ch_spec["name"], overwrites=overwrites, reason=reason)
                     else:
-                        channel = await category.create_text_channel(ch_spec["name"], overwrites=overwrites, reason=reason)
+                        channel = await category.create_text_channel(
+                            ch_spec["name"], overwrites=overwrites, topic=ch_spec.get("topic"), reason=reason)
                     result["created_channels"].append(channel.name)
                 except discord.HTTPException as e:
                     result["errors"].append(f"チャンネル「{ch_spec['name']}」: {e}")
@@ -291,6 +358,8 @@ async def build(bot, guild: discord.Guild, template: dict, apply_settings: bool 
                 result["settings"].setdefault(ch_spec["setting"], []).append(channel.id)
             if ch_spec.get("auto_vc"):
                 auto_vc_ids.append(channel.id)
+            for log_type in ch_spec.get("logs", []):
+                log_channels[log_type] = channel.id
 
     # --- Bot 設定へ反映 ---
     if apply_settings:
@@ -298,6 +367,7 @@ async def build(bot, guild: discord.Guild, template: dict, apply_settings: bool 
         await _apply_settings(bot, guild, result["settings"], result["errors"])
         for cid in auto_vc_ids:
             await _register_auto_vc(bot, cid, result["errors"])
+        await _apply_log_channels(guild, log_channels, result)
     return result
 
 
@@ -330,6 +400,19 @@ async def _apply_settings(bot, guild: discord.Guild, settings: dict, errors: lis
             guild_cache[key] = value
         except Exception as e:
             errors.append(f"設定 {key}: {e}")
+
+
+async def _apply_log_channels(guild: discord.Guild, log_channels: dict, result: dict):
+    """ログの送信先を登録する。既に送信先が決まっているログ種類はそのまま。"""
+    result["logs"] = []
+    for log_type, channel_id in log_channels.items():
+        try:
+            if await database.get_log_channel(guild.id, log_type):
+                continue
+            await database.save_log_channel(guild.id, log_type, channel_id)
+            result["logs"].append(log_type)
+        except Exception as e:
+            result["errors"].append(f"ログ {log_type}: {e}")
 
 
 async def _register_auto_vc(bot, channel_id: int, errors: list):
