@@ -20,6 +20,7 @@ GROUPS = {
     "candidate": ["candidate"],
     "pending": ["pending"],
     "failed": ["failed"],
+    "violator": ["violator"],
     "rp_master": ["rp_master"],
     "mc_staff": ["mc_staff"],
 }
@@ -133,9 +134,20 @@ ZERO_TENGETSU = {
             {"name": "📊｜評価対象一覧"},
             {"name": "評価員会議", "type": "voice"},
         ]},
+        # 評価落ち専用（既に構築済みのサーバーでも、このカテゴリーに足りないチャンネルだけ追加される）
         {"name": "⛓️ ── 再評価 ──", "access": {"failed": WRITE, "eval_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "📜｜評価落ちの案内", "access": {"failed": READ}},
             {"name": "📮｜再評価申請"},
             {"name": "💬｜評価落ち待機所"},
+            {"name": "評価落ちVC", "type": "voice"},
+        ]},
+        # 違反者専用
+        {"name": "🚫 ── 違反者 ──", "access": {"violator": WRITE, "staff": WRITE}, "channels": [
+            {"name": "📜｜違反者の案内", "access": {"violator": READ}},
+            {"name": "⚠️｜処分通知", "access": {"violator": READ}},
+            {"name": "📝｜反省文"},
+            {"name": "📮｜異議申し立て"},
+            {"name": "違反者VC", "type": "voice"},
         ]},
         {"name": "🛡️ ── 運営 ──", "access": {"staff": WRITE}, "channels": [
             {"name": "🛡️｜運営連絡"},
