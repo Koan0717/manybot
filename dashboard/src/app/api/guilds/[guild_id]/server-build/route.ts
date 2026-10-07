@@ -7,6 +7,8 @@ import { SERVER_BUILD_CATEGORIES } from '@/lib/serverBuild';
 const TEMPLATE_KEY = 'SERVER_BUILD_TEMPLATE';
 const PENDING_KEY = 'SERVER_BUILD_PENDING';
 const STATUS_KEY = 'SERVER_BUILD_STATUS';
+// Bot が書くテンプレート一覧（組み込み＋保存したテンプレートの中身）
+const CATALOG_KEY = 'SERVER_TEMPLATE_CATALOG';
 // この時間を過ぎても「作成中」のままなら Bot の再起動などで止まったとみなし、もう一度作成できるようにする
 const STALE_MS = 20 * 60 * 1000;
 
@@ -48,13 +50,15 @@ export async function GET(
     const pool = await getPool(guildId);
     let template = null;
     let status = null;
+    let catalog = null;
     try {
       template = await readSetting(pool, guildId, TEMPLATE_KEY);
       status = await readSetting(pool, guildId, STATUS_KEY);
+      catalog = await readSetting(pool, guildId, CATALOG_KEY);
     } catch {
       // bot_settings がまだ無い（Bot 未起動の新規サーバー）
     }
-    return NextResponse.json({ template, status });
+    return NextResponse.json({ template, status, catalog });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -111,7 +115,22 @@ export async function POST(
     `);
 
     if (action === 'save') {
-      await writeSetting(pool, guildId, TEMPLATE_KEY, template);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await writeSetting(client, guildId, TEMPLATE_KEY, template);
+        // テンプレート一覧（中身の表示）を Bot に作り直してもらう
+        await client.query(
+          `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, 0, 'reload_server_templates')`,
+          [guildId]
+        );
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
       return NextResponse.json({ success: true, action, template });
     }
 

@@ -139,6 +139,14 @@ class IPC(commands.Cog):
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload othello settings: {e}")
 
+                        elif panel_type == "reload_server_templates":
+                            try:
+                                import server_template
+                                await server_template.publish_catalog(guild_id)
+                                print(f"[IPC] Published server template catalog for guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to publish server template catalog: {e}")
+
                         elif panel_type.startswith("build_server_custom"):
                             # ダッシュボード「サーバー作成」。build_server_custom:<設定に反映 0/1>:<権限を更新 0/1>
                             import asyncio
@@ -457,6 +465,13 @@ class IPC(commands.Cog):
     @check_panel_requests.before_loop
     async def before_check(self):
         await self.bot.wait_until_ready()
+        # ダッシュボード「サーバー作成」のテンプレート一覧を最新のテンプレートで書き直す
+        import server_template
+        for guild in self.bot.guilds:
+            try:
+                await server_template.publish_catalog(guild.id)
+            except Exception as e:
+                print(f"[IPC] Failed to publish server template catalog for guild {guild.id}: {e}")
 
     @tasks.loop(seconds=30.0)
     async def heartbeat(self):
