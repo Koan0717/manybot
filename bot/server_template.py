@@ -228,7 +228,219 @@ ZERO_TENGETSU = {
     ],
 }
 
-TEMPLATES = {"zero_tengetsu": ZERO_TENGETSU}
+# 「でっぱ寿司」= 寿司屋モチーフの評価鯖。部署ごとに 統括・副統括・係 の3段のロールを持つ
+_DEPPA_LEAD_PERMS = {"manage_messages": True, "move_members": True, "mute_members": True}
+_NETA = ["マグロ", "中トロ", "サーモン", "ハマチ", "タイ", "エビ", "イカ", "タコ", "ウニ", "イクラ", "穴子", "玉子"]
+
+DEPPA_SUSHI = {
+    "name": "でっぱ寿司",
+    "description": "寿司屋モチーフの評価鯖",
+    "groups": {
+        # 板前（運営）は鯖主・副鯖主・各統括に付ける
+        "staff": ["owner", "vice_owner", "itamae"],
+        "eval_staff": ["eval_lead", "eval_vice", "evaluator"],
+        "interviewer": ["noren_lead", "noren_vice", "noren"],
+        "event_staff": ["event_lead", "event_vice", "patissier"],
+        "game_staff": ["game_lead", "game_vice", "game"],
+        "fish_staff": ["fish_lead", "fish_vice", "fish"],
+        "night_staff": ["sake_lead", "sake_staff", "sake_cast"],
+        # 本面・準面
+        "members": ["futokyaku", "joren"],
+        "main": ["futokyaku"],
+        "candidate": ["ichigen"],
+        # 本面・準面・仮メン
+        "residents": ["futokyaku", "joren", "ichigen"],
+        "failed": ["hosokyaku"],
+    },
+    "roles": [
+        {"key": "owner", "name": "大将", "color": 0xC0392B, "hoist": True,
+         "perms": {"administrator": True}, "settings": ["ADMIN_ROLE_IDS"]},
+        {"key": "vice_owner", "name": "親方", "color": 0xE74C3C, "hoist": True,
+         "perms": _STAFF_PERMS, "settings": ["ADMIN_ROLE_IDS"]},
+        {"key": "itamae", "name": "板前", "color": 0xF5B041, "hoist": True,
+         "perms": _STAFF_PERMS, "settings": ["ADMIN_ROLE_IDS"]},
+        # 評価員
+        {"key": "eval_lead", "name": "食べログ隊長", "color": 0x8E44AD, "hoist": True,
+         "perms": _DEPPA_LEAD_PERMS, "settings": ["EVALUATOR_TIER3_ROLE_IDS"]},
+        {"key": "eval_vice", "name": "食べログ副隊長", "color": 0x9B59B6, "hoist": True,
+         "perms": {"move_members": True}, "settings": ["EVALUATOR_TIER2_ROLE_IDS"]},
+        {"key": "evaluator", "name": "食べログ民", "color": 0xAF7AC5, "hoist": True,
+         "perms": {"move_members": True}, "settings": ["EVALUATOR_ROLE_IDS"]},
+        # 面接官
+        {"key": "noren_lead", "name": "のれん番", "color": 0x2471A3, "hoist": True,
+         "perms": _DEPPA_LEAD_PERMS, "settings": ["INTERVIEWER_ROLE_IDS"]},
+        {"key": "noren_vice", "name": "のれん番補佐", "color": 0x2E86C1, "hoist": True,
+         "perms": {"move_members": True}, "settings": ["INTERVIEWER_ROLE_IDS"]},
+        {"key": "noren", "name": "のれん係", "color": 0x5DADE2, "hoist": True,
+         "perms": {"move_members": True}, "settings": ["INTERVIEWER_ROLE_IDS"]},
+        # イベンター
+        {"key": "event_lead", "name": "パティスリー店長", "color": 0xD81B60, "hoist": True,
+         "perms": _DEPPA_LEAD_PERMS, "settings": ["EVENT_MANAGER_ROLE_IDS"]},
+        {"key": "event_vice", "name": "パティスリー副店長", "color": 0xEC407A, "hoist": True,
+         "perms": {"move_members": True}, "settings": ["EVENT_MANAGER_ROLE_IDS"]},
+        {"key": "patissier", "name": "パティシエ", "color": 0xF48FB1, "hoist": True},
+        # ゲーム
+        {"key": "game_lead", "name": "サイド大臣", "color": 0x117A65, "hoist": True, "perms": _DEPPA_LEAD_PERMS},
+        {"key": "game_vice", "name": "サイド副大臣", "color": 0x16A085, "hoist": True, "perms": {"move_members": True}},
+        {"key": "game", "name": "サイド参謀", "color": 0x48C9B0, "hoist": True},
+        # 評価落ち担当
+        {"key": "fish_lead", "name": "鮮魚商店長", "color": 0x1F618D, "hoist": True, "perms": _DEPPA_LEAD_PERMS},
+        {"key": "fish_vice", "name": "鮮魚商副店長", "color": 0x2874A6, "hoist": True, "perms": {"move_members": True}},
+        {"key": "fish", "name": "鮮魚商", "color": 0x3498DB, "hoist": True},
+        # 夜色
+        {"key": "sake_lead", "name": "酒屋店長", "color": 0x512E5F, "hoist": True, "perms": _DEPPA_LEAD_PERMS},
+        {"key": "sake_staff", "name": "酒屋店員", "color": 0x2C3E50, "hoist": True},
+        {"key": "sake_cast", "name": "酒屋キャスト", "color": 0x6C3483, "hoist": True},
+        # プレイヤー
+        {"key": "futokyaku", "name": "太客", "color": 0xF1C40F, "hoist": True,
+         "settings": ["MAIN_SUB_MEMBER_ROLE_IDS", "MAIN_MEMBER_ROLE_IDS"]},
+        {"key": "joren", "name": "常連", "color": 0xF8C471, "hoist": True,
+         "settings": ["MAIN_SUB_MEMBER_ROLE_IDS", "SUB_MEMBER_ROLE_IDS"]},
+        {"key": "ichigen", "name": "一見さん", "color": 0xBDC3C7, "hoist": True, "settings": ["NEW_MEMBER_ROLE_IDS"]},
+        {"key": "hosokyaku", "name": "細客", "color": 0x7F8C8D, "settings": ["DOWNGRADE_ROLE_ID"]},
+        # 準面以上の属性ロール（自由選択）
+        {"key": "attr_akami", "name": "赤身", "color": 0xE74C3C},
+        {"key": "attr_shiromi", "name": "白身", "color": 0xECF0F1},
+        {"key": "attr_kai", "name": "貝類", "color": 0xA04000},
+        {"key": "attr_gunkan", "name": "軍艦", "color": 0x1C2833},
+        {"key": "attr_maki", "name": "巻物", "color": 0x58D68D},
+        # 本面以上の好きなネタ（自由選択）
+        *[{"key": f"neta_{i}", "name": n} for i, n in enumerate(_NETA)],
+    ],
+    "categories": [
+        {"name": "🏮 ── のれん ──", "access": {"everyone": READ, "staff": WRITE}, "channels": [
+            {"name": "🍣｜いらっしゃいませ"},
+            {"name": "📜｜店のきまり"},
+            {"name": "📢｜お知らせ"},
+            {"name": "🗒️｜役職一覧", "topic": "大将・親方・板前（鯖主・副鯖主・各統括に付与）と各部署の役職"},
+            {"name": "🔰｜入店手続き", "access": {"interviewer": WRITE},
+             "topic": "ダッシュボード「面接」から面接チケットのパネルを設置"},
+        ]},
+        {"name": "🚪 ── 面接 ──",
+         "access": {"everyone": WRITE, "residents": HIDDEN, "failed": HIDDEN, "interviewer": WRITE, "staff": WRITE},
+         "channels": [
+            {"name": "💬｜面接待合室"},
+            {"name": "面接室", "type": "voice"},
+        ]},
+        {"name": "🍽️ ── カウンター（評価）──", "setting": "EVALUATION_CATEGORY_ID",
+         "access": {"candidate": WRITE, "members": WRITE, "eval_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "📋｜評価の流れ", "access": {"candidate": READ, "members": READ}},
+            {"name": "🙋｜自己紹介", "setting": "SELF_INTRO_CHANNEL_IDS"},
+            {"name": "💬｜評価雑談"},
+            {"name": "評価VC①", "type": "voice"},
+            {"name": "評価VC②", "type": "voice"},
+            {"name": "評価VC③", "type": "voice"},
+        ]},
+        {"name": "🍣 ── 店内 ──", "access": {"residents": WRITE, "staff": WRITE}, "channels": [
+            {"name": "💬｜雑談"},
+            {"name": "📸｜画像・スクショ"},
+            {"name": "🤖｜コマンド"},
+            {"name": "📞｜通話募集", "topic": "ダッシュボード「通話募集掲示板」からパネルを設置"},
+            {"name": "🎉｜レベルアップ", "setting": "LEVEL_UP_CHANNEL_ID", "access": {"residents": READ}},
+            # 準面以上
+            {"name": "🏷️｜属性ロール", "access": {"candidate": HIDDEN, "members": READ},
+             "topic": "/運営 任意ロールパネル設置 で 赤身（活発・元気）／白身（かっこいい）／貝類（大人）／軍艦（個性的）／巻物（かわいい）のパネルを置く"},
+            # 本面以上
+            {"name": "🍣｜好きなネタ", "access": {"residents": HIDDEN, "main": READ},
+             "topic": "/運営 任意ロールパネル設置 で好きなネタのロールのパネルを置く（本面以上）"},
+            {"name": "雑談VC", "type": "voice"},
+            {"name": "➕ VC作成", "type": "voice", "auto_vc": True},
+        ]},
+        {"name": "🎂 ── パティスリー（イベント）──",
+         "access": {"residents": WRITE, "event_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "📢｜イベント告知", "access": {"residents": READ}},
+            {"name": "💬｜イベント雑談"},
+            {"name": "💡｜イベント要望"},
+            {"name": "イベントVC", "type": "voice"},
+        ]},
+        {"name": "🎲 ── サイドメニュー（ゲーム）──",
+         "access": {"residents": WRITE, "game_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "🎰｜カジノ"},
+            {"name": "🎁｜ガチャ", "topic": "/運営 福引パネル設置"},
+            {"name": "♟️｜ボードゲーム", "topic": "オセロ・チェス・将棋"},
+            {"name": "🃏｜ポーカー"},
+            {"name": "🛍️｜ショップ"},
+            {"name": "🎮｜ゲームvc作成", "access": {"residents": READ},
+             "topic": "ダッシュボード「部屋」からゲームVC・賭博VCの作成パネルを設置"},
+            {"name": "ゲームVC", "type": "voice"},
+        ]},
+        {"name": "🍶 ── 夜の酒屋 ──", "access": {"members": WRITE, "night_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "📜｜酒屋の案内", "access": {"members": READ}},
+            {"name": "🍶｜カウンター"},
+            {"name": "💌｜指名・予約"},
+            {"name": "酒屋VC①", "type": "voice"},
+            {"name": "酒屋VC②", "type": "voice"},
+        ]},
+        {"name": "🛏️ ── 宿 ──", "access": {"residents": WRITE, "staff": WRITE}, "channels": [
+            {"name": "🛏️｜宿・部屋作成", "access": {"residents": READ},
+             "topic": "ダッシュボード「部屋」から一般宿・高級宿・カスタムVCの作成パネルを設置（部屋はこのカテゴリーに作られる）"},
+        ]},
+        {"name": "🎫 ── 窓口 ──",
+         "access": {"members": READ, "candidate": READ, "failed": READ, "staff": WRITE}, "channels": [
+            {"name": "🎫｜お問い合わせ", "topic": "ダッシュボード「チケット」からお問い合わせパネルを設置"},
+            {"name": "🎭｜匿名チャット", "topic": "ダッシュボード「チケット」から匿名チャットパネルを設置"},
+            {"name": "🎨｜スタンプ依頼", "topic": "ダッシュボード「チケット」からスタンプ制作依頼パネルを設置"},
+        ]},
+        # 評価落ち（細客）専用。鮮魚商が担当
+        {"name": "🐟 ── 鮮魚市場（再評価）──",
+         "access": {"failed": WRITE, "fish_staff": WRITE, "eval_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "📜｜細客の案内", "access": {"failed": READ}},
+            {"name": "📮｜再評価申請"},
+            {"name": "💬｜細客待機所"},
+            {"name": "細客VC", "type": "voice"},
+        ]},
+        # 部署の控室（その部署と運営だけ）
+        {"name": "📝 ── 食べログ本部 ──", "access": {"eval_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "📋｜評価会議"},
+            {"name": "📝｜評価記録"},
+            {"name": "📊｜評価対象一覧"},
+            {"name": "食べログ会議", "type": "voice"},
+        ]},
+        {"name": "🚪 ── のれん番控室 ──", "access": {"interviewer": WRITE, "staff": WRITE}, "channels": [
+            {"name": "💬｜面接官連絡"},
+            {"name": "📝｜面接記録"},
+            {"name": "面接官会議", "type": "voice"},
+        ]},
+        {"name": "🎂 ── パティスリー厨房 ──", "access": {"event_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "💬｜イベンター連絡"},
+            {"name": "🗓️｜イベント企画"},
+            {"name": "イベンター会議", "type": "voice"},
+        ]},
+        {"name": "🎲 ── サイド参謀本部 ──", "access": {"game_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "💬｜ゲーム運営連絡"},
+            {"name": "🗓️｜ゲーム企画"},
+            {"name": "ゲーム運営会議", "type": "voice"},
+        ]},
+        {"name": "🐟 ── 鮮魚商控室 ──", "access": {"fish_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "💬｜鮮魚商連絡"},
+            {"name": "📝｜細客の記録"},
+            {"name": "鮮魚商会議", "type": "voice"},
+        ]},
+        {"name": "🍶 ── 酒屋裏方 ──", "access": {"night_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "💬｜酒屋連絡"},
+            {"name": "📋｜シフト・指名表"},
+            {"name": "酒屋スタッフVC", "type": "voice"},
+        ]},
+        {"name": "🔪 ── 板場（運営）──", "access": {"staff": WRITE}, "channels": [
+            {"name": "🔪｜運営連絡"},
+            {"name": "📌｜運営メモ"},
+            {"name": "👑｜統括会議"},
+            {"name": "運営会議", "type": "voice"},
+        ]},
+        {"name": "📂 ── ログ ──", "access": {"staff": WRITE}, "channels": [
+            {"name": "📥｜入退室ログ", "logs": ["member_join_leave"]},
+            {"name": "✏️｜メッセージログ", "logs": ["message_edit", "message_delete"]},
+            {"name": "🔊｜vcログ", "logs": ["vc_join_leave"]},
+            {"name": "🧾｜通貨ログ", "logs": ["currency", "role_salary", "member_transfer"]},
+            {"name": "🛍️｜ショップ・ガチャログ", "logs": ["shop", "shop_extend", "gacha"]},
+            {"name": "🎰｜カジノログ", "logs": ["gambling"]},
+            {"name": "📋｜評価・面接ログ", "logs": ["evaluation_failure", "interviewer"]},
+            {"name": "🛡️｜荒らし対策ログ", "logs": ["antigrief"]},
+        ]},
+    ],
+}
+
+TEMPLATES = {"zero_tengetsu": ZERO_TENGETSU, "deppa_sushi": DEPPA_SUSHI}
 
 
 # ==========================================================================
