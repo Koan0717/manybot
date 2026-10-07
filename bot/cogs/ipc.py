@@ -139,6 +139,29 @@ class IPC(commands.Cog):
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload othello settings: {e}")
 
+                        elif panel_type.startswith("build_server_custom"):
+                            # ダッシュボード「サーバー作成」。build_server_custom:<設定に反映 0/1>:<権限を更新 0/1>
+                            import asyncio
+                            import server_template
+                            parts = panel_type.split(":")
+                            apply_settings = len(parts) < 2 or parts[1] != "0"
+                            sync_permissions = len(parts) > 2 and parts[2] == "1"
+                            building = self.bot.__dict__.setdefault("server_building_guilds", set())
+                            if guild_id in building:
+                                print(f"[IPC] build_server_custom skipped (already running) for guild {guild_id}")
+                            else:
+                                building.add(guild_id)
+
+                                async def _run(g=guild, a=apply_settings, s=sync_permissions):
+                                    try:
+                                        await server_template.run_dashboard_build(self.bot, g, a, s)
+                                    finally:
+                                        building.discard(g.id)
+
+                                # 作成に時間がかかるので、他のリクエストを止めないよう別タスクで動かす
+                                asyncio.create_task(_run())
+                                print(f"[IPC] build_server_custom started for guild {guild_id}")
+
                         elif panel_type.startswith("apply_room_access_deny:") or panel_type.startswith("apply_room_access_allow:"):
                             try:
                                 from helpers import get_setting, get_downgrade_roles

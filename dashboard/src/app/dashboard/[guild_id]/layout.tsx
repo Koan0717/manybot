@@ -41,6 +41,7 @@ import {
   Pickaxe,
   KeyRound,
   MapPin,
+  Hammer,
 } from 'lucide-react';
 
 
@@ -175,6 +176,7 @@ export default function DashboardLayout({
       items: [
         { label: 'BOT機能接続状況', path: `/dashboard/${guildId}/bot-status`, roles: ['admin', 'subadmin'], icon: Activity, group: 'その他' },
         { label: 'データベース設定', path: `/dashboard/${guildId}/database`, roles: ['admin', 'subadmin'], icon: Database, group: 'その他' },
+        { label: 'サーバー作成', path: `/dashboard/${guildId}/server-build`, roles: ['admin', 'subadmin'], icon: Hammer, group: 'その他' },
         { label: 'アカウント設定', path: `/dashboard/${guildId}/accounts`, roles: ['admin'], icon: Users, group: 'その他' },
       ],
     },

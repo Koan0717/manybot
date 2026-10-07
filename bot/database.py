@@ -3102,6 +3102,20 @@ async def save_setting(guild_id: int, key: str, value):
 
 
 
+async def get_setting_value(guild_id: int, key: str):
+    """bot_settings の値を1件だけ DB から直接読む（JSON をそのまま返す。無ければ None）。"""
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        raw = await conn.fetchval(
+            'SELECT setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key = $2', guild_id, key)
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+
+
 async def load_settings() -> dict:
 
     settings = {}
