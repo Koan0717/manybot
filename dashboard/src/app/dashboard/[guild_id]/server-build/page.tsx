@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { Hammer, Save, Sparkles, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Hammer, Save, Sparkles, Loader2, CheckCircle2, XCircle, LayoutList, ChevronDown, ChevronRight, Volume2, Hash } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import { ROLE_SETTINGS } from '@/lib/roleSettings';
 import { SERVER_BUILD_CATEGORIES, SUGGESTED_ROLE_NAMES } from '@/lib/serverBuild';
@@ -23,7 +23,26 @@ interface BuildStatus {
   };
 }
 
+interface CatalogTemplate {
+  id: string;
+  source: 'builtin' | 'saved';
+  name: string;
+  description?: string;
+  summary?: string;
+  updated_at?: string | null;
+  error?: string;
+  roles?: { name: string; color: number; settings: string[] }[];
+  categories?: { name: string; channels: { name: string; voice: boolean }[] }[];
+}
+
+interface Catalog {
+  generated_at: string;
+  templates: CatalogTemplate[];
+}
+
 const POLL_MS = 3000;
+// テンプレ保存のあと、Bot がテンプレート一覧を作り直すのを待つ時間
+const CATALOG_WAIT_MS = 30_000;
 
 export default function ServerBuildPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -37,6 +56,10 @@ export default function ServerBuildPage({ params }: { params: { guild_id: string
   const [status, setStatus] = useState<BuildStatus | null>(null);
   const [submitting, setSubmitting] = useState<Action | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [openTemplate, setOpenTemplate] = useState<string | null>(null);
+  const [catalogWaiting, setCatalogWaiting] = useState(false);
+  const catalogPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -60,6 +83,39 @@ export default function ServerBuildPage({ params }: { params: { guild_id: string
     pollRef.current = setInterval(fetchStatus, POLL_MS);
   }, [fetchStatus, stopPolling]);
 
+  const stopCatalogPolling = useCallback(() => {
+    if (catalogPollRef.current) {
+      clearInterval(catalogPollRef.current);
+      catalogPollRef.current = null;
+    }
+    setCatalogWaiting(false);
+  }, []);
+
+  // 保存したテンプレート（updatedAt）が一覧に反映されるまで待つ
+  const waitForCatalog = useCallback((updatedAt: string) => {
+    if (catalogPollRef.current) clearInterval(catalogPollRef.current);
+    setCatalogWaiting(true);
+    const started = Date.now();
+    catalogPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/guilds/${guildId}/server-build`, { cache: 'no-store' });
+        const data = await res.json();
+        if (!data.error && data.catalog) {
+          setCatalog(data.catalog);
+          const saved = data.catalog.templates?.find((t: CatalogTemplate) => t.source === 'saved');
+          if (saved?.updated_at === updatedAt) {
+            setOpenTemplate('custom');
+            stopCatalogPolling();
+            return;
+          }
+        }
+      } catch {}
+      if (Date.now() - started > CATALOG_WAIT_MS) stopCatalogPolling();
+    }, POLL_MS);
+  }, [guildId, stopCatalogPolling]);
+
+  useEffect(() => stopCatalogPolling, [stopCatalogPolling]);
+
   useEffect(() => {
     fetch(`/api/guilds/${guildId}/server-build`, { cache: 'no-store' })
       .then(res => res.json())
@@ -73,6 +129,7 @@ export default function ServerBuildPage({ params }: { params: { guild_id: string
           setSavedAt(t.updated_at || null);
         }
         setStatus(data.status);
+        setCatalog(data.catalog);
         if (data.status && (data.status.state === 'queued' || data.status.state === 'running')) startPolling();
       })
       .catch(console.error)
@@ -127,6 +184,7 @@ export default function ServerBuildPage({ params }: { params: { guild_id: string
       }
       if (action === 'save') {
         setSavedAt(data.template?.updated_at || new Date().toISOString());
+        if (data.template?.updated_at) waitForCatalog(data.template.updated_at);
         toast.success('テンプレートを保存しました！ Discord で /運営 サーバー構築 → 「保存したテンプレート」を選ぶと作成できます');
       } else {
         setStatus(data.status);
@@ -149,6 +207,99 @@ export default function ServerBuildPage({ params }: { params: { guild_id: string
         title="サーバー作成"
         subtitle="基本設定のロール設定ごとにロール名を入れて、ロール・カテゴリー・チャンネルの土台を一括で作ります"
       />
+
+      <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
+        <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white flex items-center gap-2">
+          <LayoutList className="w-5 h-5 text-zinc-400" />
+          テンプレート一覧
+        </h2>
+        <p className="text-sm text-zinc-400 mb-4">
+          <code className="px-1 bg-black/40 rounded text-zinc-200">/運営 サーバー構築</code>
+          で選べるテンプレートです。名前を押すと、作られるロール・カテゴリー・チャンネルを確認できます。
+        </p>
+        {catalogWaiting && (
+          <p className="text-xs text-amber-400 mb-3 flex items-center gap-1.5">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            保存したテンプレートを Bot が一覧に反映しています…
+          </p>
+        )}
+        {!catalog ? (
+          <p className="text-sm text-zinc-500">
+            {loading ? '読み込み中…' : 'まだ一覧がありません。Bot が起動すると表示されます。'}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {catalog.templates.map(t => {
+              const open = openTemplate === t.id;
+              return (
+                <div key={t.id} className="border border-zinc-700 rounded">
+                  <button
+                    type="button"
+                    onClick={() => setOpenTemplate(open ? null : t.id)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-zinc-800/60 transition-colors"
+                  >
+                    {open ? <ChevronDown className="w-4 h-4 text-zinc-400" /> : <ChevronRight className="w-4 h-4 text-zinc-400" />}
+                    <span className="font-bold text-white">{t.name}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                      t.source === 'saved' ? 'border-cyan-700 text-cyan-300' : 'border-zinc-600 text-zinc-400'
+                    }`}>
+                      {t.source === 'saved' ? '保存したテンプレート' : '組み込み'}
+                    </span>
+                    {t.summary && <span className="text-xs text-zinc-500 ml-auto hidden md:inline">{t.summary}</span>}
+                  </button>
+                  {open && (
+                    <div className="px-4 pb-4 pt-1 border-t border-zinc-800 text-sm">
+                      {t.description && <p className="text-zinc-400 mb-1">{t.description}</p>}
+                      {t.summary && <p className="text-xs text-zinc-500 mb-3 md:hidden">{t.summary}</p>}
+                      {t.source === 'saved' && t.updated_at && (
+                        <p className="text-xs text-zinc-500 mb-3">最終保存: {new Date(t.updated_at).toLocaleString('ja-JP')}</p>
+                      )}
+                      {t.error ? (
+                        <p className="text-red-400">このテンプレートは読み込めません: {t.error}</p>
+                      ) : (
+                        <>
+                          <p className="text-xs font-bold text-zinc-300 mb-2">ロール（上ほど上位）</p>
+                          <div className="flex flex-wrap gap-1.5 mb-4">
+                            {t.roles?.map((r, i) => (
+                              <span
+                                key={i}
+                                title={r.settings.map(k => ROLE_SETTINGS.find(s => s.key === k)?.label || k).join(' / ') || undefined}
+                                className="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border border-zinc-700 bg-zinc-900 text-zinc-200"
+                              >
+                                <span
+                                  className="w-2 h-2 rounded-full"
+                                  style={{ backgroundColor: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : '#99aab5' }}
+                                />
+                                {r.name}
+                              </span>
+                            ))}
+                          </div>
+                          <p className="text-xs font-bold text-zinc-300 mb-2">カテゴリー・チャンネル</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {t.categories?.map((c, i) => (
+                              <div key={i} className="border border-zinc-800 rounded p-2.5">
+                                <p className="text-xs font-bold text-zinc-200 mb-1.5">{c.name}</p>
+                                <ul className="space-y-0.5">
+                                  {c.channels.map((ch, j) => (
+                                    <li key={j} className="text-xs text-zinc-400 flex items-center gap-1.5">
+                                      {ch.voice ? <Volume2 className="w-3 h-3 flex-shrink-0" /> : <Hash className="w-3 h-3 flex-shrink-0" />}
+                                      {ch.name}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <div className="mecha-clip mecha-grid-bg bg-neutral-900/80 border border-zinc-800/80 p-6 shadow-xl mb-8">
         <h2 className="text-xl font-bold mb-4 border-b border-zinc-700 pb-2 text-white">テンプレート名</h2>

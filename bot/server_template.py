@@ -961,3 +961,40 @@ async def run_dashboard_build(bot, guild: discord.Guild, apply_settings: bool, s
         await save_status(state="done", finished_at=now(), message="完了しました", result=result_summary(result))
     except Exception as e:
         await save_status(state="error", finished_at=now(), message=str(e))
+
+
+CATALOG_KEY = "SERVER_TEMPLATE_CATALOG"
+
+
+def preview(template: dict) -> dict:
+    """ダッシュボードで中身を見せるための要約（ロール・カテゴリー・チャンネル）。"""
+    return {
+        "name": template["name"],
+        "description": template.get("description", ""),
+        "summary": plan_summary(template),
+        "roles": [{"name": r["name"], "color": r.get("color", 0), "settings": r.get("settings", [])}
+                  for r in template["roles"]],
+        "categories": [{"name": c["name"], "channels": [
+            {"name": ch["name"], "voice": ch.get("type") == "voice"} for ch in c["channels"]]}
+            for c in template["categories"]],
+    }
+
+
+async def publish_catalog(guild_id: int):
+    """組み込みテンプレートと「テンプレ保存」したテンプレートの中身を SERVER_TEMPLATE_CATALOG に書く。"""
+    import datetime
+    items = [{"id": key, "source": "builtin", **preview(tpl)} for key, tpl in TEMPLATES.items()]
+    spec = await database.get_setting_value(guild_id, CUSTOM_TEMPLATE_KEY)
+    if spec:
+        item = {"id": "custom", "source": "saved",
+                "updated_at": spec.get("updated_at") if isinstance(spec, dict) else None}
+        try:
+            item.update(preview(custom_template(spec)))
+        except Exception as e:
+            item.update({"name": (spec.get("name") if isinstance(spec, dict) else None) or "保存したテンプレート",
+                         "error": str(e)})
+        items.append(item)
+    await database.save_setting(guild_id, CATALOG_KEY, {
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "templates": items,
+    })
