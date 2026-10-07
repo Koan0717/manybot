@@ -230,11 +230,233 @@ ZERO_TENGETSU = {
 
 TEMPLATES = {"zero_tengetsu": ZERO_TENGETSU}
 
+
+# ==========================================================================
+# カスタムテンプレート（ダッシュボード「サーバー作成」）
+# 基本設定のロール設定ごとにロール名を入れると、そのロールを元に基盤のカテゴリー・チャンネルを作る。
+# 保存先: bot_settings の SERVER_BUILD_TEMPLATE（テンプレ保存）/ SERVER_BUILD_PENDING（サーバー作成）
+# 形式: {"name": str, "roles": {設定キー: ロール名}, "categories": [カテゴリーID, ...]}
+# ==========================================================================
+CUSTOM_TEMPLATE_KEY = "SERVER_BUILD_TEMPLATE"
+CUSTOM_PENDING_KEY = "SERVER_BUILD_PENDING"
+CUSTOM_STATUS_KEY = "SERVER_BUILD_STATUS"
+
+# 設定キー → ロールの作り方。並び順＝ロールの上下（上ほど上位）
+# group: カテゴリーの見える範囲を決める権限グループ
+CUSTOM_ROLE_SETTINGS = [
+    ("ADMIN_ROLE_IDS", {"group": "staff", "color": 0xE6B422, "hoist": True, "perms": _STAFF_PERMS}),
+    ("EVALUATOR_TIER3_ROLE_IDS", {"group": "eval_staff", "color": 0x8E44AD, "hoist": True,
+                                  "perms": {"manage_messages": True, "move_members": True}}),
+    ("EVALUATOR_TIER2_ROLE_IDS", {"group": "eval_staff", "color": 0x9B59B6, "hoist": True, "perms": {"move_members": True}}),
+    ("EVALUATOR_ROLE_IDS", {"group": "eval_staff", "color": 0xAF7AC5, "hoist": True, "perms": {"move_members": True}}),
+    ("EVALUATOR_MENTION_ROLE_IDS", {"group": "eval_staff", "color": 0xD2B4DE, "mentionable": True}),
+    ("INTERVIEWER_ROLE_IDS", {"group": "interviewer", "color": 0x5DADE2, "hoist": True, "perms": {"move_members": True}}),
+    ("EVENT_MANAGER_ROLE_IDS", {"group": "event_staff", "color": 0xF1948A, "hoist": True}),
+    ("GAMBLE_MANAGER_ROLE_IDS", {"group": "casino_staff", "color": 0xD68910}),
+    ("GAMBLE_EMPLOYEE_ROLE_IDS", {"group": "casino_staff", "color": 0xF39C12}),
+    ("SHOP_MANAGER_ROLE_ID", {"group": "shop_staff", "color": 0x229954}),
+    ("SHOP_EMPLOYEE_ROLE_ID", {"group": "shop_staff", "color": 0x52BE80}),
+    ("EMBLEM_MANAGER_ROLE_ID", {"group": "stamp_staff", "color": 0xCA6F1E}),
+    ("EMBLEM_MASTER_ROLE_IDS", {"group": "stamp_staff", "color": 0xE59866}),
+    ("CONFESSION_PRIEST_ROLE_ID", {"group": "priest", "color": 0x5D6D7E}),
+    ("PRIEST_ROLE_ID", {"group": "priest", "color": 0x85929E}),
+    ("BANKER_ROLE_IDS", {"group": "banker", "color": 0x48C9B0}),
+    ("MAIN_SUB_MEMBER_ROLE_IDS", {"group": "members", "color": 0x85C1E9, "hoist": True}),
+    ("MAIN_MEMBER_ROLE_IDS", {"group": "members", "color": 0x85C1E9, "hoist": True}),
+    ("SUB_MEMBER_ROLE_IDS", {"group": "members", "color": 0xAED6F1, "hoist": True}),
+    ("FREE_INN_ROLE_IDS", {"color": 0xA3E4D7}),
+    ("NEW_MEMBER_ROLE_IDS", {"group": "candidate", "color": 0xBDC3C7, "hoist": True}),
+    ("PENDING_MEMBER_ROLE_ID", {"group": "pending", "color": 0x95A5A6}),
+    ("DOWNGRADE_ROLE_ID", {"group": "failed", "color": 0x7F8C8D}),
+    ("MINUS_TARGET_ROLE_IDS", {"color": 0x6E2C00}),
+    ("GAMBLE_VIOLATOR_ROLE_IDS", {"group": "violator", "color": 0x641E16}),
+    ("MALE_ROLE_ID", {"color": 0x3498DB}),
+    ("FEMALE_ROLE_ID", {"color": 0xFF69B4}),
+]
+CUSTOM_ROLE_KEYS = [k for k, _ in CUSTOM_ROLE_SETTINGS]
+
+# カテゴリーID → 作るときに必要な権限グループ（どれか1つにロールがあれば作る。空なら常に作る）
+CUSTOM_CATEGORY_REQUIRES = {
+    "info": [],
+    "interview": ["interviewer", "pending"],
+    "evaluation": ["eval_staff", "candidate"],
+    "community": [],
+    "support": [],
+    "entertainment": [],
+    "eval_room": ["eval_staff"],
+    "failed": ["failed"],
+    "violator": ["violator"],
+    "staff": [],
+    "logs": [],
+}
+CUSTOM_CATEGORY_IDS = list(CUSTOM_CATEGORY_REQUIRES)
+
+
+def _custom_categories(has) -> list:
+    """has(group) でロールがある権限グループを判定して、基盤のカテゴリー・チャンネルを組み立てる。"""
+    # 住民（本・準・仮）が設定されていなければ、交流系は @everyone に開く（待機・違反者は除く）
+    if has("members") or has("candidate"):
+        community = {"members": WRITE, "candidate": WRITE}
+        community_read = {"members": READ, "candidate": READ}
+    else:
+        community = {"everyone": WRITE, "pending": HIDDEN, "violator": HIDDEN, "failed": HIDDEN}
+        community_read = {"everyone": READ}
+
+    def ch(name, cond=True, **kw):
+        return {"name": name, **kw} if cond else None
+
+    cats = {
+        "info": {"name": "📢 ── 案内 ──", "access": {"everyone": READ, "violator": HIDDEN, "staff": WRITE}, "channels": [
+            ch("👋｜ようこそ"),
+            ch("📜｜ルール"),
+            ch("📢｜お知らせ"),
+            ch("🔰｜入界手続き", has("pending"), access={"pending": WRITE, "interviewer": WRITE},
+               topic="ダッシュボード「面接」から面接チケットのパネルを設置"),
+        ]},
+        "interview": {"name": "🚪 ── 面接 ──", "access": {"pending": WRITE, "interviewer": WRITE, "staff": WRITE}, "channels": [
+            ch("💬｜面接待合室"),
+            ch("面接室", type="voice"),
+        ]},
+        "evaluation": {"name": "📋 ── 評価 ──", "setting": "EVALUATION_CATEGORY_ID",
+                       "access": {"candidate": WRITE, "members": WRITE, "eval_staff": WRITE, "staff": WRITE}, "channels": [
+            ch("📋｜評価の流れ", access={"candidate": READ, "members": READ}),
+            ch("🙋｜自己紹介", setting="SELF_INTRO_CHANNEL_IDS"),
+            ch("💬｜評価雑談"),
+            ch("評価VC①", type="voice"),
+            ch("評価VC②", type="voice"),
+        ]},
+        "community": {"name": "💬 ── 交流 ──", "access": {**community, "staff": WRITE}, "channels": [
+            ch("💬｜雑談"),
+            ch("📸｜画像・スクショ"),
+            ch("🤖｜コマンド"),
+            ch("📞｜通話募集", topic="ダッシュボード「通話募集掲示板」からパネルを設置"),
+            ch("🎉｜レベルアップ", setting="LEVEL_UP_CHANNEL_ID", access=community_read),
+            ch("🏦｜銀行", has("banker"), access={"banker": WRITE}, topic="/balance・/pay"),
+            ch("雑談VC", type="voice"),
+            ch("➕ VC作成", type="voice", auto_vc=True),
+        ]},
+        "support": {"name": "🎫 ── 窓口 ──", "access": {"everyone": READ, "staff": WRITE}, "channels": [
+            ch("🎫｜お問い合わせ", topic="ダッシュボード「チケット」からお問い合わせパネルを設置"),
+            ch("🎭｜匿名チャット", topic="ダッシュボード「チケット」から匿名チャットパネルを設置"),
+            ch("🎨｜スタンプ依頼", has("stamp_staff"), access={"stamp_staff": WRITE},
+               topic="ダッシュボード「チケット」からスタンプ制作依頼パネルを設置"),
+            ch("⛪｜告解室", has("priest"), access={"priest": WRITE},
+               topic="ダッシュボード「チケット」から告解パネルを設置"),
+        ]},
+        "entertainment": {"name": "🎲 ── 娯楽 ──",
+                          "access": {**community, "casino_staff": WRITE, "shop_staff": WRITE, "event_staff": WRITE, "staff": WRITE},
+                          "channels": [
+            ch("🎉｜イベント", has("event_staff")),
+            ch("🎰｜カジノ"),
+            ch("🛍️｜ショップ"),
+            ch("🎁｜ガチャ", topic="/運営 福引パネル設置"),
+            ch("♟️｜ボードゲーム", topic="オセロ・チェス・将棋"),
+            ch("🎮｜ゲームvc作成", access=community_read,
+               topic="ダッシュボード「部屋」からゲームVC・賭博VCの作成パネルを設置"),
+        ]},
+        "eval_room": {"name": "⚖️ ── 評価員室 ──", "access": {"eval_staff": WRITE, "staff": WRITE}, "channels": [
+            ch("📋｜評価会議"),
+            ch("📝｜評価記録"),
+            ch("評価員会議", type="voice"),
+        ]},
+        "failed": {"name": "⛓️ ── 再評価 ──", "access": {"failed": WRITE, "eval_staff": WRITE, "staff": WRITE}, "channels": [
+            ch("📜｜評価落ちの案内", access={"failed": READ}),
+            ch("📮｜再評価申請"),
+            ch("💬｜評価落ち待機所"),
+        ]},
+        "violator": {"name": "🚫 ── 違反者 ──", "access": {"violator": WRITE, "staff": WRITE}, "channels": [
+            ch("📜｜違反者の案内", access={"violator": READ}),
+            ch("📝｜反省文"),
+            ch("📮｜異議申し立て"),
+        ]},
+        "staff": {"name": "🛡️ ── 運営 ──", "access": {"staff": WRITE}, "channels": [
+            ch("🛡️｜運営連絡"),
+            ch("📌｜運営メモ"),
+            ch("運営会議", type="voice"),
+        ]},
+        "logs": {"name": "📂 ── ログ ──", "access": {"staff": WRITE}, "channels": [
+            ch("📥｜入退室ログ", logs=["member_join_leave"]),
+            ch("✏️｜メッセージログ", logs=["message_edit", "message_delete"]),
+            ch("🔊｜vcログ", logs=["vc_join_leave"]),
+            ch("🧾｜通貨ログ", logs=["currency", "role_salary", "member_transfer"]),
+            ch("🛍️｜ショップ・ガチャログ", logs=["shop", "shop_extend", "gacha"]),
+            ch("🎰｜カジノログ", logs=["gambling"]),
+            ch("📋｜評価・面接ログ", has("eval_staff") or has("interviewer"), logs=["evaluation_failure", "interviewer"]),
+            ch("🛡️｜荒らし対策ログ", logs=["antigrief"]),
+        ]},
+    }
+    for c in cats.values():
+        c["channels"] = [x for x in c["channels"] if x]
+    return cats
+
+
+def custom_template(spec: dict) -> dict:
+    """ダッシュボードで作ったテンプレート（設定キー → ロール名）を build() に渡せる形にする。"""
+    if not isinstance(spec, dict):
+        raise ValueError("テンプレートの形式が正しくありません")
+    names = spec.get("roles") or {}
+    meta = dict(CUSTOM_ROLE_SETTINGS)
+
+    roles, by_name, groups = [], {}, {}
+    for key in CUSTOM_ROLE_KEYS:
+        name = str(names.get(key) or "").strip()[:100]
+        if not name:
+            continue
+        m = meta[key]
+        spec_role = by_name.get(name)
+        if spec_role is None:
+            # 同じ名前を複数の設定に入れたら1つのロールにまとめる（上位の設定の色・権限を使う）
+            spec_role = {"key": f"r{len(roles)}", "name": name, "color": m.get("color", 0),
+                         "hoist": m.get("hoist", False), "mentionable": m.get("mentionable", False),
+                         "perms": m.get("perms"), "settings": []}
+            roles.append(spec_role)
+            by_name[name] = spec_role
+        else:
+            spec_role["hoist"] = spec_role["hoist"] or m.get("hoist", False)
+            spec_role["mentionable"] = spec_role["mentionable"] or m.get("mentionable", False)
+        spec_role["settings"].append(key)
+        if m.get("group"):
+            members = groups.setdefault(m["group"], [])
+            if spec_role["key"] not in members:
+                members.append(spec_role["key"])
+    if not roles:
+        raise ValueError("ロール名が1つも入力されていません")
+    if not any("MAIN_SUB_MEMBER_ROLE_IDS" in r["settings"] for r in roles):
+        # 本・準メンバーロールが空なら、本メンバー・準メンバーのロールをそこにも入れる
+        for r in roles:
+            if {"MAIN_MEMBER_ROLE_IDS", "SUB_MEMBER_ROLE_IDS"} & set(r["settings"]):
+                r["settings"].append("MAIN_SUB_MEMBER_ROLE_IDS")
+
+    has = lambda g: bool(groups.get(g))
+    cats = _custom_categories(has)
+    selected = spec.get("categories")
+    if not isinstance(selected, list):
+        selected = CUSTOM_CATEGORY_IDS
+    categories = []
+    for cid in CUSTOM_CATEGORY_IDS:
+        if cid not in selected:
+            continue
+        req = CUSTOM_CATEGORY_REQUIRES[cid]
+        if req and not any(has(g) for g in req):
+            continue
+        categories.append(cats[cid])
+
+    return {
+        "name": str(spec.get("name") or "").strip()[:50] or "カスタムテンプレート",
+        "description": "ダッシュボードで作成",
+        "roles": roles,
+        "groups": groups,
+        "categories": categories,
+    }
+
 _LIST_SETTINGS = {
     "ADMIN_ROLE_IDS", "EVALUATOR_ROLE_IDS", "EVALUATOR_TIER3_ROLE_IDS", "INTERVIEWER_ROLE_IDS",
     "BANKER_ROLE_IDS", "MAIN_SUB_MEMBER_ROLE_IDS", "MAIN_MEMBER_ROLE_IDS", "SUB_MEMBER_ROLE_IDS",
     "NEW_MEMBER_ROLE_IDS", "GAMBLE_VIOLATOR_ROLE_IDS", "GAMBLE_EMPLOYEE_ROLE_IDS", "SELF_INTRO_CHANNEL_IDS",
 }
+
+
+_SHOP_SETTINGS = {"SHOP_EMPLOYEE_ROLE_ID", "SHOP_MANAGER_ROLE_ID"}
 
 
 def _overwrite(level: str) -> discord.PermissionOverwrite:
@@ -252,12 +474,13 @@ def _overwrite(level: str) -> discord.PermissionOverwrite:
     return discord.PermissionOverwrite(view_channel=False)
 
 
-def _build_overwrites(guild: discord.Guild, access: dict, roles: dict) -> dict:
+def _build_overwrites(guild: discord.Guild, access: dict, roles: dict, groups: dict = None) -> dict:
+    groups = GROUPS if groups is None else groups
     overwrites = {guild.default_role: _overwrite(access.get("everyone", HIDDEN))}
     for group, level in access.items():
         if group == "everyone":
             continue
-        for key in GROUPS.get(group, [group]):
+        for key in groups.get(group, [group]):
             role = roles.get(key)
             if role:
                 overwrites[role] = _overwrite(level)
@@ -300,6 +523,7 @@ async def build(bot, guild: discord.Guild, template: dict, apply_settings: bool 
     result = {"created_roles": [], "reused_roles": [], "created_channels": [], "reused_channels": [],
               "errors": [], "settings": {}, "synced": []}
     reason = f"サーバー構築テンプレート「{template['name']}」"
+    groups = template.get("groups", GROUPS)
 
     async def report(msg):
         if progress:
@@ -343,14 +567,14 @@ async def build(bot, guild: discord.Guild, template: dict, apply_settings: bool 
             result["reused_channels"].append(category.name)
             if sync_permissions:
                 try:
-                    if await _sync_overwrites(guild, category, _build_overwrites(guild, cat_spec["access"], roles), roles, reason):
+                    if await _sync_overwrites(guild, category, _build_overwrites(guild, cat_spec["access"], roles, groups), roles, reason):
                         result["synced"].append(category.name)
                 except discord.HTTPException as e:
                     result["errors"].append(f"カテゴリー「{cat_spec['name']}」の権限: {e}")
         else:
             try:
                 category = await guild.create_category(
-                    cat_spec["name"], overwrites=_build_overwrites(guild, cat_spec["access"], roles), reason=reason)
+                    cat_spec["name"], overwrites=_build_overwrites(guild, cat_spec["access"], roles, groups), reason=reason)
                 result["created_channels"].append(category.name)
             except discord.HTTPException as e:
                 result["errors"].append(f"カテゴリー「{cat_spec['name']}」: {e}")
@@ -363,7 +587,7 @@ async def build(bot, guild: discord.Guild, template: dict, apply_settings: bool 
             existing = category.voice_channels if is_voice else category.text_channels
             channel = discord.utils.get(existing, name=ch_spec["name"])
             access = {**cat_spec["access"], **ch_spec.get("access", {})}
-            overwrites = _build_overwrites(guild, access, roles)
+            overwrites = _build_overwrites(guild, access, roles, groups)
             if channel:
                 result["reused_channels"].append(channel.name)
                 if sync_permissions:
@@ -406,7 +630,9 @@ async def _apply_settings(bot, guild: discord.Guild, settings: dict, errors: lis
         bot.bot_settings = cache = {}
     guild_cache = cache.setdefault(guild.id, {})
     for key, ids in settings.items():
-        if key in _LIST_SETTINGS:
+        if key in _SHOP_SETTINGS:
+            continue
+        if key in _LIST_SETTINGS or key.endswith("_IDS"):
             # 既に設定されているものは残して追加する
             current = guild_cache.get(key) or []
             if isinstance(current, (int, str)):
@@ -429,6 +655,20 @@ async def _apply_settings(bot, guild: discord.Guild, settings: dict, errors: lis
             guild_cache[key] = value
         except Exception as e:
             errors.append(f"設定 {key}: {e}")
+    shop = {k: ids[0] for k, ids in settings.items() if k in _SHOP_SETTINGS and ids}
+    if shop:
+        # ショップの従業員・統括ロールは bot_settings ではなく shop_settings に入っている
+        try:
+            cur = await database.get_shop_settings(guild.id)
+            await database.set_shop_settings(
+                guild.id,
+                shop.get("SHOP_EMPLOYEE_ROLE_ID", cur.get("employee_role_id")),
+                shop.get("SHOP_MANAGER_ROLE_ID", cur.get("manager_role_id")),
+                cur.get("inquiry_mention_role_id"),
+                cur.get("inquiry_mention_role_ids") or [],
+            )
+        except Exception as e:
+            errors.append(f"ショップのロール設定: {e}")
 
 
 async def _apply_log_channels(guild: discord.Guild, log_channels: dict, result: dict):
@@ -460,3 +700,52 @@ async def _register_auto_vc(bot, channel_id: int, errors: list):
             }
     except Exception as e:
         errors.append(f"VC作成チャンネルの登録: {e}")
+
+
+async def load_saved_template(guild_id: int):
+    """「テンプレ保存」で保存したテンプレートを build() 用に変換して返す。無ければ None。"""
+    spec = await database.get_setting_value(guild_id, CUSTOM_TEMPLATE_KEY)
+    if not spec:
+        return None
+    return custom_template(spec)
+
+
+def result_summary(result: dict) -> dict:
+    return {
+        "created_roles": len(result["created_roles"]), "reused_roles": len(result["reused_roles"]),
+        "created_channels": len(result["created_channels"]), "reused_channels": len(result["reused_channels"]),
+        "synced": len(result["synced"]), "settings": len(result["settings"]), "logs": len(result.get("logs", [])),
+        "errors": result["errors"][:30],
+    }
+
+
+async def run_dashboard_build(bot, guild: discord.Guild, apply_settings: bool, sync_permissions: bool):
+    """ダッシュボードの「サーバー作成」ボタンから（IPC 経由で）呼ばれる。進み具合は SERVER_BUILD_STATUS に書く。"""
+    import datetime
+
+    def now():
+        return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    status = {"state": "running", "started_at": now(), "message": "準備しています…"}
+
+    async def save_status(**kw):
+        status.update(kw)
+        try:
+            await database.save_setting(guild.id, CUSTOM_STATUS_KEY, status)
+        except Exception as e:
+            print(f"[ServerBuild] status save error: {e}")
+
+    await save_status()
+    try:
+        me = guild.me.guild_permissions
+        if not (me.manage_roles and me.manage_channels):
+            raise ValueError("Bot に「ロールの管理」と「チャンネルの管理」の権限が必要です")
+        spec = await database.get_setting_value(guild.id, CUSTOM_PENDING_KEY)
+        if not spec:
+            raise ValueError("作成するテンプレートが見つかりません")
+        template = custom_template(spec)
+        await save_status(name=template["name"], message=f"{plan_summary(template)} を作成します…")
+        result = await build(bot, guild, template, apply_settings, lambda msg: save_status(message=msg), sync_permissions)
+        await save_status(state="done", finished_at=now(), message="完了しました", result=result_summary(result))
+    except Exception as e:
+        await save_status(state="error", finished_at=now(), message=str(e))
