@@ -244,6 +244,7 @@ DEPPA_SUSHI = {
         "game_staff": ["game_lead", "game_vice", "game"],
         "fish_staff": ["fish_lead", "fish_vice", "fish"],
         "night_staff": ["sake_lead", "sake_staff", "sake_cast"],
+        "stamp_staff": ["stamp_lead", "stamp"],
         # 本面・準面
         "members": ["futokyaku", "joren"],
         "main": ["futokyaku"],
@@ -287,6 +288,10 @@ DEPPA_SUSHI = {
         {"key": "fish_lead", "name": "鮮魚商店長", "color": 0x1F618D, "hoist": True, "perms": _DEPPA_LEAD_PERMS},
         {"key": "fish_vice", "name": "鮮魚商副店長", "color": 0x2874A6, "hoist": True, "perms": {"move_members": True}},
         {"key": "fish", "name": "鮮魚商", "color": 0x3498DB, "hoist": True},
+        # スタンプ
+        {"key": "stamp_lead", "name": "焼印職人頭", "color": 0xBA4A00, "hoist": True,
+         "perms": _DEPPA_LEAD_PERMS, "settings": ["EMBLEM_MANAGER_ROLE_ID"]},
+        {"key": "stamp", "name": "焼印職人", "color": 0xE67E22, "hoist": True, "settings": ["EMBLEM_MASTER_ROLE_IDS"]},
         # 夜色
         {"key": "sake_lead", "name": "酒屋店長", "color": 0x512E5F, "hoist": True, "perms": _DEPPA_LEAD_PERMS},
         {"key": "sake_staff", "name": "酒屋店員", "color": 0x2C3E50, "hoist": True},
@@ -379,7 +384,13 @@ DEPPA_SUSHI = {
          "access": {"members": READ, "candidate": READ, "failed": READ, "staff": WRITE}, "channels": [
             {"name": "🎫｜お問い合わせ", "topic": "ダッシュボード「チケット」からお問い合わせパネルを設置"},
             {"name": "🎭｜匿名チャット", "topic": "ダッシュボード「チケット」から匿名チャットパネルを設置"},
-            {"name": "🎨｜スタンプ依頼", "topic": "ダッシュボード「チケット」からスタンプ制作依頼パネルを設置"},
+        ]},
+        # スタンプ（焼印職人が担当）。依頼チケットはパネルを置いたチャンネルと同じカテゴリーに作られる
+        {"name": "🔥 ── 焼印屋（スタンプ）──",
+         "access": {"members": READ, "candidate": READ, "stamp_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "📜｜スタンプの案内", "topic": "スタンプ制作の流れ・料金・納期"},
+            {"name": "🎨｜スタンプ依頼", "topic": "ダッシュボード「チケット」からスタンプ制作依頼パネルを設置（依頼チケットはこのカテゴリーに作られる）"},
+            {"name": "🖼️｜スタンプ見本", "topic": "焼印職人の作品・完成したスタンプ"},
         ]},
         # 評価落ち（細客）専用。鮮魚商が担当
         {"name": "🐟 ── 鮮魚市場（再評価）──",
@@ -415,6 +426,12 @@ DEPPA_SUSHI = {
             {"name": "💬｜鮮魚商連絡"},
             {"name": "📝｜細客の記録"},
             {"name": "鮮魚商会議", "type": "voice"},
+        ]},
+        {"name": "🔥 ── 焼印工房 ──", "access": {"stamp_staff": WRITE, "staff": WRITE}, "channels": [
+            {"name": "💬｜焼印職人連絡"},
+            {"name": "📋｜制作進捗", "topic": "受けた依頼・担当・締め切り"},
+            {"name": "📦｜納品記録"},
+            {"name": "焼印職人会議", "type": "voice"},
         ]},
         {"name": "🍶 ── 酒屋裏方 ──", "access": {"night_staff": WRITE, "staff": WRITE}, "channels": [
             {"name": "💬｜酒屋連絡"},
