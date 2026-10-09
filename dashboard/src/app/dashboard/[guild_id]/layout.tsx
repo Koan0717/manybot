@@ -42,6 +42,7 @@ import {
   KeyRound,
   MapPin,
   Hammer,
+  ClipboardList,
 } from 'lucide-react';
 
 
@@ -139,6 +140,7 @@ export default function DashboardLayout({
         { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'], icon: Dices, group: '評価鯖' },
         { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'], icon: Gift, group: '評価鯖' },
         { label: '福引ガチャ設定', path: `/dashboard/${guildId}/gacha`, roles: ['admin', 'subadmin'], icon: Gift, group: '雑談鯖' },
+        { label: 'アンケート', path: `/dashboard/${guildId}/surveys`, roles: ['admin', 'subadmin'], icon: ClipboardList, group: '雑談鯖' },
       ],
     },
     {

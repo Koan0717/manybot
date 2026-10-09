@@ -212,6 +212,48 @@ export async function ensureVcCoinsSettingsSchema(pool: any) {
 }
 
 /**
+ * アンケート（surveys / survey_responses）テーブルを保証する。Bot側 cogs/survey.py と同じ定義。
+ */
+export async function ensureSurveySchema(pool: any) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS surveys (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        questions JSONB NOT NULL DEFAULT '[]'::jsonb,
+        is_anonymous BOOLEAN NOT NULL DEFAULT FALSE,
+        allow_edit BOOLEAN NOT NULL DEFAULT TRUE,
+        is_open BOOLEAN NOT NULL DEFAULT TRUE,
+        closes_at TIMESTAMPTZ,
+        button_label TEXT NOT NULL DEFAULT '回答する',
+        channel_id BIGINT,
+        message_id BIGINT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS survey_responses (
+        id SERIAL PRIMARY KEY,
+        survey_id INT NOT NULL,
+        guild_id BIGINT NOT NULL,
+        user_id BIGINT NOT NULL,
+        user_name TEXT NOT NULL DEFAULT '',
+        answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (survey_id, user_id)
+      )
+    `);
+    // パネル投稿・更新リクエストでアンケートIDを渡すために使う
+    await pool.query(`ALTER TABLE panel_requests ADD COLUMN IF NOT EXISTS panel_id BIGINT`);
+  } catch (e) {
+    console.error('Failed to ensure survey schema:', e);
+  }
+}
+
+/**
  * VC浮上報酬（vc_float_*）テーブルを保証する。Bot側 cogs/vc_float.py と同じ定義。
  */
 export async function ensureVcFloatSchema(pool: any) {
@@ -361,6 +403,7 @@ export async function ensureAllSchemas(pool: any) {
     ensureAntigriefSettingsSchema(pool),
     ensureVcCoinsSettingsSchema(pool),
     ensureVcFloatSchema(pool),
+    ensureSurveySchema(pool),
     ensureRoomPanelsSchema(pool),
     ensureRoleSalarySettingsSchema(pool),
   ]);

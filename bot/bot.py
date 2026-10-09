@@ -290,6 +290,7 @@ class EconomyBot(commands.Bot):
             "cogs.role_history",
             "cogs.vc_float",
             "cogs.poker",
+            "cogs.survey",
         ]
         for cog in cogs_to_load:
             try:
