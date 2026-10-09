@@ -126,6 +126,15 @@ class IPC(commands.Cog):
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload vc_float settings: {e}")
 
+                        elif panel_type == "refresh_survey":
+                            try:
+                                from cogs.survey import refresh_survey_panel
+                                if req.get("panel_id"):
+                                    await refresh_survey_panel(guild, int(req["panel_id"]))
+                                print(f"[IPC] Refreshed survey panel {req.get('panel_id')} for guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to refresh survey panel: {e}")
+
                         elif panel_type == "reload_call_board":
                             try:
                                 print(f"[IPC] Processed reload_call_board for guild {guild_id}")
@@ -284,6 +293,19 @@ class IPC(commands.Cog):
                     
                     if not channel:
                         print(f"[IPC ERROR] Channel {channel_id} not found in guild {guild_id}.")
+                        await database.delete_panel_request(req_id, guild_id)
+                        continue
+
+                    if panel_type in ("survey", "survey_results"):
+                        try:
+                            from cogs.survey import post_survey_panel, post_survey_results
+                            if req.get("panel_id"):
+                                if panel_type == "survey":
+                                    await post_survey_panel(guild, channel, int(req["panel_id"]))
+                                else:
+                                    await post_survey_results(guild, channel, int(req["panel_id"]))
+                        except discord.Forbidden:
+                            print(f"[IPC ERROR] Failed to send {panel_type} to {channel_id}: Forbidden (No permissions)")
                         await database.delete_panel_request(req_id, guild_id)
                         continue
 
