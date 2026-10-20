@@ -1,3 +1,5 @@
+import asyncio
+import unicodedata
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -7,6 +9,7 @@ from helpers import get_setting, has_admin_role, has_banker_role, send_log
 class Economy(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self._issue_locks: dict[tuple[int, int], asyncio.Lock] = {}
 
     @app_commands.command(name="balance", description="自分の所持金を確認します（管理者・銀行員は他のユーザーも確認可能）")
     async def balance(self, interaction: discord.Interaction, user: discord.Member = None):
@@ -203,6 +206,60 @@ class Economy(commands.Cog):
         embed.add_field(name="合計付与人数", value=f"{len(success_users)}名", inline=False)
         
         await send_log(self.bot, interaction.guild, "currency", embed)
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        """初期発行自動：指定チャンネルで「初期発行お願いします」と言った人に初期発行し、✅を付ける。"""
+        if message.author.bot or not message.guild or not isinstance(message.author, discord.Member):
+            return
+        guild_id = message.guild.id
+        if get_setting(self.bot, "AUTO_INITIAL_ISSUE_ENABLED", guild_id) in (False, "false", None):
+            return
+        channel_ids = get_setting(self.bot, "AUTO_INITIAL_ISSUE_CHANNEL_IDS", guild_id) or []
+        if not isinstance(channel_ids, list):
+            channel_ids = [channel_ids]
+        watch_ids = {int(c) for c in channel_ids if str(c).isdigit()}
+        # スレッド内の発言は親チャンネルで判定する
+        channel_id = message.channel.id
+        parent_id = getattr(message.channel, "parent_id", None)
+        if channel_id not in watch_ids and parent_id not in watch_ids:
+            return
+
+        keyword = str(get_setting(self.bot, "AUTO_INITIAL_ISSUE_KEYWORD", guild_id) or "初期発行お願いします")
+        normalize = lambda s: unicodedata.normalize("NFKC", s).replace(" ", "").replace("　", "")
+        if normalize(keyword) not in normalize(message.content):
+            return
+
+        member = message.author
+        # 連投されても二重に発行しないよう、確認から発行までを人ごとに直列化する
+        lock = self._issue_locks.setdefault((guild_id, member.id), asyncio.Lock())
+        async with lock:
+            if await database.check_initial_issued(guild_id, member.id):
+                try:
+                    await message.reply("すでに初期発行済みです。", mention_author=False, delete_after=15)
+                except discord.HTTPException:
+                    pass
+                return
+            init_coins = get_setting(self.bot, "INITIAL_COINS", guild_id) or 30000
+            await database.add_balance(guild_id, member.id, init_coins)
+            await database.set_initial_issued(guild_id, member.id)
+
+        try:
+            await message.add_reaction("✅")
+        except discord.HTTPException:
+            pass
+
+        currency_name = get_setting(self.bot, "CURRENCY_NAME", guild_id) or "コイン"
+        embed = discord.Embed(
+            title="🏦 初期発行（自動）",
+            description="初期発行自動によって初期発行が行われました。",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name="対象者", value=f"{member.mention} ({member.id})", inline=False)
+        embed.add_field(name="付与額", value=f"{init_coins:,} {currency_name}", inline=False)
+        embed.add_field(name="メッセージ", value=message.jump_url, inline=False)
+        await send_log(self.bot, message.guild, "currency", embed)
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))

@@ -43,6 +43,7 @@ import {
   MapPin,
   Hammer,
   ClipboardList,
+  BadgeCheck,
 } from 'lucide-react';
 
 
@@ -136,6 +137,7 @@ export default function DashboardLayout({
         { label: '評価関連設定', path: `/dashboard/${guildId}/eval-sheet`, roles: ['admin', 'subadmin'], icon: ClipboardCheck, group: '評価鯖' },
         { label: '役職給与設定', path: `/dashboard/${guildId}/role-salary`, roles: ['admin', 'subadmin'], icon: Banknote, group: '評価鯖' },
         { label: '経済・レベリング設定', path: `/dashboard/${guildId}/economy`, roles: ['admin', 'subadmin'], icon: Coins, group: '評価鯖' },
+        { label: '初期発行自動', path: `/dashboard/${guildId}/auto-initial-issue`, roles: ['admin', 'subadmin'], icon: BadgeCheck, group: '評価鯖' },
         { label: 'メンバー残高一覧', path: `/dashboard/${guildId}/member-list`, roles: ['admin', 'subadmin'], icon: ListOrdered, group: '評価鯖' },
         { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'], icon: Dices, group: '評価鯖' },
         { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'], icon: Gift, group: '評価鯖' },
