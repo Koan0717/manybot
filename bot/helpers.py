@@ -41,6 +41,22 @@ def normalize_image_url(url: str) -> str:
     return url
 
 
+async def _read_body_limited(resp, max_bytes: int):
+    """
+    レスポンス本文を最後まで読み込む。max_bytes を超えた場合はNoneを返す。
+    ※ resp.content.read(n) は「最大n バイト」しか保証せず、最初に届いた一部だけを
+      返すことがあるため（画像が途中で切れてアイコンが真っ暗になる原因）、必ずEOFまで読む。
+    """
+    chunks = []
+    total = 0
+    async for chunk in resp.content.iter_chunked(64 * 1024):
+        total += len(chunk)
+        if total > max_bytes:
+            return None
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 async def fetch_image_bytes(session, url: str, max_bytes: int = 10 * 1024 * 1024):
     """
     指定URLから画像バイト列を取得する。Googleドライブのウイルススキャン確認ページや
@@ -55,24 +71,27 @@ async def fetch_image_bytes(session, url: str, max_bytes: int = 10 * 1024 * 1024
             if resp.status != 200:
                 return None
             content_type = resp.headers.get("Content-Type", "")
-            data = await resp.content.read(max_bytes + 1)
+            data = await _read_body_limited(resp, max_bytes)
 
-            if len(data) > max_bytes:
+            if data is None:
                 return None
 
             # Google Driveの大容量ファイル確認ページ(HTML)対策:
-            # confirm=tトークンが必要な場合、再度リクエストする
+            # confirm/uuidトークンが必要な場合、再度リクエストする
             if "text/html" in content_type and "drive.google.com" in normalized:
                 text = data.decode("utf-8", errors="ignore")
-                m = re.search(r'confirm=([0-9A-Za-z_]+)', text)
+                m = re.search(r'name="confirm" value="([0-9A-Za-z_-]+)"', text) or re.search(r'confirm=([0-9A-Za-z_-]+)', text)
+                m_uuid = re.search(r'name="uuid" value="([0-9A-Za-z_-]+)"', text)
                 m_id = re.search(r'id=([a-zA-Z0-9_-]+)', normalized)
                 if m and m_id:
-                    confirm_url = f"https://drive.google.com/uc?export=download&confirm={m.group(1)}&id={m_id.group(1)}"
+                    confirm_url = f"https://drive.usercontent.google.com/download?export=download&id={m_id.group(1)}&confirm={m.group(1)}"
+                    if m_uuid:
+                        confirm_url += f"&uuid={m_uuid.group(1)}"
                     async with session.get(confirm_url, allow_redirects=True) as resp2:
                         if resp2.status != 200:
                             return None
-                        data = await resp2.content.read(max_bytes + 1)
-                        if len(data) > max_bytes:
+                        data = await _read_body_limited(resp2, max_bytes)
+                        if data is None:
                             return None
                         content_type = resp2.headers.get("Content-Type", "")
 
@@ -84,6 +103,38 @@ async def fetch_image_bytes(session, url: str, max_bytes: int = 10 * 1024 * 1024
             return data
     except Exception as e:
         print(f"[fetch_image_bytes] Failed to fetch image from {url}: {e}")
+        return None
+
+
+def prepare_avatar_bytes(data: bytes, max_size: int = 1024):
+    """
+    取得した画像がアイコンとして使えるか(途中で切れていないか等)をPillowで検証し、
+    Discordが確実に表示できるPNGに変換する。アニメーションGIF/WebPはそのまま返す。
+    壊れた画像の場合はNoneを返す。
+    """
+    import io
+    from PIL import Image, ImageOps
+
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            if getattr(img, "is_animated", False):
+                # 全フレームを読めるか確認だけして元データを使う
+                for i in range(img.n_frames):
+                    img.seek(i)
+                    img.load()
+                return data
+
+            img.load()  # 途中で切れた画像はここで例外になる
+            img = ImageOps.exif_transpose(img)
+            # CMYK等はDiscord側で黒く表示されることがあるためRGB(A)に統一
+            img = img.convert("RGBA" if ("A" in img.getbands() or "transparency" in img.info) else "RGB")
+            img.thumbnail((max_size, max_size), Image.LANCZOS)
+
+            out = io.BytesIO()
+            img.save(out, format="PNG", optimize=True)
+            return out.getvalue()
+    except Exception as e:
+        print(f"[prepare_avatar_bytes] Invalid image data: {e}")
         return None
 
 def get_room_settings(bot, guild_id: int = None) -> dict:
@@ -1255,6 +1306,9 @@ async def apply_bot_nicknames(bot):
                 import aiohttp
                 async with aiohttp.ClientSession() as session:
                     image_bytes = await fetch_image_bytes(session, icon_url)
+
+                if image_bytes:
+                    image_bytes = prepare_avatar_bytes(image_bytes)
 
                 if not image_bytes:
                     print(f"[apply_bot_icons] Failed to fetch image for {guild.name} ({guild.id}): invalid URL or not an image")
