@@ -114,14 +114,14 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
 
   const textChannels = channels.filter(c => c.type === 0 || c.type === 5);
   const outputChannels = channels.filter(c => c.type === 0 || c.type === 5 || c.type === 15);
-  const modalCount = Math.max(1, Math.ceil(settings.items.length / 5));
+  const modalCount = Math.max(1, Math.ceil(settings.items.length / 2));
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-white flex items-center gap-2"><FileText size={20} /> 評価シート記入パネル</h2>
         <p className="text-sm text-zinc-400 mt-1">
-          評価員がパネルのボタンから「仮メンを選択 → 総評（あり・保留・なし）を選択 → 各項目の内容を記入」して送信すると、
+          評価員がパネルのボタンから「仮メンを選択 → 総評（あり・保留・なし）を選択 → 各項目の段階（保留・1〜5、5が最高）と内容を記入」して送信すると、
           送信先チャンネルに評価シートが投稿されます。投稿には相手のアイコンが右上に表示されます。
         </p>
       </div>
@@ -165,8 +165,8 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
         >
           <Plus size={16} /> 項目を追加
         </button>
-        {settings.items.length > 5 && (
-          <p className="text-xs text-zinc-500">Discordの入力画面は1回に5項目までのため、記入画面は {modalCount} 回に分かれます。</p>
+        {settings.items.length > 2 && (
+          <p className="text-xs text-zinc-500">Discordの入力画面は1回に2項目（段階と内容）までのため、記入画面は {modalCount} 回に分かれます。</p>
         )}
       </div>
 
