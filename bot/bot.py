@@ -291,6 +291,7 @@ class EconomyBot(commands.Bot):
             "cogs.vc_float",
             "cogs.poker",
             "cogs.survey",
+            "cogs.eval_report",
         ]
         for cog in cogs_to_load:
             try:
