@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { ArrowUp, ArrowDown, Trash2, Plus, Send, FileText } from 'lucide-react';
 import ChannelSelect, { ChannelOption } from '@/components/ChannelSelect';
+import { useSyncStatus, SyncBadge } from '@/lib/useSyncStatus';
 
 type Item = { id: string; label: string; placeholder: string };
 type Settings = {
@@ -27,6 +28,7 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
   const [panelChannel, setPanelChannel] = useState('');
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
+  const sync = useSyncStatus(guildId);
 
   useEffect(() => {
     fetch(`/api/guilds/${guildId}/eval-sheet/report`)
@@ -87,6 +89,7 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
       return;
     }
     setPosting(true);
+    sync.reset();
     try {
       // パネルの文言は保存済みの設定から作られるので、先に保存しておく
       if (!(await save())) return;
@@ -97,7 +100,11 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
       });
       const data = await res.json();
       if (!res.ok || data.error) toast.error(data.error || 'パネルの設置に失敗しました');
-      else toast.success('パネルの設置をBotに依頼しました');
+      else {
+        toast.success('パネルの設置をBotに依頼しました');
+        // Botが依頼を処理したか（またはオフラインか）をボタンの横に表示する
+        sync.startPolling(data.sync_request_id ?? null);
+      }
     } catch {
       toast.error('通信エラーが発生しました');
     } finally {
@@ -209,13 +216,16 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
           value={panelChannel}
           onChange={(id: any) => setPanelChannel(id)}
         />
-        <button
-          onClick={handlePostPanel}
-          disabled={posting}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-lg disabled:opacity-50"
-        >
-          <Send size={16} /> {posting ? '依頼中...' : '保存してパネルを設置'}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handlePostPanel}
+            disabled={posting}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-lg disabled:opacity-50"
+          >
+            <Send size={16} /> {posting ? '依頼中...' : '保存してパネルを設置'}
+          </button>
+          <SyncBadge state={sync.state} botOnline={sync.botOnline} />
+        </div>
         <p className="text-xs text-zinc-500">パネルのボタンは評価員ロールを持つ人だけが使えます。項目を変更しても、設置済みのパネルからそのまま新しい項目で記入できます。</p>
       </div>
     </div>
