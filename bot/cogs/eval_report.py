@@ -16,7 +16,10 @@ VERDICTS = [
     ("保留", "🟡", discord.Color.gold()),
     ("なし", "🔴", discord.Color.red()),
 ]
-ITEMS_PER_MODAL = 5  # Discord のモーダルに置ける入力欄の上限
+# Discord のモーダルに置ける部品は5つまで。1項目で「段階」と「内容」の2つを使うので、1画面2項目ずつにする
+ITEMS_PER_MODAL = 2
+# 各項目の段階。5が最高
+RATINGS = ["保留", "1", "2", "3", "4", "5"]
 MAX_ITEMS = 20
 DEFAULT_ITEMS = [
     {"id": "voice", "label": "声", "placeholder": ""},
@@ -88,7 +91,16 @@ def _verdict_meta(verdict: str):
     return next((v for v in VERDICTS if v[0] == verdict), (verdict, "⚪", discord.Color.light_grey()))
 
 
-def build_report_embeds(target: discord.Member, evaluator: discord.Member, verdict: str, items: list[dict], answers: dict) -> list[discord.Embed]:
+def format_rating(rating: str | None) -> str:
+    if not rating:
+        return "（未選択）"
+    if rating == "保留":
+        return "⏸️ 保留"
+    n = int(rating)
+    return f"{'★' * n}{'☆' * (5 - n)} {n} / 5"
+
+
+def build_report_embeds(target: discord.Member, evaluator: discord.Member, verdict: str, items: list[dict], answers: dict, ratings: dict) -> list[discord.Embed]:
     """提出内容の Embed。1メッセージの合計 6000 文字制限を超えないよう、必要に応じて複数に分ける。"""
     _, emoji, color = _verdict_meta(verdict)
     first = discord.Embed(
@@ -106,7 +118,7 @@ def build_report_embeds(target: discord.Member, evaluator: discord.Member, verdi
     embeds = [first]
     for item in items:
         name = item["label"][:256]
-        value = (answers.get(item["id"]) or "（未記入）")[:1024]
+        value = f"**段階:** {format_rating(ratings.get(item['id']))}\n{answers.get(item['id']) or '（未記入）'}"[:1024]
         current = embeds[-1]
         if len(current) + len(name) + len(value) > 5800 or len(current.fields) >= 25:
             current = discord.Embed(title="📋 評価シート（続き）", color=color)
@@ -120,21 +132,37 @@ class EvalReportModal(discord.ui.Modal):
     def __init__(self, form: "EvalReportFormView", chunk: list[dict]):
         super().__init__(title="評価内容の記入", timeout=900)
         self.form = form
-        self.inputs: list[tuple[dict, discord.ui.TextInput]] = []
+        self.inputs: list[tuple[dict, discord.ui.Select, discord.ui.TextInput]] = []
         for item in chunk:
+            current = form.ratings.get(item["id"])
+            rating_select = discord.ui.Select(
+                placeholder="段階を選択",
+                options=[
+                    discord.SelectOption(label=r if r == "保留" else f"{r}{'（最高）' if r == '5' else ''}", value=r, default=r == current)
+                    for r in RATINGS
+                ],
+                required=True,
+            )
             text_input = discord.ui.TextInput(
-                label=item["label"][:45],
                 placeholder=(item.get("placeholder") or "")[:100] or None,
                 style=discord.TextStyle.paragraph,
                 required=True,
-                max_length=1000,
+                max_length=950,
                 default=form.answers.get(item["id"]),
             )
-            self.inputs.append((item, text_input))
-            self.add_item(text_input)
+            # 内容を書く欄の上に、5段階のどれかを選ぶ欄を置く
+            self.add_item(discord.ui.Label(
+                text=f"{item['label']}（5段階）"[:45],
+                description="1〜5で選択（5が最高）。決めかねる場合は保留",
+                component=rating_select,
+            ))
+            self.add_item(discord.ui.Label(text=item["label"][:45], component=text_input))
+            self.inputs.append((item, rating_select, text_input))
 
     async def on_submit(self, interaction: discord.Interaction):
-        for item, text_input in self.inputs:
+        for item, rating_select, text_input in self.inputs:
+            if rating_select.values:
+                self.form.ratings[item["id"]] = rating_select.values[0]
             text = text_input.value.strip()
             if text:
                 self.form.answers[item["id"]] = text
@@ -199,12 +227,16 @@ class EvalReportFormView(discord.ui.View):
         self.target: discord.Member | None = None
         self.verdict: str | None = None
         self.answers: dict[str, str] = {}
+        self.ratings: dict[str, str] = {}
 
     def _chunks(self) -> list[list[dict]]:
         return [self.items[i:i + ITEMS_PER_MODAL] for i in range(0, len(self.items), ITEMS_PER_MODAL)]
 
+    def _is_item_done(self, item: dict) -> bool:
+        return bool(self.answers.get(item["id"]) and self.ratings.get(item["id"]))
+
     def _is_complete(self) -> bool:
-        return bool(self.target and self.verdict and all(self.answers.get(i["id"]) for i in self.items))
+        return bool(self.target and self.verdict and all(self._is_item_done(i) for i in self.items))
 
     def _build(self) -> discord.Embed:
         self.clear_items()
@@ -213,31 +245,32 @@ class EvalReportFormView(discord.ui.View):
 
         chunks = self._chunks()
         for n, chunk in enumerate(chunks):
-            filled = all(self.answers.get(i["id"]) for i in chunk)
+            filled = all(self._is_item_done(i) for i in chunk)
             if len(chunks) == 1:
                 label = "内容を書く"
             else:
                 start = n * ITEMS_PER_MODAL + 1
-                label = f"内容を書く（{start}〜{start + len(chunk) - 1}）"
+                names = "・".join(i["label"] for i in chunk)
+                label = f"内容を書く（{names}）"[:80]
             btn = discord.ui.Button(
                 label=label,
                 emoji="✅" if filled else "✏️",
                 style=discord.ButtonStyle.secondary if filled else discord.ButtonStyle.primary,
-                row=2,
+                row=2 + n // 5,  # 1行に置けるボタンは5つまで
             )
             btn.callback = self._make_write_handler(chunk)
             self.add_item(btn)
 
-        submit = discord.ui.Button(label="送信する", emoji="📨", style=discord.ButtonStyle.success, disabled=not self._is_complete(), row=3)
+        submit = discord.ui.Button(label="送信する", emoji="📨", style=discord.ButtonStyle.success, disabled=not self._is_complete(), row=4)
         submit.callback = self.on_submit
         self.add_item(submit)
-        cancel = discord.ui.Button(label="やめる", style=discord.ButtonStyle.danger, row=3)
+        cancel = discord.ui.Button(label="やめる", style=discord.ButtonStyle.danger, row=4)
         cancel.callback = self.on_cancel
         self.add_item(cancel)
 
         embed = discord.Embed(
             title="📋 評価シートの記入",
-            description="仮メンを選び、総評と各項目の内容を書いてから「送信する」を押してください。",
+            description="仮メンを選び、総評と各項目の段階（保留・1〜5）・内容を書いてから「送信する」を押してください。",
             color=_verdict_meta(self.verdict)[2] if self.verdict else discord.Color.blue(),
         )
         if self.target:
@@ -249,8 +282,9 @@ class EvalReportFormView(discord.ui.View):
             inline=True,
         )
         for item in self.items:
-            text = self.answers.get(item["id"])
-            embed.add_field(name=item["label"][:256], value=(text[:1024] if text else "（未記入）"), inline=False)
+            text = self.answers.get(item["id"]) or "（未記入）"
+            value = f"**段階:** {format_rating(self.ratings.get(item['id']))}\n{text}"
+            embed.add_field(name=item["label"][:256], value=value[:1024], inline=False)
         return embed
 
     def _make_write_handler(self, chunk: list[dict]):
@@ -281,7 +315,7 @@ class EvalReportFormView(discord.ui.View):
             return
 
         await interaction.response.defer()
-        embeds = build_report_embeds(self.target, interaction.user, self.verdict, self.items, self.answers)
+        embeds = build_report_embeds(self.target, interaction.user, self.verdict, self.items, self.answers, self.ratings)
         try:
             if isinstance(channel, discord.ForumChannel):
                 tags = [channel.available_tags[0]] if channel.flags.require_tag and channel.available_tags else []
