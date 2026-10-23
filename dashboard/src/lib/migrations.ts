@@ -254,6 +254,26 @@ export async function ensureSurveySchema(pool: any) {
 }
 
 /**
+ * 評価シート記入パネル（eval_report_settings）テーブルを保証する。Bot側 cogs/eval_report.py と同じ定義。
+ */
+export async function ensureEvalReportSchema(pool: any) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS eval_report_settings (
+        guild_id BIGINT PRIMARY KEY,
+        items JSONB NOT NULL DEFAULT '[]'::jsonb,
+        output_channel_id BIGINT,
+        panel_title TEXT NOT NULL DEFAULT '',
+        panel_description TEXT NOT NULL DEFAULT '',
+        button_label TEXT NOT NULL DEFAULT ''
+      )
+    `);
+  } catch (e) {
+    console.error('Failed to ensure eval_report_settings schema:', e);
+  }
+}
+
+/**
  * VC浮上報酬（vc_float_*）テーブルを保証する。Bot側 cogs/vc_float.py と同じ定義。
  */
 export async function ensureVcFloatSchema(pool: any) {
@@ -404,6 +424,7 @@ export async function ensureAllSchemas(pool: any) {
     ensureVcCoinsSettingsSchema(pool),
     ensureVcFloatSchema(pool),
     ensureSurveySchema(pool),
+    ensureEvalReportSchema(pool),
     ensureRoomPanelsSchema(pool),
     ensureRoleSalarySettingsSchema(pool),
   ]);
