@@ -18,6 +18,8 @@ export const ROLE_SETTINGS: RoleSetting[] = [
   { key: 'PRIEST_ROLE_ID', label: '司祭ロール', multiple: false },
   { key: 'ADMIN_ROLE_IDS', label: '運営管理者ロール', multiple: true },
   { key: 'INTERVIEWER_ROLE_IDS', label: '面接官ロール', multiple: true },
+  // 面接官設定の告知パネルで告知を送ったときに、通知チャンネルでメンションする
+  { key: 'INTERVIEW_MANAGER_ROLE_IDS', label: '面接官統括ロール', multiple: true },
   { key: 'EVALUATOR_ROLE_IDS', label: '初級評価員ロール', multiple: true },
   { key: 'EVALUATOR_TIER2_ROLE_IDS', label: '中級評価員ロール', multiple: true },
   { key: 'EVALUATOR_TIER3_ROLE_IDS', label: '上級評価員ロール', multiple: true },

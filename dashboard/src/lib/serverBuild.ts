@@ -34,6 +34,7 @@ export const SUGGESTED_ROLE_NAMES: Record<string, string> = {
   EVALUATOR_TIER2_ROLE_IDS: '⚖️ 中級評価員',
   EVALUATOR_ROLE_IDS: '📋 評価員',
   INTERVIEWER_ROLE_IDS: '🚪 面接官',
+  INTERVIEW_MANAGER_ROLE_IDS: '🚪 面接官統括',
   MAIN_MEMBER_ROLE_IDS: '✦ 本メンバー',
   SUB_MEMBER_ROLE_IDS: '✧ 準メンバー',
   NEW_MEMBER_ROLE_IDS: '🔰 仮メンバー',
