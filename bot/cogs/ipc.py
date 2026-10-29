@@ -309,6 +309,19 @@ class IPC(commands.Cog):
                         await database.delete_panel_request(req_id, guild_id)
                         continue
 
+                    if panel_type in ("interview_entry", "interview_announce"):
+                        try:
+                            if panel_type == "interview_entry":
+                                from cogs.interview import post_interview_entry_panel
+                                await post_interview_entry_panel(guild, channel)
+                            else:
+                                from cogs.interview_announce import post_announce_panel
+                                await post_announce_panel(self.bot, guild, channel)
+                        except discord.Forbidden:
+                            print(f"[IPC ERROR] Failed to send {panel_type} panel to {channel_id}: Forbidden (No permissions)")
+                        await database.delete_panel_request(req_id, guild_id)
+                        continue
+
                     if panel_type == "eval_report":
                         try:
                             from cogs.eval_report import post_eval_report_panel

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Save, Loader2, Plus, Trash2, UserCheck } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import PageHeader from '@/components/PageHeader';
+import InterviewerFeatureSettings from '@/components/InterviewerFeatureSettings';
 
 export default function InterviewerPage({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -71,7 +72,9 @@ export default function InterviewerPage({ params }: { params: { guild_id: string
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <PageHeader icon={UserCheck} title="面接官設定" subtitle="手動での入界手続きの自動検知と、面接官ごとの対応人数を管理します" guildId={guildId} healthKey="interviewer" />
+      <PageHeader icon={UserCheck} title="面接官設定" subtitle="入界パネル（自己申告型）・自己紹介の転載・告知パネル、手動での入界手続きの自動検知と、面接官ごとの対応人数を管理します" guildId={guildId} healthKey="interviewer" />
+
+      <InterviewerFeatureSettings guildId={guildId} />
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
         <h2 className="text-lg font-bold mb-4">自動検知設定</h2>

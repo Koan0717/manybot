@@ -292,6 +292,7 @@ class EconomyBot(commands.Bot):
             "cogs.poker",
             "cogs.survey",
             "cogs.eval_report",
+            "cogs.interview_announce",
         ]
         for cog in cogs_to_load:
             try:
