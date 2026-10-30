@@ -102,10 +102,24 @@ export async function ensureAntigriefSettingsSchema(pool: any) {
       `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS exempt_role_ids BIGINT[] NOT NULL DEFAULT '{}'`,
       `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS ng_keywords TEXT[] NOT NULL DEFAULT '{}'`,
       `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS admin_channel_id BIGINT`,
+      `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS bot_guard_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS bot_guard_action TEXT NOT NULL DEFAULT 'kick'`,
+      `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS bot_guard_allowed_user_ids BIGINT[] NOT NULL DEFAULT '{}'`,
     ];
-    for (const sql of cols) { 
-      try { await pool.query(sql); } catch {} 
+    for (const sql of cols) {
+      try { await pool.query(sql); } catch {}
     }
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS antigrief_approved_bots (
+        guild_id BIGINT NOT NULL,
+        bot_id BIGINT NOT NULL,
+        bot_name TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'manual',
+        approved_by BIGINT,
+        approved_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (guild_id, bot_id)
+      )
+    `);
   } catch (e) {
     console.error('Failed to ensure antigrief_settings schema:', e);
   }

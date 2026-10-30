@@ -44,6 +44,31 @@ function checkRoleExists(roleId: string | null | undefined, roleMap: Map<string,
   return { label, ok: exists, detail: exists ? undefined : 'ロールが削除されています' };
 }
 
+// BOT導入制限に必要な権限（Discordの権限ビット）
+const BOT_GUARD_PERMISSIONS: [bigint, string][] = [
+  [BigInt(1) << BigInt(1), 'メンバーをキック'],
+  [BigInt(1) << BigInt(2), 'メンバーをBAN'],
+  [BigInt(1) << BigInt(7), '監査ログを表示'],
+  [BigInt(1) << BigInt(13), 'メッセージの管理'],
+];
+const ADMINISTRATOR = BigInt(1) << BigInt(3);
+
+async function checkBotGuardPermissions(guildId: string, roleMap: Map<string, any>): Promise<Check> {
+  const label = 'BOT導入制限に必要な権限';
+  const me = await discordGet('/users/@me');
+  const member = me.body?.id ? await discordGet(`/guilds/${guildId}/members/${me.body.id}`) : null;
+  if (member?.status !== 200 || roleMap.size === 0) return { label, ok: false, detail: '確認できませんでした' };
+
+  // 付与されたロールと @everyone（ロールIDはサーバーIDと同じ）の権限を合算する
+  let permissions = BigInt(0);
+  for (const roleId of [guildId, ...(member.body.roles || [])]) {
+    permissions |= BigInt(roleMap.get(String(roleId))?.permissions ?? 0);
+  }
+  if (permissions & ADMINISTRATOR) return { label, ok: true };
+  const missing = BOT_GUARD_PERMISSIONS.filter(([bit]) => !(permissions & bit)).map(([, name]) => name);
+  return { label, ok: missing.length === 0, detail: missing.length ? `Botに権限がありません: ${missing.join('、')}` : undefined };
+}
+
 function finalize(checks: (Check | null)[]): FeatureStatus {
   const filtered = checks.filter((c): c is Check => c !== null);
   return { ok: filtered.every(c => c.ok), checks: filtered };
@@ -322,6 +347,9 @@ export async function GET(
         }
         if (ag.rows[0].admin_channel_id) {
           checks.push(await checkChannel(ag.rows[0].admin_channel_id.toString(), '管理者チャット（タイムアウト通知先）'));
+        }
+        if (ag.rows[0].bot_guard_enabled) {
+          checks.push(await checkBotGuardPermissions(guildId, roleMap));
         }
       }
       try {
