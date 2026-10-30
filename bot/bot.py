@@ -37,7 +37,8 @@ class EconomyBot(commands.Bot):
         self.role_room_prices = {}     # {(role_key, room_type, duration): price}
         self.spam_tracker = {}         # {user_id: {"last_content": str, "content_count": int, "everyone_count": int, "last_time": datetime}}
         self.invite_cache = {}         # {guild_id: {invite_code: uses}}
-        self.antigrief_settings_cache = {} # {guild_id: {"categories": set, "channels": set, "exempt_roles": set, "admin_channel_id": int|None, "ng_rules": list(未読込なら無し)}}
+        self.antigrief_settings_cache = {} # {guild_id: {"categories": set, "channels": set, "exempt_roles": set, "admin_channel_id": int|None, "ng_rules": list(未読込なら無し), "bot_guard_enabled": bool(未読込なら無し), "bot_guard_action": str, "bot_guard_allowed_users": set, "approved_bots": set}}
+        self.bot_guard_reviews = {}    # {(guild_id, bot_id): asyncio.Task}（審査中・処分済みのBot）
 
     def get_evaluation_config(self, guild_id: int) -> dict:
         if guild_id not in self.evaluation_settings:
@@ -134,11 +135,16 @@ class EconomyBot(commands.Bot):
     async def fetch_and_cache_antigrief_config(self, guild_id: int) -> dict:
         data = await database.get_antigrief_settings(guild_id)
         ng_rules = await database.get_antigrief_ng_rules(guild_id)
+        approved_bots = await database.get_approved_bot_ids(guild_id)
         self.antigrief_settings_cache[guild_id] = {
             "categories": set(data.get("categories", [])),
             "channels": set(data.get("channels", [])),
             "exempt_roles": set(data.get("exempt_roles", [])),
             "admin_channel_id": data.get("admin_channel_id"),
+            "bot_guard_enabled": data.get("bot_guard_enabled", False),
+            "bot_guard_action": data.get("bot_guard_action", "kick"),
+            "bot_guard_allowed_users": set(data.get("bot_guard_allowed_users", [])),
+            "approved_bots": set(approved_bots),
             "ng_rules": [
                 {
                     **r,

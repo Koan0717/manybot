@@ -1,21 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
-import { DiscordGuildMember, DiscordRole, botRequest, memberAvatarUrl, memberDisplayName } from '@/lib/discordApi';
+import { DiscordRole, botRequest, fetchAllGuildMembers, memberAvatarUrl, memberDisplayName } from '@/lib/discordApi';
 
 export const dynamic = 'force-dynamic';
-
-/** サーバーの全メンバー（Botは除く）。1回 1000 人ずつ取る */
-async function fetchAllMembers(guildId: string): Promise<DiscordGuildMember[]> {
-  const all: DiscordGuildMember[] = [];
-  let after = '0';
-  for (let i = 0; i < 100; i++) {
-    const page = await botRequest<DiscordGuildMember[]>(`/guilds/${guildId}/members?limit=1000&after=${after}`);
-    all.push(...page);
-    if (page.length < 1000) break;
-    after = page[page.length - 1].user.id;
-  }
-  return all.filter((m) => !m.user.bot);
-}
 
 /**
  * GET /api/guilds/[guild_id]/member-list
@@ -25,8 +12,8 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
   const guildId = params.guild_id;
   try {
     const pool = await getPool(guildId);
-    const [members, roles, users, cur] = await Promise.all([
-      fetchAllMembers(guildId),
+    const [allMembers, roles, users, cur] = await Promise.all([
+      fetchAllGuildMembers(guildId),
       botRequest<DiscordRole[]>(`/guilds/${guildId}/roles`),
       pool.query(
         `SELECT user_id::text AS user_id, COALESCE(balance, 0)::text AS balance,
@@ -39,6 +26,7 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
         .catch(() => ({ rows: [] as any[] })),
     ]);
 
+    const members = allMembers.filter((m) => !m.user.bot);
     const stats = new Map(users.rows.map((r) => [r.user_id, r]));
     // ロールは上位（Discordの並び順が上）から。@everyone は出さない
     const roleMap = new Map(roles.filter((r) => r.id !== guildId).map((r) => [r.id, r]));

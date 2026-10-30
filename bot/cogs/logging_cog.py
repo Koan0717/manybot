@@ -8,7 +8,7 @@ import os
 import hashlib
 import re
 from helpers import get_setting
-from antigrief import handle_antigrief
+from antigrief import handle_antigrief, handle_bot_join, handle_bot_leave, handle_bot_message
 
 
 class Logging(commands.Cog):
@@ -24,6 +24,8 @@ class Logging(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
+            # 荒らし対策: 未承認Botのメッセージを削除
+            await handle_bot_message(self.bot, message)
             return
 
         # 荒らし対策: NGキーワード、連続同じメッセージ、@everyone/URLスパム、メンションスパム
@@ -502,6 +504,10 @@ class Logging(commands.Cog):
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         guild = member.guild
+
+        # 荒らし対策: 未許可のBotは参加ログより先に処分する
+        if member.bot:
+            await handle_bot_join(self.bot, member)
         
         invite = await self.find_used_invite(guild)
         invite_code_val = "不明"
@@ -538,6 +544,9 @@ class Logging(commands.Cog):
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
         guild = member.guild
+
+        if member.bot:
+            await handle_bot_leave(self.bot, member)
         
         embed = discord.Embed(
             description=f"{member.mention} がサーバーから退出しました",

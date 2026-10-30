@@ -28,7 +28,7 @@ const LOG_TYPES = [
   { id: 'gacha', label: '福引ガチャの利用' },
   { id: 'evaluation_failure', label: '評価シートの浮上・不合格処理' },
   { id: 'interviewer', label: '面接官・入界処理' },
-  { id: 'antigrief', label: '荒らし対策（タイムアウトの理由・対象者）' },
+  { id: 'antigrief', label: '荒らし対策（タイムアウトの理由・対象者、未許可BOTの処分）' },
 ];
 
 export default function LogSettingsPage() {

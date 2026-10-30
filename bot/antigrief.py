@@ -1,4 +1,5 @@
-"""荒らし対策（スパム検知・NGキーワード検知・タイムアウト・管理者通知）"""
+"""荒らし対策（スパム検知・NGキーワード検知・タイムアウト・BOT導入制限・管理者通知）"""
+import asyncio
 import datetime
 import re
 import unicodedata
@@ -6,6 +7,7 @@ import unicodedata
 import discord
 
 import config
+import database
 from helpers import get_setting, send_log
 
 # Discord招待URL検知用パターン（毎メッセージでのコンパイルを避けるためモジュールレベルで定義）
@@ -15,6 +17,11 @@ DISCORD_INVITE_PATTERN = re.compile(
 )
 
 TIMEOUT_DURATION = datetime.timedelta(hours=1)
+
+# BOT追加の監査ログは参加イベントより遅れて届くことがあるので、間を空けて数回探す（秒）
+BOT_ADD_LOG_RETRY_DELAYS = (0, 0.5, 1, 2)
+# 参加時刻よりこれ以上古い監査ログは、以前に同じBotを入れたときの記録として扱わない
+BOT_ADD_LOG_MAX_AGE = datetime.timedelta(minutes=1)
 
 
 def _normalize(text: str) -> str:
@@ -156,6 +163,23 @@ def _clip(text: str, limit: int = 1024) -> str:
     return text if len(text) <= limit else text[:limit - 3] + "..."
 
 
+async def _send_admin_channel(bot, guild: discord.Guild, content: str, embed: discord.Embed):
+    """管理者チャットに通知する（未設定なら何もしない）"""
+    admin_channel_id = bot.get_antigrief_config(guild.id).get("admin_channel_id")
+    if not admin_channel_id:
+        return
+    channel = guild.get_channel(admin_channel_id)
+    if channel is None:
+        try:
+            channel = await guild.fetch_channel(admin_channel_id)
+        except Exception:
+            return
+    try:
+        await channel.send(content=content, embed=embed)
+    except Exception as e:
+        print(f"[ERROR] Failed to notify antigrief admin channel {admin_channel_id}: {e}")
+
+
 async def _notify_timeout(bot, message: discord.Message, reason: str, rule: dict | None, keyword: str | None, timed_out: bool, error: str | None):
     """管理者チャットとログチャンネルにタイムアウトを通知する"""
     guild = message.guild
@@ -182,23 +206,8 @@ async def _notify_timeout(bot, message: discord.Message, reason: str, rule: dict
     embed.add_field(name="メッセージ内容", value=_clip(message.content), inline=False)
 
     # 管理者チャット（メンション付き）
-    admin_channel_id = bot.get_antigrief_config(guild.id).get("admin_channel_id")
-    if admin_channel_id:
-        channel = guild.get_channel(admin_channel_id)
-        if channel is None:
-            try:
-                channel = await guild.fetch_channel(admin_channel_id)
-            except Exception:
-                channel = None
-        if channel is not None:
-            action = "をタイムアウト（1時間）しました" if timed_out else "のタイムアウトに失敗しました"
-            try:
-                await channel.send(
-                    content=f"🚨 {member.mention}（{discord.utils.escape_markdown(member.display_name)}）{action}。",
-                    embed=embed,
-                )
-            except Exception as e:
-                print(f"[ERROR] Failed to notify antigrief admin channel {admin_channel_id}: {e}")
+    action = "をタイムアウト（1時間）しました" if timed_out else "のタイムアウトに失敗しました"
+    await _send_admin_channel(bot, guild, f"🚨 {member.mention}（{discord.utils.escape_markdown(member.display_name)}）{action}。", embed)
 
     # ログチャンネル
     await send_log(bot, guild, "antigrief", embed)
@@ -255,3 +264,165 @@ async def handle_antigrief(bot, message: discord.Message) -> bool:
     except Exception as e:
         print(f"[ERROR] Antigrief notification failed: {e}")
     return True
+
+
+async def _get_bot_guard_config(bot, guild: discord.Guild) -> dict | None:
+    """BOT導入制限が有効なら設定を返す（無効、または設定を読めないときは None）"""
+    if not is_antigrief_enabled(bot, guild):
+        return None
+    cfg = bot.get_antigrief_config(guild.id)
+    if "bot_guard_enabled" not in cfg:
+        try:
+            cfg = await bot.fetch_and_cache_antigrief_config(guild.id)
+        except Exception as e:
+            print(f"[ERROR] Failed to load bot guard settings for guild {guild.id}: {e}")
+            return None
+    return cfg if cfg.get("bot_guard_enabled") else None
+
+
+async def _find_bot_adder(guild: discord.Guild, member: discord.Member):
+    """監査ログからBotを追加した人を探す（見つからなければ None）"""
+    oldest = member.joined_at - BOT_ADD_LOG_MAX_AGE if member.joined_at else None
+    for delay in BOT_ADD_LOG_RETRY_DELAYS:
+        if delay:
+            await asyncio.sleep(delay)
+        try:
+            async for entry in guild.audit_logs(limit=25, action=discord.AuditLogAction.bot_add):
+                if entry.target is None or entry.target.id != member.id:
+                    continue
+                # 新しい順に並ぶので、古い記録に当たったらこれ以上探しても無い
+                if oldest is not None and entry.created_at < oldest:
+                    break
+                return entry.user
+        except discord.Forbidden:
+            print(f"[WARNING] Cannot read audit log in guild {guild.id}. Missing permissions.")
+            return None
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch bot_add audit log: {e}")
+    return None
+
+
+async def _notify_bot_guard(bot, member: discord.Member, adder, action: str, error: str | None):
+    """未許可Botの処分を管理者チャットとログチャンネルに通知する"""
+    guild = member.guild
+    label = "BAN" if action == "ban" else "キック"
+    embed = discord.Embed(
+        title=f"⚠️ 荒らし対策: 未許可BOTの{label}に失敗" if error else f"🚨 荒らし対策: 未許可BOTを{label}",
+        color=discord.Color.orange() if error else discord.Color.red(),
+        timestamp=datetime.datetime.now(config.JST),
+    )
+    embed.set_author(name=member.name, icon_url=member.display_avatar.url)
+    embed.add_field(name="BOT", value=f"{member.mention} (**{discord.utils.escape_markdown(member.name)}** / ID: {member.id})", inline=False)
+    embed.add_field(name="追加した人", value=f"{adder.mention} (ID: {adder.id})" if adder else "不明（監査ログで確認できませんでした）", inline=False)
+    if error:
+        embed.add_field(name="エラー", value=_clip(error), inline=False)
+
+    result = f"の{label}に失敗しました" if error else f"を{label}しました"
+    await _send_admin_channel(bot, guild, f"🚨 未許可のBOT {member.mention}（{discord.utils.escape_markdown(member.name)}）{result}。", embed)
+    await send_log(bot, guild, "antigrief", embed)
+
+
+async def _notify_bot_approved(bot, member: discord.Member, adder):
+    """許可された人が入れたBotの自動承認をログチャンネルに記録する"""
+    embed = discord.Embed(
+        title="✅ 荒らし対策: BOTを承認",
+        description=f"{adder.mention} が追加した {member.mention} (ID: {member.id}) を承認しました。",
+        color=discord.Color.green(),
+        timestamp=datetime.datetime.now(config.JST),
+    )
+    await send_log(bot, member.guild, "antigrief", embed)
+
+
+async def _review_bot(bot, member: discord.Member) -> bool:
+    """Botを追加した人を確認し、許可された人なら承認、それ以外なら処分する。承認したら True を返す"""
+    guild = member.guild
+    adder = await _find_bot_adder(guild, member)
+    cfg = bot.get_antigrief_config(guild.id)
+
+    # サーバーオーナーは許可リストになくても追加できる
+    if adder is not None and (adder.id == guild.owner_id or adder.id in cfg.get("bot_guard_allowed_users", ())):
+        try:
+            await database.add_approved_bot(guild.id, member.id, member.name, "inviter", adder.id)
+        except Exception as e:
+            print(f"[ERROR] Failed to save approved bot {member.id}: {e}")
+        bot.get_antigrief_config(guild.id).setdefault("approved_bots", set()).add(member.id)
+        bot.bot_guard_reviews.pop((guild.id, member.id), None)
+        try:
+            await _notify_bot_approved(bot, member, adder)
+        except Exception as e:
+            print(f"[ERROR] Bot guard notification failed: {e}")
+        return True
+
+    # 追加した人が分からないときも、許可された人が入れたと確認できないので処分する
+    action = cfg.get("bot_guard_action", "kick")
+    reason = f"[荒らし対策] 未許可のBOT（追加した人: {adder or '不明'}）"[:512]
+    error = None
+    try:
+        if action == "ban":
+            await member.ban(reason=reason)
+        else:
+            await member.kick(reason=reason)
+    except Exception as e:
+        error = str(e)
+        print(f"[ERROR] Failed to {action} bot {member.name} ({member.id}): {e}")
+
+    try:
+        await _notify_bot_guard(bot, member, adder, action, error)
+    except Exception as e:
+        print(f"[ERROR] Bot guard notification failed: {e}")
+    return False
+
+
+def _start_bot_review(bot, member: discord.Member) -> asyncio.Task:
+    """審査を1回だけ走らせる。参加イベントとメッセージで同じ結果を待ち、二重に処分・通知しない"""
+    key = (member.guild.id, member.id)
+    task = bot.bot_guard_reviews.get(key)
+    if task is None:
+        task = asyncio.create_task(_review_bot(bot, member))
+        bot.bot_guard_reviews[key] = task
+    return task
+
+
+async def handle_bot_join(bot, member: discord.Member):
+    """Botの参加時に、未承認ならその場で審査する"""
+    if member.id == bot.user.id:
+        return
+    cfg = await _get_bot_guard_config(bot, member.guild)
+    if cfg is None or member.id in cfg.get("approved_bots", ()):
+        return
+    await _start_bot_review(bot, member)
+
+
+async def handle_bot_leave(bot, member: discord.Member):
+    """退出したBotの承認を取り消す。入れ直すときは許可された人の追加が必要"""
+    guild_id = member.guild.id
+    bot.bot_guard_reviews.pop((guild_id, member.id), None)
+    bot.get_antigrief_config(guild_id).get("approved_bots", set()).discard(member.id)
+    try:
+        await database.remove_approved_bot(guild_id, member.id)
+    except Exception as e:
+        print(f"[ERROR] Failed to remove approved bot {member.id}: {e}")
+
+
+async def handle_bot_message(bot, message: discord.Message):
+    """未承認Botのメッセージを削除する。オフライン中に入ったBotもここで審査する"""
+    guild = message.guild
+    author = message.author
+    if not guild or author.id == bot.user.id or author.system:
+        return
+    member = guild.get_member(author.id)
+    # Webhookの投稿は author.bot が True でもサーバーのメンバーではない
+    if message.webhook_id is not None and member is None:
+        return
+    cfg = await _get_bot_guard_config(bot, guild)
+    if cfg is None or author.id in cfg.get("approved_bots", ()):
+        return
+    # 許可された人が入れたBotの最初の発言を消さないよう、審査の結果を待ってから削除する
+    if member is not None and await _start_bot_review(bot, member):
+        return
+    try:
+        await message.delete()
+    except discord.NotFound:
+        pass
+    except Exception as e:
+        print(f"[ERROR] Failed to delete message from unapproved bot {author.id}: {e}")
