@@ -6,7 +6,6 @@ import asyncio
 import database
 import json
 import os
-import re
 from helpers import (
     JST, get_setting, get_role_by_setting, has_admin_role, has_event_manager_role,
     EMBLEM_MANAGER_ROLE_NAME, EMBLEM_MASTER_ROLE_NAME, CONFESSION_PRIEST_ROLE_NAME,
@@ -14,30 +13,15 @@ from helpers import (
 )
 
 # --- チケット管理 (共通) ---
-_TICKET_STAFF_PATTERN = re.compile(r"\*\*担当者:\*\*\s*<@!?(\d+)>")
-
-async def _find_ticket_staff_ids(channel: discord.TextChannel) -> set[int]:
-    """チケット冒頭のBotメッセージの埋め込みから「担当者」のユーザーIDを取得する。"""
-    staff_ids = set()
-    async for msg in channel.history(limit=10, oldest_first=True):
-        if msg.author.id != channel.guild.me.id:
-            continue
-        for embed in msg.embeds:
-            for m in _TICKET_STAFF_PATTERN.finditer(embed.description or ""):
-                staff_ids.add(int(m.group(1)))
-        if staff_ids:
-            break
-    return staff_ids
-
 async def close_ticket_channel(channel: discord.TextChannel) -> list[str]:
     """チケットを「閉じた」状態にする。
-    ロールの権限（管理者・メンションロール等）とBot・担当者はそのまま残し、
-    それ以外の個別メンバー（チケット発行者・同行プレイヤー）の閲覧権限を外す。
-    閲覧できなくなったメンバーのメンション一覧を返す。"""
+    ロールの権限（運営・メンションロール等）とBotはそのまま残し、
+    個別に追加されたメンバー（作成者・担当者・同行プレイヤー）をチャンネルから外す。
+    個別の権限を消すだけなので、運営やメンションロールを持つ人は引き続き閲覧できる。
+    外したメンバーのメンション一覧を返す。"""
     guild = channel.guild
-    staff_ids = await _find_ticket_staff_ids(channel)
-    hidden = []
-    for target, overwrite in list(channel.overwrites.items()):
+    removed = []
+    for target in list(channel.overwrites.keys()):
         if isinstance(target, discord.Role):
             continue
         if isinstance(target, discord.Object):
@@ -46,18 +30,30 @@ async def close_ticket_channel(channel: discord.TextChannel) -> list[str]:
             try:
                 target = await guild.fetch_member(target.id)
             except Exception:
+                # サーバーを抜けたメンバーなどは権限だけ消す
+                await channel.set_permissions(target, overwrite=None, reason="チケットのクローズ")
                 continue
-        if target.bot or target.id in staff_ids:
+        if target.bot:
             continue
-        if overwrite.read_messages is False:
+        await channel.set_permissions(target, overwrite=None, reason="チケットのクローズ")
+        removed.append(target.mention)
+    return removed
+
+def can_delete_ticket(interaction: discord.Interaction) -> bool:
+    """チケットを削除できるのは運営（管理者）と、チケットにロールで参加している人（メンションロール等）だけ。"""
+    user = interaction.user
+    if has_admin_role(interaction.client, user):
+        return True
+    admin_role_ids = {int(rid) for rid in (get_setting(interaction.client, "ADMIN_ROLE_IDS", interaction.guild.id) or []) if str(rid).isdigit()}
+    channel = interaction.channel
+    for role in getattr(user, "roles", []):
+        if role.is_default():
             continue
-        await channel.set_permissions(
-            target,
-            overwrite=discord.PermissionOverwrite(read_messages=False, send_messages=False),
-            reason="チケットのクローズ"
-        )
-        hidden.append(target.mention)
-    return hidden
+        if role.id in admin_role_ids:
+            return True
+        if channel.overwrites_for(role).read_messages:
+            return True
+    return False
 
 class TicketDeleteView(discord.ui.View):
     """閉じたチケットに表示する削除ボタン。"""
@@ -66,6 +62,8 @@ class TicketDeleteView(discord.ui.View):
 
     @discord.ui.button(label="チケットを削除", style=discord.ButtonStyle.danger, emoji="🗑️", custom_id="persistent_delete_ticket_btn")
     async def delete_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not can_delete_ticket(interaction):
+            return await interaction.response.send_message("❌ チケットを削除できるのは運営（管理者）とメンション設定されているロールの人だけです。", ephemeral=True)
         embed = discord.Embed(title="確認", description="このチケットを完全に削除してもよろしいですか？\nこの操作は取り消せません。", color=discord.Color.red())
         await interaction.response.send_message(embed=embed, view=TicketDeleteConfirmView(), ephemeral=True)
 
@@ -75,6 +73,8 @@ class TicketDeleteConfirmView(discord.ui.View):
 
     @discord.ui.button(label="削除する", style=discord.ButtonStyle.danger)
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not can_delete_ticket(interaction):
+            return await interaction.response.edit_message(content="❌ チケットを削除する権限がありません。", embed=None, view=None)
         await interaction.response.send_message("チケットを削除します...")
         await asyncio.sleep(2)
         await interaction.channel.delete()
@@ -93,7 +93,7 @@ class TicketCloseConfirmView(discord.ui.View):
         await interaction.response.edit_message(content="チケットを閉じています...", embed=None, view=None)
         channel = interaction.channel
         try:
-            hidden = await close_ticket_channel(channel)
+            removed = await close_ticket_channel(channel)
         except discord.Forbidden:
             return await interaction.followup.send("❌ エラー: Botにチャンネルの権限を編集する権限（ロールの管理）がありません。", ephemeral=True)
         except Exception as e:
@@ -107,9 +107,9 @@ class TicketCloseConfirmView(discord.ui.View):
                 pass
 
         desc = f"{interaction.user.mention} がチケットを閉じました。\n"
-        if hidden:
-            desc += f"{'、'.join(hidden)} はこのチケットを閲覧できなくなりました。\n"
-        desc += "\n管理者・担当者は引き続き閲覧できます。不要になったら下のボタンで削除してください。"
+        if removed:
+            desc += f"{'、'.join(removed)} をこのチケットから外しました。\n"
+        desc += "\n運営（管理者）とメンション設定されているロールの人は引き続き閲覧できます。\n不要になったら下のボタンで削除してください（削除できるのは運営・メンションロールの人だけです）。"
         embed = discord.Embed(title="🔒 チケットをクローズしました", description=desc, color=discord.Color.dark_grey())
         await channel.send(embed=embed, view=TicketDeleteView())
 
@@ -117,15 +117,86 @@ class TicketCloseConfirmView(discord.ui.View):
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(content="キャンセルしました。", embed=None, view=None)
 
+class TicketAddMemberView(discord.ui.View):
+    """チケットにプレイヤー・ロールを追加する選択画面（どちらも複数選択可）。
+    ロールを追加するとそのロールの人も削除できるようになるため、ロールの選択は運営・メンションロールの人にだけ出す。"""
+    def __init__(self, allow_roles: bool):
+        super().__init__(timeout=180)
+        self.selected_users = []
+        self.selected_roles = []
+
+        self.user_select = discord.ui.UserSelect(placeholder="名前を入力してプレイヤーを検索...（複数可）", min_values=0, max_values=25)
+        self.user_select.callback = self._user_callback
+        self.add_item(self.user_select)
+
+        if allow_roles:
+            self.role_select = discord.ui.RoleSelect(placeholder="名前を入力してロールを検索...（複数可）", min_values=0, max_values=25)
+            self.role_select.callback = self._role_callback
+            self.add_item(self.role_select)
+
+        add_btn = discord.ui.Button(label="追加する", style=discord.ButtonStyle.success, emoji="➕")
+        add_btn.callback = self._add_callback
+        self.add_item(add_btn)
+
+    async def _user_callback(self, interaction: discord.Interaction):
+        self.selected_users = list(self.user_select.values)
+        await interaction.response.defer()
+
+    async def _role_callback(self, interaction: discord.Interaction):
+        self.selected_roles = list(self.role_select.values)
+        await interaction.response.defer()
+
+    async def _add_callback(self, interaction: discord.Interaction):
+        if not self.selected_users and not self.selected_roles:
+            return await interaction.response.send_message("❌ 追加するプレイヤーかロールを選択してください。", ephemeral=True)
+        await interaction.response.edit_message(content="追加しています...", view=None)
+        channel = interaction.channel
+        guild = interaction.guild
+        added = []
+        try:
+            for user in self.selected_users:
+                member = user if isinstance(user, discord.Member) else guild.get_member(user.id)
+                if member is None:
+                    try:
+                        member = await guild.fetch_member(user.id)
+                    except Exception:
+                        continue
+                if member.bot:
+                    continue
+                await channel.set_permissions(member, read_messages=True, send_messages=True, reason=f"チケットに追加 (by {interaction.user.display_name})")
+                added.append(member.mention)
+            for role in self.selected_roles:
+                if role.is_default() or role.managed:
+                    continue
+                await channel.set_permissions(role, read_messages=True, send_messages=True, reason=f"チケットに追加 (by {interaction.user.display_name})")
+                added.append(role.mention)
+        except discord.Forbidden:
+            return await interaction.edit_original_response(content="❌ エラー: Botにチャンネルの権限を編集する権限（ロールの管理）がありません。")
+        except Exception as e:
+            return await interaction.edit_original_response(content=f"❌ エラーが発生しました: {e}")
+
+        if not added:
+            return await interaction.edit_original_response(content="追加できる対象がありませんでした（Bot・@everyone・連携ロールは追加できません）。")
+        await interaction.edit_original_response(content="✅ 追加しました。")
+        await channel.send(f"➕ {interaction.user.mention} が {' '.join(added)} をこのチケットに追加しました。")
+
 class TicketControlView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
+
+    @discord.ui.button(label="人を追加", style=discord.ButtonStyle.secondary, emoji="➕", custom_id="persistent_add_ticket_member_btn")
+    async def add_member_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        allow_roles = can_delete_ticket(interaction)
+        msg = "チケットに追加するプレイヤーを検索して選び、「追加する」を押してください。\n選択欄に名前を入力すると絞り込めます。"
+        if allow_roles:
+            msg = "チケットに追加するプレイヤー・ロールを検索して選び、「追加する」を押してください（どちらも複数選択できます）。\n選択欄に名前を入力すると絞り込めます。"
+        await interaction.response.send_message(msg, view=TicketAddMemberView(allow_roles), ephemeral=True)
 
     @discord.ui.button(label="チケットを閉じる", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="persistent_close_ticket_btn")
     async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
             title="確認",
-            description="このチケットを閉じてもよろしいですか？\n閉じるとチケット発行者は閲覧できなくなります（管理者・担当者は削除するまで閲覧可能）。",
+            description="このチケットを閉じてもよろしいですか？\n閉じると作成者はチャンネルから外れます（運営・メンションロールの人は削除するまで閲覧可能）。",
             color=discord.Color.red()
         )
         await interaction.response.send_message(embed=embed, view=TicketCloseConfirmView(interaction.message), ephemeral=True)
