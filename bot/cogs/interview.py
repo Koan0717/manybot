@@ -7,7 +7,7 @@ from discord.ext import commands
 from discord import app_commands
 import database
 from helpers import (
-    get_setting, get_role_by_setting, get_entry_grant_roles, has_interviewer_role, has_interview_staff_role,
+    get_setting, get_role_by_setting, get_entry_grant_roles, get_entry_remove_roles, has_interviewer_role, has_interview_staff_role,
     NEW_MEMBER_ROLE_NAME, PENDING_MEMBER_ROLE_NAME, send_log
 )
 
@@ -215,7 +215,7 @@ async def complete_entry(bot, guild: discord.Guild, member: discord.Member, *, n
     出戻り（初期発行済み、または以前に入界の記録がある人）には初期通貨を配らず、面接官ログに配布失敗として残す。
     初期発行自動の設定「入界時に初期発行する」(ENTRY_INITIAL_ISSUE_ENABLED) が OFF のときは誰にも初期発行しない。"""
     new_roles = get_entry_grant_roles(bot, guild)
-    pending_role = get_role_by_setting(bot, guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
+    remove_roles = _entry_remove_roles(bot, guild, new_roles)
     reason = f"面接官入界許可 (面接官: {interviewer.display_name})" if interviewer else "入界手続き（自己申告）"
     currency_name = get_setting(bot, "CURRENCY_NAME", guild.id) or "コイン"
     issue_enabled = get_setting(bot, "ENTRY_INITIAL_ISSUE_ENABLED", guild.id) not in (False, "false")
@@ -240,16 +240,18 @@ async def complete_entry(bot, guild: discord.Guild, member: discord.Member, *, n
     else:
         result["roles"] = "✅ 付与済み"
 
-    if pending_role and pending_role in member.roles and result["roles_ok"]:
+    roles_to_remove = [r for r in remove_roles if r in member.roles]
+    removed_names = "、".join(f"「{r.name}」" for r in roles_to_remove)
+    if roles_to_remove and result["roles_ok"]:
         try:
-            await member.remove_roles(pending_role, reason=reason)
-            result["pending"] = f"✅ 「{pending_role.name}」を外しました"
+            await member.remove_roles(*roles_to_remove, reason=reason)
+            result["pending"] = f"✅ {removed_names}を外しました"
         except discord.HTTPException:
-            result["pending"] = f"⚠️ 「{pending_role.name}」を外せませんでした（Botのロールを上に移動してください）"
-    elif pending_role and pending_role in member.roles:
+            result["pending"] = f"⚠️ {removed_names}を外せませんでした（Botのロールを上に移動してください）"
+    elif roles_to_remove:
         result["pending"] = "⏸️ ロール付与に失敗したため外していません"
     else:
-        result["pending"] = "✅ 付いていません"
+        result["pending"] = "✅ 外すロールは付いていません"
 
     if result["roles_ok"]:
         result["returnee"] = await database.check_initial_issued(guild.id, member.id) or await has_entry(guild.id, member.id)
@@ -321,7 +323,12 @@ async def complete_entry(bot, guild: discord.Guild, member: discord.Member, *, n
     return result
 
 
-def _role_preflight_error(guild: discord.Guild, new_roles: list[discord.Role], pending_role: discord.Role | None) -> str | None:
+def _entry_remove_roles(bot, guild: discord.Guild, new_roles: list[discord.Role]) -> list[discord.Role]:
+    """入界手続きで外すロール（付与するロールと同じものは外さない）。"""
+    return [r for r in get_entry_remove_roles(bot, guild) if r not in new_roles]
+
+
+def _role_preflight_error(guild: discord.Guild, new_roles: list[discord.Role], remove_roles: list[discord.Role]) -> str | None:
     me = guild.me
     if not me.guild_permissions.manage_roles:
         return (
@@ -337,11 +344,13 @@ def _role_preflight_error(guild: discord.Guild, new_roles: list[discord.Role], p
             f"付与対象のロール {role_names} がBotの最上位ロール（**{me.top_role.name}**）以上の位置にあります。\n"
             f"Discordの【サーバー設定】>【ロール】一覧で、**Botのロールを付与対象ロールよりも上にドラッグして移動**してください。"
         )
-    if pending_role and pending_role >= me.top_role:
+    higher_remove = [r for r in remove_roles if r >= me.top_role]
+    if higher_remove:
+        role_names = "、".join([f"「**{r.name}**」" for r in higher_remove])
         return (
             f"❌ **ロール順位エラー (403 Forbidden)**:\n"
-            f"剥奪対象のロール「**{pending_role.name}**」がBotの最上位ロール（**{me.top_role.name}**）以上の位置にあります。\n"
-            f"Discordの【サーバー設定】>【ロール】一覧で、**Botのロールを「{pending_role.name}」よりも上にドラッグして移動**してください。"
+            f"剥奪対象のロール {role_names} がBotの最上位ロール（**{me.top_role.name}**）以上の位置にあります。\n"
+            f"Discordの【サーバー設定】>【ロール】一覧で、**Botのロールを剥奪対象ロールよりも上にドラッグして移動**してください。"
         )
     return None
 
@@ -373,10 +382,10 @@ class InterviewEntryModal(discord.ui.Modal, title='入界手続き'):
         new_roles = get_entry_grant_roles(bot, guild)
         pending_role = get_role_by_setting(bot, guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
         if not new_roles:
-            return await interaction.followup.send(f"❌ エラー: 入界許可ロール（未設定時は「{NEW_MEMBER_ROLE_NAME}」）が見つかりません。", ephemeral=True)
+            return await interaction.followup.send(f"❌ エラー: 付与するロール（未設定時は「{NEW_MEMBER_ROLE_NAME}」）が見つかりません。", ephemeral=True)
         if all(r in user.roles for r in new_roles):
             return await interaction.followup.send("ℹ️ 既に手続きは完了しています。", ephemeral=True)
-        error = _role_preflight_error(guild, new_roles, pending_role)
+        error = _role_preflight_error(guild, new_roles, _entry_remove_roles(bot, guild, new_roles))
         if error:
             return await interaction.followup.send(error + "\nサーバー管理者にお問い合わせください。", ephemeral=True)
 
@@ -522,12 +531,12 @@ class InterviewerGroup(app_commands.Group):
         pending_role = get_role_by_setting(bot, guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
 
         if not new_roles:
-            return await interaction.followup.send(f"❌ エラー: 入界許可ロール（未設定時は「{NEW_MEMBER_ROLE_NAME}」）が見つかりません。ダッシュボードの面接官設定を確認してください。", ephemeral=True)
+            return await interaction.followup.send(f"❌ エラー: 付与するロール（未設定時は「{NEW_MEMBER_ROLE_NAME}」）が見つかりません。ダッシュボードの入場許可ロール設定を確認してください。", ephemeral=True)
         if not pending_role:
             return await interaction.followup.send(f"❌ エラー: 待機ロール「{PENDING_MEMBER_ROLE_NAME}」が見つかりません。ダッシュボードまたは設定を確認してください。", ephemeral=True)
 
         # 1. Botの権限 / 2. ロール順位（ヒエラルキー）チェック
-        error = _role_preflight_error(guild, new_roles, pending_role)
+        error = _role_preflight_error(guild, new_roles, _entry_remove_roles(bot, guild, new_roles))
         if error:
             return await interaction.followup.send(error, ephemeral=True)
 

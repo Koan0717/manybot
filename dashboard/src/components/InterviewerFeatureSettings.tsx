@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { Save, Loader2, Send, Plus, X, ClipboardPen, MessageSquareQuote, Megaphone } from 'lucide-react';
 import ChannelSelect, { ChannelOption } from '@/components/ChannelSelect';
-import RoleSelect, { RoleOption } from '@/components/RoleSelect';
 import { useSyncStatus, SyncBadge } from '@/lib/useSyncStatus';
 
 // Bot側 cogs/interview_announce.py の既定値と同じ
@@ -48,8 +47,6 @@ export default function InterviewerFeatureSettings({ guildId }: { guildId: strin
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [channels, setChannels] = useState<ChannelOption[]>([]);
-  const [roles, setRoles] = useState<RoleOption[]>([]);
-  const [entryRoleIds, setEntryRoleIds] = useState<string[]>([]);
   const [selfApply, setSelfApply] = useState(true);
   const [introSourceIds, setIntroSourceIds] = useState<string[]>([]);
   const [introOutputId, setIntroOutputId] = useState('');
@@ -70,8 +67,7 @@ export default function InterviewerFeatureSettings({ guildId }: { guildId: strin
     Promise.all([
       fetch(`/api/guilds/${guildId}/settings`).then(r => r.json()),
       fetch(`/api/guilds/${guildId}/channels`).then(r => r.json()),
-      fetch(`/api/guilds/${guildId}/roles`).then(r => (r.ok ? r.json() : [])).catch(() => []),
-    ]).then(([s, ch, rl]) => {
+    ]).then(([s, ch]) => {
       if (s && !s.error) {
         setSelfApply(!(s.INTERVIEW_SELF_APPLY_ENABLED === false || s.INTERVIEW_SELF_APPLY_ENABLED === 'false'));
         setIntroSourceIds(toIdList(s.INTERVIEW_INTRO_SOURCE_CHANNEL_IDS));
@@ -82,12 +78,8 @@ export default function InterviewerFeatureSettings({ guildId }: { guildId: strin
         if (s.INTERVIEW_ANNOUNCE_MESSAGE) setMessage(String(s.INTERVIEW_ANNOUNCE_MESSAGE));
         if (s.INTERVIEW_ANNOUNCE_REMINDER_MESSAGE) setReminderMessage(String(s.INTERVIEW_ANNOUNCE_REMINDER_MESSAGE));
         setHasManagerRole(toIdList(s.INTERVIEW_MANAGER_ROLE_IDS).length > 0);
-        // 入界許可ロールが未設定なら、仮メンバーロールを初期値として表示する（Bot側も未設定時は仮メンバーロールを付与）
-        const grantIds = toIdList(s.ENTRY_GRANT_ROLE_IDS);
-        setEntryRoleIds(grantIds.length > 0 ? grantIds : toIdList(s.NEW_MEMBER_ROLE_IDS ?? s.NEW_MEMBER_ROLE_ID));
       }
       if (Array.isArray(ch)) setChannels(ch);
-      if (Array.isArray(rl)) setRoles(rl.filter((r: any) => r.id !== guildId && !r.managed));
       setLoading(false);
     }).catch(err => {
       console.error(err);
@@ -130,7 +122,6 @@ export default function InterviewerFeatureSettings({ guildId }: { guildId: strin
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         INTERVIEW_SELF_APPLY_ENABLED: selfApply,
-        ENTRY_GRANT_ROLE_IDS: entryRoleIds,
         INTERVIEW_INTRO_SOURCE_CHANNEL_IDS: introSourceIds,
         INTERVIEW_INTRO_OUTPUT_CHANNEL_ID: introOutputId || null,
         INTERVIEW_ANNOUNCE_CHANNEL_ID: announceChannelId || null,
@@ -242,28 +233,11 @@ export default function InterviewerFeatureSettings({ guildId }: { guildId: strin
           </div>
           <Toggle checked={selfApply} onChange={setSelfApply} />
         </div>
-        <div className="space-y-2">
-          <label className="block text-sm font-semibold text-white">
-            入界許可ロール設定
-            <span className="ml-2 text-xs text-zinc-500 font-normal">(複数選択可)</span>
-          </label>
-          <RoleSelect
-            label="入界許可ロール"
-            placeholder="未設定（仮メンバーロールを付与）"
-            roles={roles}
-            value={entryRoleIds}
-            onChange={(vals: string[]) => setEntryRoleIds(vals)}
-            multiple
-          />
-          <p className="text-xs text-zinc-500">
-            入界パネルからの入界手続きと /面接官 入界許可実行 で付与するロールです。初期値は仮メンバーロールで、何も選ばずに保存した場合も仮メンバーロールを付与します。Discordのロール一覧で、Botのロールをここで選んだロールより上に置いてください。
-          </p>
-        </div>
         <ul className="list-disc pl-5 space-y-1 text-sm text-zinc-400">
           <li>名前に使えるのは「漢字・ひらがな・カタカナ・数字・・」だけ、よみかたは「ひらがな」だけです（記号・特殊文字・英字・ハングル・空白は不可）。</li>
           <li>名前がサーバー内の人の名前と完全一致、またはよみかたが入界時に登録された人と完全一致すると申請は通りません。</li>
           <li>完了するとパネルのチャンネルにメンション付きで完了のお知らせが出て、面接官ログにロールの付け替え結果と残高が残ります。</li>
-          <li>出戻り（以前に初期発行を受けた人）には初期通貨を配らず、面接官ログに「配布失敗」として残します（/面接官 入界許可実行 も同じです）。入界時に初期発行するかどうかは「初期発行自動」の設定で切り替えられます。</li>
+          <li>出戻り（以前に初期発行を受けた人）には初期通貨を配らず、面接官ログに「配布失敗」として残します（/面接官 入界許可実行 も同じです）。入界時に初期発行するかどうかは「初期発行自動」、付与・剥奪するロールは「入場許可ロール設定」で変更できます。</li>
         </ul>
         {saveButton}
         {panelPlacer('interview_entry', entryPanelChannel, setEntryPanelChannel, 'Discordで /面接官 入界パネル を実行しても、そのチャンネルに設置できます（運営・面接官・面接官統括が実行できます）。')}
