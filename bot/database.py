@@ -4197,9 +4197,27 @@ async def get_reaction_role(message_id: int, emoji: str, guild_id: int = None):
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT role_id FROM reaction_roles WHERE message_id = $1 AND emoji = $2', message_id, emoji)
+        rows = await conn.fetch('SELECT emoji, role_id FROM reaction_roles WHERE message_id = $1', message_id)
 
-        return row['role_id'] if row else None
+    # 絵文字の表記ゆれ（異体字セレクタ U+FE0F の有無、カスタム絵文字の名前・アニメーション表記）を吸収して比べる
+    target = normalize_reaction_emoji(emoji)
+    for row in rows:
+        if row['emoji'] == emoji:
+            return row['role_id']
+    for row in rows:
+        if normalize_reaction_emoji(row['emoji']) == target:
+            return row['role_id']
+    return None
+
+
+def normalize_reaction_emoji(emoji: str) -> str:
+    """リアクションロールの絵文字を比較用にそろえる。カスタム絵文字はIDで、標準絵文字は U+FE0F と空白を除いて比べる。"""
+    import re
+    s = (emoji or "").strip()
+    m = re.fullmatch(r"<?a?:?[^:<>]*:(\d+)>?", s)
+    if m:
+        return f"custom:{m.group(1)}"
+    return s.replace("️", "")
 
 
 

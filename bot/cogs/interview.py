@@ -7,7 +7,7 @@ from discord.ext import commands
 from discord import app_commands
 import database
 from helpers import (
-    get_setting, get_role_by_setting, get_new_member_roles, has_interviewer_role,
+    get_setting, get_role_by_setting, get_new_member_roles, has_interviewer_role, has_interview_staff_role,
     NEW_MEMBER_ROLE_NAME, PENDING_MEMBER_ROLE_NAME, send_log
 )
 
@@ -443,7 +443,7 @@ class InterviewerGroup(app_commands.Group):
         )
         embed.add_field(name="1. /面接官 入界許可実行", value="このチャンネルに名前を書き込んだ待機メンバーの入界手続き（仮ロール付与、初期通貨付与、ログ出力など）を完了します。出戻りの人には初期通貨を配りません。", inline=False)
         embed.add_field(name="2. /面接官 チャット削除 <件数>", value="チャンネル内のメッセージを指定された件数分、一括削除します。", inline=False)
-        embed.add_field(name="3. /面接官 入界パネル", value="入界待機者が自分で名前・よみかたを入力して入界できるパネルを、このチャンネルに設置します（自己申告型がONのときだけ使えます）。", inline=False)
+        embed.add_field(name="3. /面接官 入界パネル", value="入界待機者が自分で名前・よみかたを入力して入界できるパネルを、このチャンネルに設置します（運営・面接官・面接官統括が設置できます。パネルは自己申告型がONのときだけ使えます）。", inline=False)
         embed.add_field(name="4. /面接官 告知パネル", value="時刻のボタンで入店の儀などの告知を送信できるパネルを、このチャンネルに設置します。", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -475,10 +475,10 @@ class InterviewerGroup(app_commands.Group):
         except Exception as e:
             await interaction.followup.send(f"❌ メッセージ削除中にエラーが発生しました: {e}", ephemeral=True)
 
-    @app_commands.command(name="入界パネル", description="【面接官専用】名前・よみかたを入力して入界できるパネルをこのチャンネルに設置します")
+    @app_commands.command(name="入界パネル", description="【運営・面接官・面接官統括】名前・よみかたを入力して入界できるパネルをこのチャンネルに設置します")
     async def entry_panel(self, interaction: discord.Interaction):
-        if not interaction.guild or not has_interviewer_role(self.bot, interaction.user):
-            return await interaction.response.send_message("このコマンドを実行する権限がありません（面接官ロールが必要です）。", ephemeral=True)
+        if not interaction.guild or not has_interview_staff_role(self.bot, interaction.user):
+            return await interaction.response.send_message("このコマンドを実行する権限がありません（運営・面接官・面接官統括のいずれかのロールが必要です）。", ephemeral=True)
         await interaction.response.defer(ephemeral=True)
         try:
             await post_interview_entry_panel(interaction.guild, interaction.channel)
