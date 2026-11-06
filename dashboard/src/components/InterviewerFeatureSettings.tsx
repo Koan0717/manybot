@@ -240,7 +240,7 @@ export default function InterviewerFeatureSettings({ guildId }: { guildId: strin
           <li>出戻り（以前に初期発行を受けた人）には初期通貨を配らず、面接官ログに「配布失敗」として残します（/面接官 入界許可実行 も同じです）。</li>
         </ul>
         {saveButton}
-        {panelPlacer('interview_entry', entryPanelChannel, setEntryPanelChannel, 'Discordで /面接官 入界パネル を実行しても、そのチャンネルに設置できます。')}
+        {panelPlacer('interview_entry', entryPanelChannel, setEntryPanelChannel, 'Discordで /面接官 入界パネル を実行しても、そのチャンネルに設置できます（運営・面接官・面接官統括が実行できます）。')}
       </div>
 
       {/* 自己紹介の転載 */}

@@ -493,6 +493,18 @@ def has_interviewer_role(bot, user: discord.Member):
         return True
     return False
 
+def has_interview_staff_role(bot, user: discord.Member) -> bool:
+    """運営・面接官・面接官統括のいずれかなら True（入界パネルの設置などに使う）。"""
+    if isinstance(user, discord.User) or not hasattr(user, 'roles'):
+        return False
+    if has_interviewer_role(bot, user) or has_admin_role(bot, user):
+        return True
+    manager_role_ids = get_setting(bot, "INTERVIEW_MANAGER_ROLE_IDS", user.guild.id) or []
+    if not isinstance(manager_role_ids, list):
+        manager_role_ids = [manager_role_ids]
+    user_role_ids = {str(r.id) for r in user.roles}
+    return any(str(rid) in user_role_ids for rid in manager_role_ids)
+
 def has_event_manager_role(bot, user: discord.Member):
     event_manager_role_ids = get_setting(bot, "EVENT_MANAGER_ROLE_IDS")
     if not event_manager_role_ids:
