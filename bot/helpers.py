@@ -255,6 +255,8 @@ DEFAULT_SETTINGS = {
     "AUTO_INITIAL_ISSUE_CHANNEL_IDS": [],
     "AUTO_INITIAL_ISSUE_KEYWORD": "初期発行お願いします",
     "ENTRY_INITIAL_ISSUE_ENABLED": True,
+    "ENTRY_GRANT_ROLE_IDS": [],
+    "ENTRY_REMOVE_ROLE_IDS": [],
     "GAMBLE_EMPLOYEE_ROLE_IDS": [],
     "GAMBLE_MANAGER_ROLE_IDS": [],
     "GAMBLE_MAX_BET": 100000,
@@ -684,6 +686,39 @@ def get_new_member_roles(bot, guild: discord.Guild) -> list:
         if r:
             roles.append(r)
     return roles
+
+def _roles_from_setting(bot, guild: discord.Guild, key: str) -> list:
+    """設定に保存されたロールID（単一・複数どちらでも）から、サーバーに存在するロールだけを返す。"""
+    roles = []
+    raw = get_setting(bot, key, guild.id) or []
+    if not isinstance(raw, (list, tuple)):
+        raw = [raw]
+    for rid in raw:
+        try:
+            r = guild.get_role(int(rid))
+        except (TypeError, ValueError):
+            r = None
+        if r and r not in roles:
+            roles.append(r)
+    return roles
+
+def get_entry_grant_roles(bot, guild: discord.Guild) -> list:
+    """
+    入界手続き（入界パネル・/面接官 入界許可実行）で付与するロール一覧を返す。
+    ダッシュボードの「入場許可ロール設定」(ENTRY_GRANT_ROLE_IDS) を使い、未設定・全て見つからない場合は仮メンバーロールにする。
+    """
+    return _roles_from_setting(bot, guild, "ENTRY_GRANT_ROLE_IDS") or get_new_member_roles(bot, guild)
+
+def get_entry_remove_roles(bot, guild: discord.Guild) -> list:
+    """
+    入界手続きで外す（剥奪する）ロール一覧を返す。
+    ダッシュボードの「入場許可ロール設定」(ENTRY_REMOVE_ROLE_IDS) を使い、未設定・全て見つからない場合は入界待機者ロールにする。
+    """
+    roles = _roles_from_setting(bot, guild, "ENTRY_REMOVE_ROLE_IDS")
+    if roles:
+        return roles
+    pending = get_role_by_setting(bot, guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
+    return [pending] if pending else []
 
 def is_new_member(bot, user: discord.Member) -> bool:
     if isinstance(user, discord.User) or not hasattr(user, 'roles'):
