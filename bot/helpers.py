@@ -255,6 +255,7 @@ DEFAULT_SETTINGS = {
     "AUTO_INITIAL_ISSUE_CHANNEL_IDS": [],
     "AUTO_INITIAL_ISSUE_KEYWORD": "初期発行お願いします",
     "ENTRY_INITIAL_ISSUE_ENABLED": True,
+    "ENTRY_GRANT_ROLE_IDS": [],
     "GAMBLE_EMPLOYEE_ROLE_IDS": [],
     "GAMBLE_MANAGER_ROLE_IDS": [],
     "GAMBLE_MAX_BET": 100000,
@@ -684,6 +685,24 @@ def get_new_member_roles(bot, guild: discord.Guild) -> list:
         if r:
             roles.append(r)
     return roles
+
+def get_entry_grant_roles(bot, guild: discord.Guild) -> list:
+    """
+    入界手続き（入界パネル・/面接官 入界許可実行）で付与するロール一覧を返す。
+    ダッシュボードの「入界許可ロール」(ENTRY_GRANT_ROLE_IDS) を使い、未設定・全て見つからない場合は仮メンバーロールにする。
+    """
+    roles = []
+    raw = get_setting(bot, "ENTRY_GRANT_ROLE_IDS", guild.id) or []
+    if not isinstance(raw, (list, tuple)):
+        raw = [raw]
+    for rid in raw:
+        try:
+            r = guild.get_role(int(rid))
+        except (TypeError, ValueError):
+            r = None
+        if r and r not in roles:
+            roles.append(r)
+    return roles or get_new_member_roles(bot, guild)
 
 def is_new_member(bot, user: discord.Member) -> bool:
     if isinstance(user, discord.User) or not hasattr(user, 'roles'):

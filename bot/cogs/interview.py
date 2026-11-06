@@ -7,7 +7,7 @@ from discord.ext import commands
 from discord import app_commands
 import database
 from helpers import (
-    get_setting, get_role_by_setting, get_new_member_roles, has_interviewer_role, has_interview_staff_role,
+    get_setting, get_role_by_setting, get_entry_grant_roles, has_interviewer_role, has_interview_staff_role,
     NEW_MEMBER_ROLE_NAME, PENDING_MEMBER_ROLE_NAME, send_log
 )
 
@@ -214,7 +214,7 @@ async def complete_entry(bot, guild: discord.Guild, member: discord.Member, *, n
 
     出戻り（初期発行済み、または以前に入界の記録がある人）には初期通貨を配らず、面接官ログに配布失敗として残す。
     初期発行自動の設定「入界時に初期発行する」(ENTRY_INITIAL_ISSUE_ENABLED) が OFF のときは誰にも初期発行しない。"""
-    new_roles = get_new_member_roles(bot, guild)
+    new_roles = get_entry_grant_roles(bot, guild)
     pending_role = get_role_by_setting(bot, guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
     reason = f"面接官入界許可 (面接官: {interviewer.display_name})" if interviewer else "入界手続き（自己申告）"
     currency_name = get_setting(bot, "CURRENCY_NAME", guild.id) or "コイン"
@@ -370,10 +370,10 @@ class InterviewEntryModal(discord.ui.Modal, title='入界手続き'):
         if not READING_PATTERN.match(reading):
             return await interaction.followup.send(f"❌ よみかた「{reading}」はひらがなだけで入力してください。\n{NAME_RULE_TEXT}", ephemeral=True)
 
-        new_roles = get_new_member_roles(bot, guild)
+        new_roles = get_entry_grant_roles(bot, guild)
         pending_role = get_role_by_setting(bot, guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
         if not new_roles:
-            return await interaction.followup.send(f"❌ エラー: ロール「{NEW_MEMBER_ROLE_NAME}」が見つかりません。", ephemeral=True)
+            return await interaction.followup.send(f"❌ エラー: 入界許可ロール（未設定時は「{NEW_MEMBER_ROLE_NAME}」）が見つかりません。", ephemeral=True)
         if all(r in user.roles for r in new_roles):
             return await interaction.followup.send("ℹ️ 既に手続きは完了しています。", ephemeral=True)
         error = _role_preflight_error(guild, new_roles, pending_role)
@@ -518,11 +518,11 @@ class InterviewerGroup(app_commands.Group):
         guild = interaction.guild
         me = guild.me
 
-        new_roles = get_new_member_roles(bot, guild)
+        new_roles = get_entry_grant_roles(bot, guild)
         pending_role = get_role_by_setting(bot, guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
 
         if not new_roles:
-            return await interaction.followup.send(f"❌ エラー: 付与対象ロール「{NEW_MEMBER_ROLE_NAME}」が見つかりません。ダッシュボードまたは設定を確認してください。", ephemeral=True)
+            return await interaction.followup.send(f"❌ エラー: 入界許可ロール（未設定時は「{NEW_MEMBER_ROLE_NAME}」）が見つかりません。ダッシュボードの面接官設定を確認してください。", ephemeral=True)
         if not pending_role:
             return await interaction.followup.send(f"❌ エラー: 待機ロール「{PENDING_MEMBER_ROLE_NAME}」が見つかりません。ダッシュボードまたは設定を確認してください。", ephemeral=True)
 
