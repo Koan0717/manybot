@@ -5,26 +5,26 @@ import { toast } from 'react-hot-toast';
 import { ArrowUp, ArrowDown, Trash2, Plus, Send, FileText } from 'lucide-react';
 import ChannelSelect, { ChannelOption } from '@/components/ChannelSelect';
 import { useSyncStatus, SyncBadge } from '@/lib/useSyncStatus';
+import {
+  EvalReportItem as Item,
+  EvalReportSheet as Sheet,
+  MAX_ITEMS,
+  MIN_RATING_SCALE,
+  MAX_RATING_SCALE,
+  newSheetDraft,
+} from '@/lib/evalReport';
 
-type Item = { id: string; label: string; placeholder: string };
-type Settings = {
-  items: Item[];
-  output_channel_id: string;
-  panel_title: string;
-  panel_description: string;
-  button_label: string;
-};
-
-const MAX_ITEMS = 20;
 const inputClass = 'w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors';
 const newItemId = () => `i${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 /**
- * 評価シート記入パネルの設定。評価員がパネルから仮メンを選び、総評（あり・保留・なし）と
- * ここで設定した項目ごとの内容を書いて、送信先チャンネルに送る。
+ * 評価シート記入パネルの設定。シートは複数作れて、パネルもシートごとに設置する。
+ * 評価員がパネルから仮メンを選び、総評（あり・保留・なし）と、そのシートの項目ごとの内容を書いて、送信先チャンネルに送る。
  */
 export default function EvalReportSettings({ guildId, channels }: { guildId: string; channels: ChannelOption[] }) {
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [sheets, setSheets] = useState<Sheet[] | null>(null);
+  // 編集中のシート。sheets のどれか（id が同じ）か、未保存の新しいシート（id が null）
+  const [settings, setSettings] = useState<Sheet | null>(null);
   const [panelChannel, setPanelChannel] = useState('');
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -34,17 +34,36 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
     fetch(`/api/guilds/${guildId}/eval-sheet/report`)
       .then(res => res.json())
       .then(data => {
-        if (data.error) toast.error(data.error);
-        else setSettings(data);
+        if (!Array.isArray(data)) {
+          toast.error(data.error || '評価シートの取得に失敗しました');
+          return;
+        }
+        setSheets(data);
+        setSettings(data[0] ?? newSheetDraft());
       })
-      .catch(() => toast.error('評価シート記入パネルの設定を取得できませんでした'));
+      .catch(() => toast.error('評価シートを取得できませんでした'));
   }, [guildId]);
 
-  if (!settings) {
+  if (!sheets || !settings) {
     return <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-zinc-400">読み込み中...</div>;
   }
 
-  const update = (patch: Partial<Settings>) => setSettings(prev => (prev ? { ...prev, ...patch } : prev));
+  const saved = settings.id ? sheets.find(s => s.id === settings.id) : undefined;
+  const isDirty = !saved || JSON.stringify(saved) !== JSON.stringify(settings);
+  const confirmLeave = () => !isDirty || confirm('保存していない変更があります。破棄して切り替えますか？');
+
+  const selectSheet = (sheet: Sheet) => {
+    if (sheet.id === settings.id || !confirmLeave()) return;
+    setSettings(sheet);
+    sync.reset();
+  };
+  const addSheet = () => {
+    if (!confirmLeave()) return;
+    setSettings(newSheetDraft(`評価シート${sheets.length + 1}`));
+    sync.reset();
+  };
+
+  const update = (patch: Partial<Sheet>) => setSettings(prev => (prev ? { ...prev, ...patch } : prev));
   const updateItem = (index: number, patch: Partial<Item>) =>
     update({ items: settings.items.map((it, i) => (i === index ? { ...it, ...patch } : it)) });
   const moveItem = (index: number, dir: -1 | 1) => {
@@ -55,32 +74,58 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
     update({ items });
   };
   const removeItem = (index: number) => update({ items: settings.items.filter((_, i) => i !== index) });
-  const addItem = () => update({ items: [...settings.items, { id: newItemId(), label: '', placeholder: '' }] });
+  const addItem = () => update({ items: [...settings.items, { id: newItemId(), label: '', placeholder: '', required: true }] });
 
-  const save = async (): Promise<boolean> => {
+  /** 保存して、保存後のシートを返す（失敗したら null） */
+  const save = async (): Promise<Sheet | null> => {
     const res = await fetch(`/api/guilds/${guildId}/eval-sheet/report`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'save', ...settings }),
+      body: JSON.stringify(settings),
     });
     const data = await res.json();
     if (!res.ok || data.error) {
       toast.error(data.error || '保存に失敗しました');
-      return false;
+      return null;
     }
-    setSettings(data.settings);
-    return true;
+    const sheet: Sheet = data.sheet;
+    setSheets(prev => {
+      const list = prev ?? [];
+      return list.some(s => s.id === sheet.id) ? list.map(s => (s.id === sheet.id ? sheet : s)) : [...list, sheet];
+    });
+    setSettings(sheet);
+    return sheet;
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      if (await save()) toast.success('評価シート記入パネルの設定を保存しました');
+      if (await save()) toast.success(`「${settings.name}」を保存しました`);
     } catch {
       toast.error('通信エラーが発生しました');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDelete = async () => {
+    if (!settings.id) {
+      // 未保存のシートは破棄するだけ
+      setSettings(sheets[0] ?? newSheetDraft());
+      return;
+    }
+    if (!confirm(`「${settings.name}」を削除しますか？\n設置済みのこのシートのパネルは使えなくなります。`)) return;
+    const res = await fetch(`/api/guilds/${guildId}/eval-sheet/report/${settings.id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      toast.error(data.error || '削除に失敗しました');
+      return;
+    }
+    toast.success('シートを削除しました');
+    const rest = sheets.filter(s => s.id !== settings.id);
+    setSheets(rest);
+    setSettings(rest[0] ?? newSheetDraft());
+    sync.reset();
   };
 
   const handlePostPanel = async () => {
@@ -91,9 +136,10 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
     setPosting(true);
     sync.reset();
     try {
-      // パネルの文言は保存済みの設定から作られるので、先に保存しておく
-      if (!(await save())) return;
-      const res = await fetch(`/api/guilds/${guildId}/eval-sheet/report`, {
+      // パネルの文言は保存済みの設定から作られるので、先に保存しておく（新しいシートはここでIDが決まる）
+      const sheet = await save();
+      if (!sheet) return;
+      const res = await fetch(`/api/guilds/${guildId}/eval-sheet/report/${sheet.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'post_panel', channel_id: panelChannel }),
@@ -101,7 +147,7 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
       const data = await res.json();
       if (!res.ok || data.error) toast.error(data.error || 'パネルの設置に失敗しました');
       else {
-        toast.success('パネルの設置をBotに依頼しました');
+        toast.success(`「${sheet.name}」のパネルの設置をBotに依頼しました`);
         // Botが依頼を処理したか（またはオフラインか）をボタンの横に表示する
         sync.startPolling(data.sync_request_id ?? null);
       }
@@ -114,16 +160,71 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
 
   const textChannels = channels.filter(c => c.type === 0 || c.type === 5);
   const outputChannels = channels.filter(c => c.type === 0 || c.type === 5 || c.type === 15);
-  const modalCount = Math.max(1, Math.ceil(settings.items.length / 2));
+  // 段階ありは1項目で「段階」と「内容」の2欄を使うので1画面2項目、段階なしなら5項目まで（Bot側と同じ）
+  const perModal = settings.rating_scale ? 2 : 5;
+  const modalCount = Math.max(1, Math.ceil(settings.items.length / perModal));
+  const tabs: Sheet[] = settings.id ? sheets : [...sheets, settings];
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-white flex items-center gap-2"><FileText size={20} /> 評価シート記入パネル</h2>
         <p className="text-sm text-zinc-400 mt-1">
-          評価員がパネルのボタンから「仮メンを選択 → 総評（あり・保留・なし）を選択 → 各項目の段階（保留・1〜5、5が最高）と内容を記入」して送信すると、
+          シートは複数作れて、パネルもシートごとに設置できます。評価員がパネルのボタンから「仮メンを選択 → 総評（あり・保留・なし）を選択 → {settings.rating_scale
+            ? `各項目の段階（保留・1〜${settings.rating_scale}、${settings.rating_scale}が最高）と内容を記入`
+            : '各項目の内容を記入'}」して送信すると、
           送信先チャンネルに評価シートが投稿されます。投稿には相手のアイコンが右上に表示されます。
         </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {tabs.map(s => {
+          const active = s.id === settings.id;
+          return (
+            <button
+              key={s.id ?? 'new'}
+              type="button"
+              onClick={() => selectSheet(s)}
+              className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                active ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700'
+              }`}
+            >
+              {(active ? settings.name : s.name) || '（名前なし）'}
+              {active && isDirty && <span className="ml-1 text-amber-300">●</span>}
+              {!s.id && <span className="ml-1 text-xs text-zinc-300">（未保存）</span>}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={addSheet}
+          disabled={!settings.id}
+          title={settings.id ? undefined : '新しいシートを保存してから追加できます'}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border border-dashed border-zinc-600 text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
+        >
+          <Plus size={14} /> シートを追加
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-2 flex-1 min-w-[200px]">
+          <label className="block text-sm font-semibold text-white">シート名</label>
+          <input
+            className={inputClass}
+            value={settings.name}
+            maxLength={100}
+            placeholder="例: 仮メン評価シート"
+            onChange={e => update({ name: e.target.value })}
+          />
+          <p className="text-xs text-zinc-500">送信される評価シートのタイトルにもなります。</p>
+        </div>
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="flex items-center gap-1 px-3 py-2 mb-6 text-red-400 hover:bg-red-400/10 border border-red-500/30 text-sm rounded-lg"
+        >
+          <Trash2 size={16} /> {settings.id ? 'このシートを削除' : '作成をやめる'}
+        </button>
       </div>
 
       <div className="space-y-3">
@@ -149,6 +250,16 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
                 placeholder="入力欄のヒント（任意）"
                 onChange={e => updateItem(i, { placeholder: e.target.value })}
               />
+              <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer select-none md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={item.required}
+                  onChange={e => updateItem(i, { required: e.target.checked })}
+                  className="w-4 h-4 accent-blue-600"
+                />
+                記入欄を必須にする
+                <span className="text-xs text-zinc-500">{item.required ? '（空欄では送信できません）' : '（任意：空欄のままでも送信できます）'}</span>
+              </label>
             </div>
             <div className="flex flex-shrink-0">
               <button type="button" onClick={() => moveItem(i, -1)} disabled={i === 0} className="p-2 text-zinc-400 hover:text-white disabled:opacity-30"><ArrowUp size={16} /></button>
@@ -165,9 +276,30 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
         >
           <Plus size={16} /> 項目を追加
         </button>
-        {settings.items.length > 2 && (
-          <p className="text-xs text-zinc-500">Discordの入力画面は1回に2項目（段階と内容）までのため、記入画面は {modalCount} 回に分かれます。</p>
+        {settings.items.length > perModal && (
+          <p className="text-xs text-zinc-500">
+            Discordの入力画面は1回に{settings.rating_scale ? '2項目（段階と内容）' : '5項目'}までのため、記入画面は {modalCount} 回に分かれます。
+          </p>
         )}
+      </div>
+
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-white">段階の数</label>
+        <p className="text-xs text-zinc-400">
+          {settings.rating_scale
+            ? `各項目で「保留」と 1〜${settings.rating_scale} から選んでもらいます（${settings.rating_scale} が最高）。このシートの全項目で共通です。`
+            : '段階は使いません。記入画面にも評価シートにも段階は表示されません。'}
+        </p>
+        <select
+          className={`${inputClass} md:w-48`}
+          value={settings.rating_scale}
+          onChange={e => update({ rating_scale: Number(e.target.value) })}
+        >
+          <option value={0}>段階なし</option>
+          {Array.from({ length: MAX_RATING_SCALE - MIN_RATING_SCALE + 1 }, (_, i) => MIN_RATING_SCALE + i).map(n => (
+            <option key={n} value={n}>{n}段階</option>
+          ))}
+        </select>
       </div>
 
       <div className="space-y-2">
@@ -203,12 +335,12 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
           disabled={saving}
           className="px-6 py-2 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-600"
         >
-          {saving ? '保存中...' : 'パネル設定を保存'}
+          {saving ? '保存中...' : 'このシートを保存'}
         </button>
       </div>
 
       <div className="space-y-3 pt-4 border-t border-zinc-800">
-        <label className="block text-sm font-semibold text-white">パネルを設置</label>
+        <label className="block text-sm font-semibold text-white">「{settings.name || 'このシート'}」のパネルを設置</label>
         <ChannelSelect
           label="設置するチャンネル"
           placeholder="チャンネルを選択..."
@@ -226,7 +358,10 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
           </button>
           <SyncBadge state={sync.state} botOnline={sync.botOnline} />
         </div>
-        <p className="text-xs text-zinc-500">パネルのボタンは評価員ロールを持つ人だけが使えます。項目を変更しても、設置済みのパネルからそのまま新しい項目で記入できます。</p>
+        <p className="text-xs text-zinc-500">
+          パネルのボタンは評価員ロールを持つ人だけが使えます。項目を変更しても、設置済みのパネルからそのまま新しい項目で記入できます。
+          同じシートのパネルを複数のチャンネルに置くこともできます。
+        </p>
       </div>
     </div>
   );

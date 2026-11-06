@@ -325,7 +325,7 @@ class IPC(commands.Cog):
                     if panel_type == "eval_report":
                         try:
                             from cogs.eval_report import post_eval_report_panel
-                            await post_eval_report_panel(guild, channel)
+                            await post_eval_report_panel(guild, channel, int(req["panel_id"]) if req.get("panel_id") else None)
                         except discord.Forbidden:
                             print(f"[IPC ERROR] Failed to send eval_report panel to {channel_id}: Forbidden (No permissions)")
                         await database.delete_panel_request(req_id, guild_id)
