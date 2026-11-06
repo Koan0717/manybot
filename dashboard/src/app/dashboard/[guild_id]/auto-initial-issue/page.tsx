@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Save, Loader2, Hash, BadgeCheck, MessageSquare } from 'lucide-react';
+import { Save, Loader2, Hash, BadgeCheck, MessageSquare, DoorOpen } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import PageHeader from '@/components/PageHeader';
 import ChannelSelect from '@/components/ChannelSelect';
@@ -25,6 +25,7 @@ export default function AutoInitialIssuePage({ params }: { params: { guild_id: s
   const [isEnabled, setIsEnabled] = useState(false);
   const [channelIds, setChannelIds] = useState<string[]>([]);
   const [keyword, setKeyword] = useState(DEFAULT_KEYWORD);
+  const [entryIssueEnabled, setEntryIssueEnabled] = useState(true);
   const [initialCoins, setInitialCoins] = useState<number>(30000);
   const [currencyName, setCurrencyName] = useState('コイン');
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -41,6 +42,7 @@ export default function AutoInitialIssuePage({ params }: { params: { guild_id: s
         const ids = settings.AUTO_INITIAL_ISSUE_CHANNEL_IDS;
         setChannelIds(Array.isArray(ids) ? ids.map(String) : ids ? [String(ids)] : []);
         setKeyword(settings.AUTO_INITIAL_ISSUE_KEYWORD || DEFAULT_KEYWORD);
+        setEntryIssueEnabled(!(settings.ENTRY_INITIAL_ISSUE_ENABLED === false || settings.ENTRY_INITIAL_ISSUE_ENABLED === 'false'));
         if (settings.INITIAL_COINS !== undefined) setInitialCoins(Number(settings.INITIAL_COINS));
         if (settings.CURRENCY_NAME) setCurrencyName(String(settings.CURRENCY_NAME));
       }
@@ -71,6 +73,7 @@ export default function AutoInitialIssuePage({ params }: { params: { guild_id: s
           AUTO_INITIAL_ISSUE_ENABLED: isEnabled,
           AUTO_INITIAL_ISSUE_CHANNEL_IDS: channelIds,
           AUTO_INITIAL_ISSUE_KEYWORD: keyword.trim(),
+          ENTRY_INITIAL_ISSUE_ENABLED: entryIssueEnabled,
         }),
       });
       const data = await res.json();
@@ -137,6 +140,19 @@ export default function AutoInitialIssuePage({ params }: { params: { guild_id: s
           <p className="text-xs text-zinc-500 mt-2">
             発言にこの言葉が含まれていれば反応します（空白・全角半角の違いは無視します）。
           </p>
+        </div>
+      </div>
+
+      {/* 入界時の初期発行 */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="font-semibold text-white flex items-center gap-2"><DoorOpen size={18} className="text-red-500" />入界時に初期発行する</div>
+            <div className="text-sm text-zinc-400 mt-1">
+              入界パネルからの入界手続きと /面接官 入界許可実行 のときに、一緒に初期発行するかどうかです。OFFにすると入界時には初期発行されません（上の「機能を有効にする」とは別の設定です）。
+            </div>
+          </div>
+          <Toggle checked={entryIssueEnabled} onChange={setEntryIssueEnabled} />
         </div>
       </div>
 

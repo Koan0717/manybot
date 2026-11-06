@@ -212,12 +212,14 @@ async def repost_self_intro(bot, guild: discord.Guild, member: discord.Member) -
 async def complete_entry(bot, guild: discord.Guild, member: discord.Member, *, name: str, reading: str | None = None, interviewer: discord.Member | None = None) -> dict:
     """入界手続きの本体（名前変更・ロール付け替え・初期発行・記録・面接官ログ・自己紹介の転載）。
 
-    出戻り（初期発行済み、または以前に入界の記録がある人）には初期通貨を配らず、面接官ログに配布失敗として残す。"""
+    出戻り（初期発行済み、または以前に入界の記録がある人）には初期通貨を配らず、面接官ログに配布失敗として残す。
+    初期発行自動の設定「入界時に初期発行する」(ENTRY_INITIAL_ISSUE_ENABLED) が OFF のときは誰にも初期発行しない。"""
     new_roles = get_new_member_roles(bot, guild)
     pending_role = get_role_by_setting(bot, guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
     reason = f"面接官入界許可 (面接官: {interviewer.display_name})" if interviewer else "入界手続き（自己申告）"
     currency_name = get_setting(bot, "CURRENCY_NAME", guild.id) or "コイン"
-    result = {"roles_ok": True, "issued": None, "returnee": False, "intro": None}
+    issue_enabled = get_setting(bot, "ENTRY_INITIAL_ISSUE_ENABLED", guild.id) not in (False, "false")
+    result = {"roles_ok": True, "issued": None, "returnee": False, "issue_disabled": not issue_enabled, "intro": None}
 
     try:
         await member.edit(nick=name, reason=reason)
@@ -251,7 +253,7 @@ async def complete_entry(bot, guild: discord.Guild, member: discord.Member, *, n
 
     if result["roles_ok"]:
         result["returnee"] = await database.check_initial_issued(guild.id, member.id) or await has_entry(guild.id, member.id)
-        if not result["returnee"]:
+        if not result["returnee"] and issue_enabled:
             initial_coins = get_setting(bot, "INITIAL_COINS", guild.id) or 30000
             await database.add_balance(guild.id, member.id, initial_coins)
             await database.mark_initial_issued(guild.id, member.id)
@@ -296,6 +298,8 @@ async def complete_entry(bot, guild: discord.Guild, member: discord.Member, *, n
     embed.add_field(name="待機ロール", value=result["pending"], inline=False)
     if result["issued"] is not None:
         embed.add_field(name="初期発行", value=f"✅ {result['issued']:,} {currency_name} を発行", inline=False)
+    elif result["issue_disabled"] and result["roles_ok"]:
+        embed.add_field(name="初期発行", value="⏸️ 入界時の初期発行がOFFに設定されているため発行していません", inline=False)
     elif result["returnee"]:
         embed.add_field(name="初期発行", value="❌ 配布失敗：出戻り（初期発行済み・入界済み）のため配布していません", inline=False)
     else:
@@ -389,7 +393,12 @@ class InterviewEntryModal(discord.ui.Modal, title='入界手続き'):
             return await interaction.followup.send(f"❌ ロールの付与に失敗しました。サーバー管理者にお問い合わせください。\n{result['roles']}", ephemeral=True)
 
         currency_name = get_setting(bot, "CURRENCY_NAME", guild.id) or "コイン"
-        coin_text = f"{result['issued']:,} {currency_name} を発行しました。" if result["issued"] is not None else "初期通貨は以前に受け取り済みのため、今回は発行していません。"
+        if result["issued"] is not None:
+            coin_text = f"{result['issued']:,} {currency_name} を発行しました。"
+        elif result["issue_disabled"]:
+            coin_text = ""
+        else:
+            coin_text = "初期通貨は以前に受け取り済みのため、今回は発行していません。"
         await interaction.followup.send(f"✅ 完了！名前を「{name}」（{reading}）で登録しました。{coin_text}\n名前変更: {result['nick']}", ephemeral=True)
         try:
             await interaction.channel.send(
@@ -596,6 +605,8 @@ class InterviewerGroup(app_commands.Group):
             currency_name = get_setting(bot, "CURRENCY_NAME", guild.id) or "コイン"
             if result["issued"] is not None:
                 coin_text = f"（{result['issued']:,} {currency_name} 発行済み）"
+            elif result["issue_disabled"]:
+                coin_text = "\n⏸️ 入界時の初期発行がOFFに設定されているため、初期通貨は発行していません。"
             else:
                 coin_text = "\n❌ 初期通貨の配布失敗：出戻り（初期発行済み）のため配布していません。"
             details = f"\n名前変更: {result['nick']}\n待機ロール: {result['pending']}\n現在の残高: {result['balance']:,} {currency_name}"
