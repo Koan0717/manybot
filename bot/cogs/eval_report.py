@@ -9,23 +9,20 @@ from helpers import JST, get_new_member_roles, has_evaluator_role
 
 # 評価シート記入パネル: 評価員がパネルのボタンから仮メンを選び、総評とダッシュボードで設定した
 # 各項目（声・コミュニケーションなど）の内容を書いて、指定チャンネルに送信する。
-# 設定は eval_report_settings に1サーバー1行で保存する。
+# シート（項目・送信先・パネルの文言など）は eval_report_sheets に1サーバー複数件保存し、パネルはシートごとに設置する。
+# 以前の1サーバー1件の eval_report_settings は、最初のシートとして移し替える。
 
 VERDICTS = [
     ("あり", "🟢", discord.Color.green()),
     ("保留", "🟡", discord.Color.gold()),
     ("なし", "🔴", discord.Color.red()),
 ]
-# Discord のモーダルに置ける部品は5つまで。1項目で「段階」と「内容」の2つを使うので、1画面2項目ずつにする
-ITEMS_PER_MODAL = 2
-# 各項目の段階。5が最高
-RATINGS = ["保留", "1", "2", "3", "4", "5"]
+# 各項目の段階は「保留」と 1〜N（N が最高）。N はダッシュボードで決め、0 なら段階なし
+DEFAULT_RATING_SCALE = 5
+MIN_RATING_SCALE = 2
+MAX_RATING_SCALE = 10
 MAX_ITEMS = 20
-DEFAULT_ITEMS = [
-    {"id": "voice", "label": "声", "placeholder": ""},
-    {"id": "communication", "label": "コミュニケーション", "placeholder": ""},
-    {"id": "server_understanding", "label": "サーバー理解度", "placeholder": ""},
-]
+DEFAULT_SHEET_NAME = "評価シート"
 DEFAULT_PANEL_TITLE = "📋 評価シート"
 DEFAULT_PANEL_DESCRIPTION = "評価員は下のボタンから仮メンの評価シートを記入できます。"
 DEFAULT_BUTTON_LABEL = "評価シートを書く"
@@ -48,22 +45,32 @@ async def ensure_eval_report_schema(guild_id: int):
                 button_label TEXT NOT NULL DEFAULT ''
             )
         ''')
+        await conn.execute('ALTER TABLE eval_report_settings ADD COLUMN IF NOT EXISTS rating_scale INT NOT NULL DEFAULT 5')
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS eval_report_sheets (
+                id SERIAL PRIMARY KEY,
+                guild_id BIGINT NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
+                items JSONB NOT NULL DEFAULT '[]'::jsonb,
+                output_channel_id BIGINT,
+                panel_title TEXT NOT NULL DEFAULT '',
+                panel_description TEXT NOT NULL DEFAULT '',
+                button_label TEXT NOT NULL DEFAULT '',
+                rating_scale INT NOT NULL DEFAULT 5,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        ''')
+        # 旧設定を最初のシートとして移す。DELETE ... RETURNING で取り出すので、ダッシュボードと同時に動いても二重にならない
+        await conn.execute('''
+            WITH moved AS (DELETE FROM eval_report_settings RETURNING *)
+            INSERT INTO eval_report_sheets (guild_id, name, items, output_channel_id, panel_title, panel_description, button_label, rating_scale)
+            SELECT guild_id, '評価シート', items, output_channel_id, panel_title, panel_description, button_label, rating_scale FROM moved
+        ''')
     _ensured_pools.add(id(p))
     return p
 
 
-async def get_eval_report_settings(guild_id: int) -> dict:
-    p = await ensure_eval_report_schema(guild_id)
-    async with p.acquire() as conn:
-        row = await conn.fetchrow('SELECT * FROM eval_report_settings WHERE guild_id = $1', guild_id)
-    if not row:
-        return {
-            "items": [dict(i) for i in DEFAULT_ITEMS],
-            "output_channel_id": None,
-            "panel_title": DEFAULT_PANEL_TITLE,
-            "panel_description": DEFAULT_PANEL_DESCRIPTION,
-            "button_label": DEFAULT_BUTTON_LABEL,
-        }
+def _normalize_sheet(row) -> dict:
     s = dict(row)
     items = s["items"]
     if isinstance(items, str):
@@ -71,19 +78,43 @@ async def get_eval_report_settings(guild_id: int) -> dict:
             items = json.loads(items)
         except Exception:
             items = []
-    s["items"] = [i for i in (items or []) if isinstance(i, dict) and i.get("id") and i.get("label")][:MAX_ITEMS]
+    s["items"] = [
+        # required が無い古い設定は必須として扱う
+        {**i, "required": i.get("required") is not False}
+        for i in (items or []) if isinstance(i, dict) and i.get("id") and i.get("label")
+    ][:MAX_ITEMS]
+    s["name"] = s.get("name") or DEFAULT_SHEET_NAME
     s["panel_title"] = s.get("panel_title") or DEFAULT_PANEL_TITLE
     s["panel_description"] = s.get("panel_description") or DEFAULT_PANEL_DESCRIPTION
     s["button_label"] = s.get("button_label") or DEFAULT_BUTTON_LABEL
+    scale = s.get("rating_scale")
+    if scale is None:
+        scale = DEFAULT_RATING_SCALE
+    s["rating_scale"] = 0 if int(scale) <= 0 else min(MAX_RATING_SCALE, max(MIN_RATING_SCALE, int(scale)))
     return s
 
 
-async def post_eval_report_panel(guild: discord.Guild, channel):
-    """IPC から呼ばれる: 評価シート記入パネルを投稿する。"""
-    s = await get_eval_report_settings(guild.id)
+async def get_sheet(guild_id: int, sheet_id: int | None = None) -> dict | None:
+    """シートを1件取得する。sheet_id が無ければ（シート番号の無い以前のパネル用）最初に作ったシート。"""
+    p = await ensure_eval_report_schema(guild_id)
+    async with p.acquire() as conn:
+        if sheet_id is None:
+            row = await conn.fetchrow('SELECT * FROM eval_report_sheets WHERE guild_id = $1 ORDER BY id LIMIT 1', guild_id)
+        else:
+            row = await conn.fetchrow('SELECT * FROM eval_report_sheets WHERE id = $1 AND guild_id = $2', sheet_id, guild_id)
+    return _normalize_sheet(row) if row else None
+
+
+async def post_eval_report_panel(guild: discord.Guild, channel, sheet_id: int | None = None):
+    """IPC から呼ばれる: シートの記入パネルを投稿する。"""
+    s = await get_sheet(guild.id, sheet_id)
+    if not s:
+        print(f"[EvalReport] sheet {sheet_id} not found in guild {guild.id}")
+        return
     embed = discord.Embed(title=s["panel_title"], description=s["panel_description"], color=discord.Color.blue())
     embed.add_field(name="記入する項目", value="総評、" + "、".join(i["label"] for i in s["items"]) if s["items"] else "総評", inline=False)
-    view = EvalReportPanelView(button_label=s["button_label"])
+    view = discord.ui.View(timeout=None)
+    view.add_item(EvalReportOpenButton(s["id"], label=s["button_label"]))
     await channel.send(embed=embed, view=view)
 
 
@@ -91,20 +122,37 @@ def _verdict_meta(verdict: str):
     return next((v for v in VERDICTS if v[0] == verdict), (verdict, "⚪", discord.Color.light_grey()))
 
 
-def format_rating(rating: str | None) -> str:
+def rating_values(scale: int) -> list[str]:
+    return ["保留"] + [str(n) for n in range(1, scale + 1)]
+
+
+def format_rating(rating: str | None, scale: int) -> str:
     if not rating:
         return "（未選択）"
     if rating == "保留":
         return "⏸️ 保留"
     n = int(rating)
-    return f"{'★' * n}{'☆' * (5 - n)} {n} / 5"
+    return f"{'★' * n}{'☆' * max(0, scale - n)} {n} / {scale}"
 
 
-def build_report_embeds(target: discord.Member, evaluator: discord.Member, verdict: str, items: list[dict], answers: dict, ratings: dict) -> list[discord.Embed]:
+def items_per_modal(scale: int) -> int:
+    # Discord のモーダルに置ける部品は5つまで。段階ありは1項目で「段階」と「内容」の2つを使うので2項目ずつ
+    return 2 if scale else 5
+
+
+def format_item_value(item: dict, text: str | None, rating: str | None, scale: int) -> str:
+    """項目の表示。段階なしの設定なら段階の行は出さない。"""
+    body = text or ("（未記入）" if item.get("required", True) else "（記入なし）")
+    if not scale:
+        return body[:1024]
+    return f"**段階:** {format_rating(rating, scale)}\n{body}"[:1024]
+
+
+def build_report_embeds(target: discord.Member, evaluator: discord.Member, verdict: str, items: list[dict], answers: dict, ratings: dict, scale: int, sheet_name: str = DEFAULT_SHEET_NAME) -> list[discord.Embed]:
     """提出内容の Embed。1メッセージの合計 6000 文字制限を超えないよう、必要に応じて複数に分ける。"""
     _, emoji, color = _verdict_meta(verdict)
     first = discord.Embed(
-        title="📋 評価シート",
+        title=f"📋 {sheet_name}"[:256],
         description=f"**対象者:** {target.mention}（{target.display_name}）\n**送信者:** {evaluator.mention}（{evaluator.display_name}）",
         color=color,
         timestamp=datetime.datetime.now(JST),
@@ -118,10 +166,10 @@ def build_report_embeds(target: discord.Member, evaluator: discord.Member, verdi
     embeds = [first]
     for item in items:
         name = item["label"][:256]
-        value = f"**段階:** {format_rating(ratings.get(item['id']))}\n{answers.get(item['id']) or '（未記入）'}"[:1024]
+        value = format_item_value(item, answers.get(item["id"]), ratings.get(item["id"]), scale)
         current = embeds[-1]
         if len(current) + len(name) + len(value) > 5800 or len(current.fields) >= 25:
-            current = discord.Embed(title="📋 評価シート（続き）", color=color)
+            current = discord.Embed(title=f"📋 {sheet_name}（続き）"[:256], color=color)
             current.set_author(name=f"送信者: {evaluator.display_name}", icon_url=evaluator.display_avatar.url)
             embeds.append(current)
         current.add_field(name=name, value=value, inline=False)
@@ -132,36 +180,44 @@ class EvalReportModal(discord.ui.Modal):
     def __init__(self, form: "EvalReportFormView", chunk: list[dict]):
         super().__init__(title="評価内容の記入", timeout=900)
         self.form = form
-        self.inputs: list[tuple[dict, discord.ui.Select, discord.ui.TextInput]] = []
+        self.inputs: list[tuple[dict, discord.ui.Select | None, discord.ui.TextInput]] = []
+        scale = form.scale
         for item in chunk:
-            current = form.ratings.get(item["id"])
-            rating_select = discord.ui.Select(
-                placeholder="段階を選択",
-                options=[
-                    discord.SelectOption(label=r if r == "保留" else f"{r}{'（最高）' if r == '5' else ''}", value=r, default=r == current)
-                    for r in RATINGS
-                ],
-                required=True,
-            )
+            required = item.get("required", True)
+            rating_select = None
+            if scale:
+                current = form.ratings.get(item["id"])
+                rating_select = discord.ui.Select(
+                    placeholder="段階を選択",
+                    options=[
+                        discord.SelectOption(label=f"{r}（最高）" if r == str(scale) else r, value=r, default=r == current)
+                        for r in rating_values(scale)
+                    ],
+                    required=True,
+                )
+                # 内容を書く欄の上に、段階を選ぶ欄を置く
+                self.add_item(discord.ui.Label(
+                    text=f"{item['label']}（{scale}段階）"[:45],
+                    description=f"1〜{scale}で選択（{scale}が最高）。決めかねる場合は保留",
+                    component=rating_select,
+                ))
             text_input = discord.ui.TextInput(
                 placeholder=(item.get("placeholder") or "")[:100] or None,
                 style=discord.TextStyle.paragraph,
-                required=True,
+                required=required,
                 max_length=950,
                 default=form.answers.get(item["id"]),
             )
-            # 内容を書く欄の上に、5段階のどれかを選ぶ欄を置く
             self.add_item(discord.ui.Label(
-                text=f"{item['label']}（5段階）"[:45],
-                description="1〜5で選択（5が最高）。決めかねる場合は保留",
-                component=rating_select,
+                text=item["label"][:45],
+                description=None if required else "任意（空欄のままでも送信できます）",
+                component=text_input,
             ))
-            self.add_item(discord.ui.Label(text=item["label"][:45], component=text_input))
             self.inputs.append((item, rating_select, text_input))
 
     async def on_submit(self, interaction: discord.Interaction):
         for item, rating_select, text_input in self.inputs:
-            if rating_select.values:
+            if rating_select is not None and rating_select.values:
                 self.form.ratings[item["id"]] = rating_select.values[0]
             text = text_input.value.strip()
             if text:
@@ -223,6 +279,7 @@ class EvalReportFormView(discord.ui.View):
         self.bot = bot
         self.settings = settings
         self.items: list[dict] = settings["items"]
+        self.scale: int = settings.get("rating_scale", DEFAULT_RATING_SCALE)  # 0 は段階なし
         self.evaluator_id = evaluator_id
         self.target: discord.Member | None = None
         self.verdict: str | None = None
@@ -230,10 +287,18 @@ class EvalReportFormView(discord.ui.View):
         self.ratings: dict[str, str] = {}
 
     def _chunks(self) -> list[list[dict]]:
-        return [self.items[i:i + ITEMS_PER_MODAL] for i in range(0, len(self.items), ITEMS_PER_MODAL)]
+        size = items_per_modal(self.scale)
+        return [self.items[i:i + size] for i in range(0, len(self.items), size)]
 
     def _is_item_done(self, item: dict) -> bool:
-        return bool(self.answers.get(item["id"]) and self.ratings.get(item["id"]))
+        rating_ok = not self.scale or bool(self.ratings.get(item["id"]))
+        text_ok = bool(self.answers.get(item["id"])) or not item.get("required", True)
+        return rating_ok and text_ok
+
+    def _is_chunk_filled(self, chunk: list[dict]) -> bool:
+        # 任意の項目だけの画面は、一度も書いていなければ「記入済み」にしない
+        touched = any(i["id"] in self.answers or i["id"] in self.ratings for i in chunk)
+        return touched and all(self._is_item_done(i) for i in chunk)
 
     def _is_complete(self) -> bool:
         return bool(self.target and self.verdict and all(self._is_item_done(i) for i in self.items))
@@ -245,11 +310,10 @@ class EvalReportFormView(discord.ui.View):
 
         chunks = self._chunks()
         for n, chunk in enumerate(chunks):
-            filled = all(self._is_item_done(i) for i in chunk)
+            filled = self._is_chunk_filled(chunk)
             if len(chunks) == 1:
                 label = "内容を書く"
             else:
-                start = n * ITEMS_PER_MODAL + 1
                 names = "・".join(i["label"] for i in chunk)
                 label = f"内容を書く（{names}）"[:80]
             btn = discord.ui.Button(
@@ -269,8 +333,12 @@ class EvalReportFormView(discord.ui.View):
         self.add_item(cancel)
 
         embed = discord.Embed(
-            title="📋 評価シートの記入",
-            description="仮メンを選び、総評と各項目の段階（保留・1〜5）・内容を書いてから「送信する」を押してください。",
+            title=f"📋 {self.settings['name']}の記入"[:256],
+            description=(
+                f"仮メンを選び、総評と各項目の段階（保留・1〜{self.scale}）・内容を書いてから「送信する」を押してください。"
+                if self.scale else
+                "仮メンを選び、総評と各項目の内容を書いてから「送信する」を押してください。"
+            ),
             color=_verdict_meta(self.verdict)[2] if self.verdict else discord.Color.blue(),
         )
         if self.target:
@@ -282,9 +350,9 @@ class EvalReportFormView(discord.ui.View):
             inline=True,
         )
         for item in self.items:
-            text = self.answers.get(item["id"]) or "（未記入）"
-            value = f"**段階:** {format_rating(self.ratings.get(item['id']))}\n{text}"
-            embed.add_field(name=item["label"][:256], value=value[:1024], inline=False)
+            name = item["label"] if item.get("required", True) else f"{item['label']}（任意）"
+            value = format_item_value(item, self.answers.get(item["id"]), self.ratings.get(item["id"]), self.scale)
+            embed.add_field(name=name[:256], value=value, inline=False)
         return embed
 
     def _make_write_handler(self, chunk: list[dict]):
@@ -307,20 +375,26 @@ class EvalReportFormView(discord.ui.View):
         if not self._is_complete():
             await self.render(interaction, notice="⚠️ 未入力の項目があります。")
             return
-        settings = await get_eval_report_settings(interaction.guild_id)
-        channel_id = settings.get("output_channel_id")
+        # 記入中に送信先が変わっていても最新の送信先に送る
+        sheet = await get_sheet(interaction.guild_id, self.settings["id"])
+        if sheet is None:
+            self.stop()
+            await interaction.response.edit_message(content="このシートは削除されました。", embed=None, view=None)
+            return
+        channel_id = sheet.get("output_channel_id")
         channel = interaction.guild.get_channel(channel_id) if channel_id else None
         if channel is None:
             await self.render(interaction, notice="⚠️ 送信先チャンネルが設定されていません。管理者にダッシュボードでの設定を依頼してください。")
             return
 
         await interaction.response.defer()
-        embeds = build_report_embeds(self.target, interaction.user, self.verdict, self.items, self.answers, self.ratings)
+        name = self.settings["name"]
+        embeds = build_report_embeds(self.target, interaction.user, self.verdict, self.items, self.answers, self.ratings, self.scale, name)
         try:
             if isinstance(channel, discord.ForumChannel):
                 tags = [channel.available_tags[0]] if channel.flags.require_tag and channel.available_tags else []
                 created = await channel.create_thread(
-                    name=f"{self.target.display_name} の評価シート"[:100], embed=embeds[0], applied_tags=tags
+                    name=f"{self.target.display_name} の{name}"[:100], embed=embeds[0], applied_tags=tags
                 )
                 dest, first_msg = created.thread, created.message
             else:
@@ -340,32 +414,61 @@ class EvalReportFormView(discord.ui.View):
 
         self.stop()
         await interaction.edit_original_response(
-            content=f"✅ {self.target.mention} の評価シートを送信しました。\n{first_msg.jump_url}", embed=None, view=None
+            content=f"✅ {self.target.mention} の{name}を送信しました。\n{first_msg.jump_url}", embed=None, view=None
         )
 
 
-class EvalReportPanelView(discord.ui.View):
-    def __init__(self, button_label: str = DEFAULT_BUTTON_LABEL):
+async def open_report_form(interaction: discord.Interaction, sheet_id: int | None):
+    """パネルのボタンから、そのシートの記入画面を本人にだけ見える形で開く。"""
+    try:
+        bot = interaction.client
+        if not has_evaluator_role(bot, interaction.user):
+            await interaction.response.send_message("評価シートを記入する権限がありません（評価員ロールが必要です）。", ephemeral=True)
+            return
+        sheet = await get_sheet(interaction.guild_id, sheet_id)
+        if sheet is None:
+            await interaction.response.send_message("このパネルのシートは削除されました。", ephemeral=True)
+            return
+        if not sheet["items"]:
+            await interaction.response.send_message("評価項目が設定されていません。管理者にダッシュボードでの設定を依頼してください。", ephemeral=True)
+            return
+        view = EvalReportFormView(bot, sheet, interaction.user.id)
+        await interaction.response.send_message(embed=view._build(), view=view, ephemeral=True)
+    except Exception as e:
+        print(f"[EvalReport Error] {e}")
+        if not interaction.response.is_done():
+            await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
+
+
+class EvalReportOpenButton(discord.ui.DynamicItem[discord.ui.Button], template=r"eval_report:(?P<sheet_id>[0-9]+)"):
+    """シートごとに固有の custom_id を持つ記入ボタン。"""
+
+    def __init__(self, sheet_id: int, label: str = DEFAULT_BUTTON_LABEL):
+        super().__init__(discord.ui.Button(
+            label=label[:80],
+            emoji="📝",
+            style=discord.ButtonStyle.primary,
+            custom_id=f"eval_report:{sheet_id}",
+        ))
+        self.sheet_id = sheet_id
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match, /):
+        return cls(int(match["sheet_id"]))
+
+    async def callback(self, interaction: discord.Interaction):
+        await open_report_form(interaction, self.sheet_id)
+
+
+class LegacyEvalReportPanelView(discord.ui.View):
+    """シート番号の無い、複数シート対応前に設置したパネル。最初に作ったシートを開く。"""
+
+    def __init__(self):
         super().__init__(timeout=None)
-        self.open_form.label = button_label[:80]
 
     @discord.ui.button(label=DEFAULT_BUTTON_LABEL, emoji="📝", style=discord.ButtonStyle.primary, custom_id="eval_report:open")
     async def open_form(self, interaction: discord.Interaction, button: discord.ui.Button):
-        try:
-            bot = interaction.client
-            if not has_evaluator_role(bot, interaction.user):
-                await interaction.response.send_message("評価シートを記入する権限がありません（評価員ロールが必要です）。", ephemeral=True)
-                return
-            settings = await get_eval_report_settings(interaction.guild_id)
-            if not settings["items"]:
-                await interaction.response.send_message("評価項目が設定されていません。管理者にダッシュボードでの設定を依頼してください。", ephemeral=True)
-                return
-            view = EvalReportFormView(bot, settings, interaction.user.id)
-            await interaction.response.send_message(embed=view._build(), view=view, ephemeral=True)
-        except Exception as e:
-            print(f"[EvalReport Error] {e}")
-            if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ エラーが発生しました: {e}", ephemeral=True)
+        await open_report_form(interaction, None)
 
 
 class EvalReport(commands.Cog):
@@ -373,7 +476,11 @@ class EvalReport(commands.Cog):
         self.bot = bot
 
     async def cog_load(self):
-        self.bot.add_view(EvalReportPanelView())
+        self.bot.add_view(LegacyEvalReportPanelView())
+        self.bot.add_dynamic_items(EvalReportOpenButton)
+
+    async def cog_unload(self):
+        self.bot.remove_dynamic_items(EvalReportOpenButton)
 
 
 async def setup(bot):

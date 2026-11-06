@@ -282,6 +282,30 @@ export async function ensureEvalReportSchema(pool: any) {
         button_label TEXT NOT NULL DEFAULT ''
       )
     `);
+    await pool.query(`ALTER TABLE eval_report_settings ADD COLUMN IF NOT EXISTS rating_scale INT NOT NULL DEFAULT 5`);
+    // シートは1サーバー複数件。パネルはシートごとに設置する
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS eval_report_sheets (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        name TEXT NOT NULL DEFAULT '',
+        items JSONB NOT NULL DEFAULT '[]'::jsonb,
+        output_channel_id BIGINT,
+        panel_title TEXT NOT NULL DEFAULT '',
+        panel_description TEXT NOT NULL DEFAULT '',
+        button_label TEXT NOT NULL DEFAULT '',
+        rating_scale INT NOT NULL DEFAULT 5,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    // 旧設定（1サーバー1件）を最初のシートとして移す。DELETE ... RETURNING で取り出すので、Botと同時に動いても二重にならない
+    await pool.query(`
+      WITH moved AS (DELETE FROM eval_report_settings RETURNING *)
+      INSERT INTO eval_report_sheets (guild_id, name, items, output_channel_id, panel_title, panel_description, button_label, rating_scale)
+      SELECT guild_id, '評価シート', items, output_channel_id, panel_title, panel_description, button_label, rating_scale FROM moved
+    `);
+    // パネル設置リクエストでシートIDを渡すために使う
+    await pool.query(`ALTER TABLE panel_requests ADD COLUMN IF NOT EXISTS panel_id BIGINT`);
   } catch (e) {
     console.error('Failed to ensure eval_report_settings schema:', e);
   }
