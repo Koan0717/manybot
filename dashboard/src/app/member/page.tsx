@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, GraduationCap, Loader2, LogOut, Server, Settings, User } from 'lucide-react';
-import { MemberState, clearMemberState, getActivityContext, guildIconUrl, keepMemberSessionAlive, loadMemberState, markLoggedOut, memberFetch } from '@/lib/memberClient';
+import { MemberGuild, MemberState, clearMemberState, getActivityContext, guildIconUrl, keepMemberSessionAlive, loadMemberState, markLoggedOut, memberFetch, saveMemberState } from '@/lib/memberClient';
 import { isCircleGuild } from '@/lib/circle';
 
 export default function MemberHome() {
@@ -27,6 +27,20 @@ export default function MemberHome() {
     }
     setState(s);
     keepMemberSessionAlive();
+    // ログイン時に保存したサーバー一覧は古いことがある（後から参加したサーバーが出ない）ので取り直す
+    memberFetch('/api/member/guilds')
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (!Array.isArray(data?.guilds)) return;
+        const current = loadMemberState() ?? s;
+        const unknown = new Set<string>(Array.isArray(data.unknown) ? data.unknown : []);
+        const kept = current.guilds.filter((g) => unknown.has(g.id) && !data.guilds.some((x: MemberGuild) => x.id === g.id));
+        const next = { ...current, guilds: [...data.guilds, ...kept] };
+        saveMemberState(next);
+        setState(next);
+      })
+      .catch(() => {});
     // アクティビティで開いたとき: 招待の「アクティビティで参加」から来たならその対局へ、
     // サーバーの通話で開いたならそのサーバーの画面へそのまま進む
     const ctx = getActivityContext();
