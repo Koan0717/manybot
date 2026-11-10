@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { useCircleSession } from '@/lib/useCircleSession';
 import {
   CheckCircle2, Clock, Download, FileText, FileUp, Loader2, Paperclip,
   Pencil, Plus, Save, Send, Trash2, X, XCircle, AlertTriangle,
@@ -27,6 +28,7 @@ interface Report {
   send_status: SendStatus;
   send_results: SendResult[];
   last_sent_at: string | null;
+  author_id: string | null;
   author_name: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -76,6 +78,9 @@ function StatusBadge({ report }: { report: Report }) {
 
 export default function CircleReportsPage() {
   const { guild_id: guildId } = useParams<{ guild_id: string }>();
+  const session = useCircleSession();
+  // 一般メンバーは自分が書いた報告書だけ編集・送信・削除できる（APIでも同じ確認をしている）
+  const canManage = (r: Report) => !session.isMember || (!!r.author_id && r.author_id === session.discordId);
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [recipientCount, setRecipientCount] = useState<number | null>(null);
@@ -174,7 +179,9 @@ export default function CircleReportsPage() {
 
   const send = async (report: Report) => {
     if (!recipientCount) {
-      toast.error('送信先が設定されていません。「送信先設定」で送る人を選んでください');
+      toast.error(session.isMember
+        ? '送信先がまだ設定されていません。運営に「送信先設定」をお願いしてください'
+        : '送信先が設定されていません。「送信先設定」で送る人を選んでください');
       return;
     }
     const again = report.send_status !== 'none' ? '（もう一度送ります）' : '';
@@ -260,11 +267,15 @@ export default function CircleReportsPage() {
       {recipientCount === 0 && (
         <div className="rounded-xl border border-amber-700/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <span>
-            送信先がまだ設定されていません。
-            <Link href={`/circle/${guildId}/recipients`} className="underline underline-offset-2 hover:text-white ml-1">送信先設定</Link>
-            で受け取る人を選んでください。
-          </span>
+          {session.isMember ? (
+            <span>送信先がまだ設定されていません。報告書は書いて保存できます。送るには運営に「送信先設定」をお願いしてください。</span>
+          ) : (
+            <span>
+              送信先がまだ設定されていません。
+              <Link href={`/circle/${guildId}/recipients`} className="underline underline-offset-2 hover:text-white ml-1">送信先設定</Link>
+              で受け取る人を選んでください。
+            </span>
+          )}
         </div>
       )}
 
@@ -406,7 +417,7 @@ export default function CircleReportsPage() {
                   </div>
                   <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5">
                     <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> 作成 {formatDate(r.created_at)}</span>
-                    {r.author_name && <span>作成者 {r.author_name}（パネルから提出）</span>}
+                    {r.author_name && <span>作成者 {r.author_name}</span>}
                     {r.last_sent_at && <span>最終送信 {formatDate(r.last_sent_at)}</span>}
                   </div>
                   {r.content && (
@@ -425,6 +436,7 @@ export default function CircleReportsPage() {
                   )}
                 </div>
 
+                {canManage(r) && (
                 <div className="flex md:flex-col gap-2 flex-shrink-0">
                   <button
                     onClick={() => send(r)}
@@ -448,6 +460,7 @@ export default function CircleReportsPage() {
                     <Trash2 className="w-3.5 h-3.5" /> 削除
                   </button>
                 </div>
+                )}
               </div>
 
               {r.send_results.length > 0 && (

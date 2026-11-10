@@ -156,6 +156,29 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/member', request.url));
     }
 
+    // サークル用サーバーの一般メンバー: そのサーバーのサークル報告書（進捗状況の一覧・作成・送信）だけ
+    if (role === 'circle') {
+      if (!guildId) {
+        return pathname.startsWith('/api/')
+          ? NextResponse.json({ error: '権限がありません' }, { status: 403 })
+          : NextResponse.redirect(new URL('/member', request.url));
+      }
+      if (pathname.startsWith('/api/')) {
+        const allowed =
+          pathname.startsWith('/api/auth/') ||
+          pathname.startsWith(`/api/guilds/${guildId}/circle/reports`) ||
+          (pathname === `/api/guilds/${guildId}/circle/settings` && request.method === 'GET');
+        if (!allowed) {
+          return NextResponse.json({ error: 'サークル報告書以外の操作の権限はありません' }, { status: 403 });
+        }
+        return NextResponse.next();
+      }
+      if (pathname !== `/circle/${guildId}`) {
+        return NextResponse.redirect(new URL(`/circle/${guildId}`, request.url));
+      }
+      return NextResponse.next();
+    }
+
     // Dedicated Bot Sub-Account restriction
     if (botId && guildId) {
       const allowedBotPrefix = `/dashboard/bot/${botId}/${guildId}`;

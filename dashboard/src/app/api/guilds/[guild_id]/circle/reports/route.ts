@@ -4,6 +4,7 @@ import {
   ensureCircleSchema, toCircleReportJson, REPORT_COLUMNS,
   MAX_PDF_BYTES, MAX_TITLE, MAX_CONTENT, isPdf, cleanPdfName,
 } from '@/lib/circle';
+import { canManageReport, getRequestSession } from '@/lib/circleAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,8 +63,14 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
       pdf = { name: cleanPdfName(f.name), size: data.length, data };
     }
 
+    const session = await getRequestSession(request);
     let row: any;
     if (id) {
+      const owner = await pool.query('SELECT author_id FROM circle_reports WHERE id = $1 AND guild_id = $2', [id, guildId]);
+      if (owner.rows.length === 0) return NextResponse.json({ error: 'レポートが見つかりません' }, { status: 404 });
+      if (!canManageReport(session, owner.rows[0].author_id)) {
+        return NextResponse.json({ error: '自分が書いた報告書だけ編集できます' }, { status: 403 });
+      }
       // PDF: 新しいファイルがあれば差し替え、削除指定なら消す、どちらでもなければそのまま
       const res = await pool.query(
         `UPDATE circle_reports SET
@@ -80,9 +87,13 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
       row = res.rows[0];
     } else {
       const res = await pool.query(
-        `INSERT INTO circle_reports (guild_id, title, content, pdf_name, pdf_size, pdf_data)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${REPORT_COLUMNS}`,
-        [guildId, title, content, pdf?.name ?? null, pdf?.size ?? null, pdf?.data ?? null]
+        `INSERT INTO circle_reports (guild_id, title, content, pdf_name, pdf_size, pdf_data, author_id, author_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING ${REPORT_COLUMNS}`,
+        [
+          guildId, title, content, pdf?.name ?? null, pdf?.size ?? null, pdf?.data ?? null,
+          // Discordログインから入った人は作成者として記録する（専用アカウントの管理者は記録しない）
+          session?.discord_id ?? null, session?.discord_id ? session.username : null,
+        ]
       );
       row = res.rows[0];
     }

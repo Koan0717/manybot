@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, GraduationCap, Loader2, LogOut, Server, Settings, User } from 'lucide-react';
 import { MemberState, clearMemberState, getActivityContext, guildIconUrl, keepMemberSessionAlive, loadMemberState, markLoggedOut, memberFetch } from '@/lib/memberClient';
-import { isCircleActivityGuild } from '@/lib/circle';
+import { isCircleGuild } from '@/lib/circle';
 
 export default function MemberHome() {
   const router = useRouter();
@@ -15,7 +15,7 @@ export default function MemberHome() {
   const [adminCache, setAdminCache] = useState<Record<string, boolean>>({});
   const [entering, setEntering] = useState(false);
   const [error, setError] = useState('');
-  // サークル用サーバーでアクティビティを開いたとき: 「ダッシュボード設定」「サークル報告書」の2つだけを出す
+  // サークル用サーバー（OPENEssex）でアクティビティを開いたとき: サーバー一覧を出さず、そのサーバーのボタンだけを出す
   const [circleGuildId, setCircleGuildId] = useState<string | null>(null);
   const [entered, setEntered] = useState<'dashboard' | 'circle' | null>(null);
 
@@ -31,8 +31,16 @@ export default function MemberHome() {
     // サーバーの通話で開いたならそのサーバーの画面へそのまま進む
     const ctx = getActivityContext();
     if (!ctx) return;
-    if (isCircleActivityGuild(ctx.guildId)) {
+    if (isCircleGuild(ctx.guildId)) {
       setCircleGuildId(ctx.guildId);
+      // 管理者ロールの有無でボタンが変わるので先に確かめておく
+      const gid = ctx.guildId as string;
+      memberFetch(`/api/member/guilds/${gid}/admin`)
+        .then(async (res) => {
+          const data = await res.json().catch(() => ({}));
+          setAdminCache((prev) => ({ ...prev, [gid]: res.ok && data.is_admin === true }));
+        })
+        .catch(() => setAdminCache((prev) => ({ ...prev, [gid]: false })));
       return;
     }
     // 自動で進むのはアクティビティを開いた最初の1回だけ（「別のサーバーを選ぶ」で戻ってきたときは進まない）
@@ -63,7 +71,8 @@ export default function MemberHome() {
   }, [router]);
 
   // サーバーを選んだら、そのサーバーの運営管理者ロールを持っているか確かめる。
-  // 持っていればプロフィールと管理ダッシュボードの2つのボタンを出し、持っていなければそのままプロフィールへ
+  // 持っていればプロフィールと管理ダッシュボードのボタンを出し、持っていなければそのままプロフィールへ。
+  // サークル用サーバーは全員に「サークル報告書」も出すので、管理者でなくてもボタンを出す
   const selectGuild = async (guildId: string) => {
     if (checking || entering) return;
     setError('');
@@ -85,20 +94,22 @@ export default function MemberHome() {
         setChecking(null);
       }
     }
-    if (isAdmin) setChoosing(guildId);
+    if (isAdmin || isCircleGuild(guildId)) setChoosing(guildId);
     else router.push(`/member/${guildId}`);
   };
 
-  // 管理ダッシュボードへ（そのサーバーだけのサブアドミンとして入る）。target が 'circle' ならサークル報告書へ
+  // 管理ダッシュボードへ（そのサーバーだけのサブアドミンとして入る）。
+  // target が 'circle' ならサークル報告書へ（管理者はサブアドミン、それ以外はサークル報告書だけのセッション）
   const enterDashboard = async (guildId: string, target: 'dashboard' | 'circle' = 'dashboard') => {
     setError('');
     setEntering(true);
     setEntered(target);
+    const failMessage = target === 'circle' ? 'サークル報告書に入れませんでした' : '管理ダッシュボードに入れませんでした';
     try {
-      const res = await memberFetch(`/api/member/guilds/${guildId}/admin`, { method: 'POST' });
+      const res = await memberFetch(`/api/member/guilds/${guildId}/${target === 'circle' ? 'circle' : 'admin'}`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.token) {
-        setError(data.error || '管理ダッシュボードに入れませんでした');
+        setError(data.error || failMessage);
         setEntering(false);
         return;
       }
@@ -113,9 +124,49 @@ export default function MemberHome() {
       url.searchParams.set('session_token', data.token);
       window.location.href = url.pathname + url.search;
     } catch {
-      setError('管理ダッシュボードに入れませんでした');
+      setError(failMessage);
       setEntering(false);
     }
+  };
+
+  // サーバーを選んだときのボタン: プロフィール / ダッシュボード設定（管理者だけ）/ サークル報告書（サークル用サーバーだけ・全員）
+  const renderChoices = (guildId: string, large = false) => {
+    const isAdmin = adminCache[guildId] === true;
+    const circle = isCircleGuild(guildId);
+    const count = 1 + (isAdmin ? 1 : 0) + (circle ? 1 : 0);
+    const size = large ? 'py-4' : 'py-3';
+    const cols = large ? 'grid-cols-1' : count === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2';
+    return (
+      <div className={`grid ${cols} gap-2`}>
+        <button
+          onClick={() => router.push(`/member/${guildId}`)}
+          disabled={entering}
+          className={`flex items-center justify-center gap-2 ${size} rounded-xl font-semibold bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 disabled:opacity-50 transition-colors`}
+        >
+          <User className="w-4 h-4" /> プロフィール
+        </button>
+        {isAdmin && (
+          <button
+            onClick={() => enterDashboard(guildId, 'dashboard')}
+            disabled={entering}
+            className={`flex items-center justify-center gap-2 ${size} rounded-xl font-semibold bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 transition-colors`}
+          >
+            {entering && entered === 'dashboard' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />}
+            {circle ? 'ダッシュボード設定' : '管理ダッシュボード'}
+          </button>
+        )}
+        {circle && (
+          <button
+            onClick={() => enterDashboard(guildId, 'circle')}
+            disabled={entering}
+            className={`flex items-center justify-center gap-2 ${size} rounded-xl font-semibold bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 disabled:opacity-50 transition-colors`}
+          >
+            {entering && entered === 'circle' ? <Loader2 className="w-4 h-4 animate-spin" /> : <GraduationCap className="w-4 h-4" />}
+            サークル報告書
+          </button>
+        )}
+      </div>
+    );
   };
 
   const logout = () => {
@@ -163,24 +214,13 @@ export default function MemberHome() {
             <div className="bg-red-950/60 border border-red-800/60 text-red-300 px-4 py-3 rounded-xl text-sm mb-4">{error}</div>
           )}
 
-          <div className="grid gap-3">
-            <button
-              onClick={() => enterDashboard(circleGuildId, 'dashboard')}
-              disabled={entering}
-              className="flex items-center justify-center gap-2 py-4 rounded-xl font-semibold bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 transition-colors"
-            >
-              {entering && entered === 'dashboard' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />}
-              ダッシュボード設定
-            </button>
-            <button
-              onClick={() => enterDashboard(circleGuildId, 'circle')}
-              disabled={entering}
-              className="flex items-center justify-center gap-2 py-4 rounded-xl font-semibold bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 disabled:opacity-50 transition-colors"
-            >
-              {entering && entered === 'circle' ? <Loader2 className="w-4 h-4 animate-spin" /> : <GraduationCap className="w-4 h-4" />}
-              サークル報告書
-            </button>
-          </div>
+          {adminCache[circleGuildId] === undefined ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-500">
+              <Loader2 className="w-4 h-4 animate-spin" /> 確認中...
+            </div>
+          ) : (
+            renderChoices(circleGuildId, true)
+          )}
         </div>
       </main>
     );
@@ -243,24 +283,7 @@ export default function MemberHome() {
                     <ChevronRight className={`w-4 h-4 text-zinc-600 group-hover:text-red-400 transition-all flex-shrink-0 ${open ? 'rotate-90' : 'group-hover:translate-x-0.5'}`} />
                   )}
                 </button>
-                {open && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 px-4 pb-4">
-                    <button
-                      onClick={() => router.push(`/member/${guild.id}`)}
-                      disabled={entering}
-                      className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 disabled:opacity-50 transition-colors"
-                    >
-                      <User className="w-4 h-4" /> プロフィール
-                    </button>
-                    <button
-                      onClick={() => enterDashboard(guild.id)}
-                      disabled={entering}
-                      className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 transition-colors"
-                    >
-                      {entering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />} 管理ダッシュボード
-                    </button>
-                  </div>
-                )}
+                {open && <div className="px-4 pb-4">{renderChoices(guild.id)}</div>}
                 </div>
               );
             })}
