@@ -289,6 +289,7 @@ class EconomyBot(commands.Bot):
             "cogs.survey",
             "cogs.eval_report",
             "cogs.interview_announce",
+            "cogs.circle_report",
         ]
         for cog in cogs_to_load:
             try:
