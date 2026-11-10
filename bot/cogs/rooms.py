@@ -1503,8 +1503,10 @@ class Rooms(commands.Cog):
                         if not cfg or not cfg.get("base_name"):
                             channel_name = f"🔊│{member.display_name}の部屋"
                         else:
+                            # ベース名に {user} があれば既に名前が入るので、末尾にオーナー名を重ねて付けない
+                            has_user_placeholder = "{user}" in cfg["base_name"]
                             base_name = cfg["base_name"].replace("{user}", member.display_name)
-                            include_owner_name = cfg.get("include_owner_name", True)
+                            include_owner_name = cfg.get("include_owner_name", True) and not has_user_placeholder
                             use_numbering = cfg.get("use_numbering", False)
 
                             if include_owner_name:

@@ -674,6 +674,25 @@ async def setup_db_schema(p):
         except Exception as e:
             print(f"[Migration] antigrief_settings migration warning: {e}")
 
+        # BOT導入制限（許可された人以外が入れたBotを処分する）
+        try:
+            await conn.execute("ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS bot_guard_enabled BOOLEAN NOT NULL DEFAULT FALSE")
+            await conn.execute("ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS bot_guard_action TEXT NOT NULL DEFAULT 'kick'")
+            await conn.execute("ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS bot_guard_allowed_user_ids BIGINT[] NOT NULL DEFAULT '{}'")
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS antigrief_approved_bots (
+                    guild_id BIGINT NOT NULL,
+                    bot_id BIGINT NOT NULL,
+                    bot_name TEXT NOT NULL DEFAULT '',
+                    source TEXT NOT NULL DEFAULT 'manual',
+                    approved_by BIGINT,
+                    approved_at TIMESTAMPTZ DEFAULT NOW(),
+                    PRIMARY KEY (guild_id, bot_id)
+                )
+            ''')
+        except Exception as e:
+            print(f"[Migration] antigrief bot guard migration warning: {e}")
+
         # NGワードルール（荒らし対策とは別の監視対象・免除設定を持つ）
         try:
             await conn.execute('''
@@ -3102,6 +3121,20 @@ async def save_setting(guild_id: int, key: str, value):
 
 
 
+async def get_setting_value(guild_id: int, key: str):
+    """bot_settings の値を1件だけ DB から直接読む（JSON をそのまま返す。無ければ None）。"""
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        raw = await conn.fetchval(
+            'SELECT setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key = $2', guild_id, key)
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return raw
+
+
 async def load_settings() -> dict:
 
     settings = {}
@@ -4164,9 +4197,27 @@ async def get_reaction_role(message_id: int, emoji: str, guild_id: int = None):
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT role_id FROM reaction_roles WHERE message_id = $1 AND emoji = $2', message_id, emoji)
+        rows = await conn.fetch('SELECT emoji, role_id FROM reaction_roles WHERE message_id = $1', message_id)
 
-        return row['role_id'] if row else None
+    # 絵文字の表記ゆれ（異体字セレクタ U+FE0F の有無、カスタム絵文字の名前・アニメーション表記）を吸収して比べる
+    target = normalize_reaction_emoji(emoji)
+    for row in rows:
+        if row['emoji'] == emoji:
+            return row['role_id']
+    for row in rows:
+        if normalize_reaction_emoji(row['emoji']) == target:
+            return row['role_id']
+    return None
+
+
+def normalize_reaction_emoji(emoji: str) -> str:
+    """リアクションロールの絵文字を比較用にそろえる。カスタム絵文字はIDで、標準絵文字は U+FE0F と空白を除いて比べる。"""
+    import re
+    s = (emoji or "").strip()
+    m = re.fullmatch(r"<?a?:?[^:<>]*:(\d+)>?", s)
+    if m:
+        return f"custom:{m.group(1)}"
+    return s.replace("️", "")
 
 
 
@@ -4332,7 +4383,7 @@ async def get_antigrief_settings(guild_id: int) -> dict:
 
     async with p.acquire() as conn:
 
-        row = await conn.fetchrow('SELECT target_category_ids, target_channel_ids, exempt_role_ids, admin_channel_id FROM antigrief_settings WHERE guild_id = $1', guild_id)
+        row = await conn.fetchrow('SELECT target_category_ids, target_channel_ids, exempt_role_ids, admin_channel_id, bot_guard_enabled, bot_guard_action, bot_guard_allowed_user_ids FROM antigrief_settings WHERE guild_id = $1', guild_id)
 
         if row:
 
@@ -4344,7 +4395,13 @@ async def get_antigrief_settings(guild_id: int) -> dict:
 
                 "exempt_roles": row["exempt_role_ids"] or [],
 
-                                "admin_channel_id": row["admin_channel_id"]
+                                "admin_channel_id": row["admin_channel_id"],
+
+                "bot_guard_enabled": row["bot_guard_enabled"],
+
+                "bot_guard_action": row["bot_guard_action"],
+
+                "bot_guard_allowed_users": row["bot_guard_allowed_user_ids"] or []
 
             }
 
@@ -4352,7 +4409,7 @@ async def get_antigrief_settings(guild_id: int) -> dict:
 
             await conn.execute('INSERT INTO antigrief_settings (guild_id, target_category_ids, target_channel_ids, exempt_role_ids) VALUES ($1, $2, $3, $4) ON CONFLICT (guild_id) DO NOTHING', guild_id, [], [], [])
 
-            return {"categories": [], "channels": [], "exempt_roles": [], "admin_channel_id": None}
+            return {"categories": [], "channels": [], "exempt_roles": [], "admin_channel_id": None, "bot_guard_enabled": False, "bot_guard_action": "kick", "bot_guard_allowed_users": []}
 
 
 
@@ -4388,6 +4445,29 @@ async def get_antigrief_ng_rules(guild_id: int) -> list[dict]:
     async with p.acquire() as conn:
         rows = await conn.fetch('SELECT * FROM antigrief_ng_rules WHERE guild_id = $1 ORDER BY id', guild_id)
         return [_ng_rule_row_to_dict(r) for r in rows]
+
+
+async def get_approved_bot_ids(guild_id: int) -> list[int]:
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        rows = await conn.fetch('SELECT bot_id FROM antigrief_approved_bots WHERE guild_id = $1', guild_id)
+        return [r["bot_id"] for r in rows]
+
+
+async def add_approved_bot(guild_id: int, bot_id: int, bot_name: str, source: str, approved_by: int | None = None):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        await conn.execute('''
+            INSERT INTO antigrief_approved_bots (guild_id, bot_id, bot_name, source, approved_by)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (guild_id, bot_id) DO NOTHING
+        ''', guild_id, bot_id, bot_name, source, approved_by)
+
+
+async def remove_approved_bot(guild_id: int, bot_id: int):
+    p = await get_pool(guild_id)
+    async with p.acquire() as conn:
+        await conn.execute('DELETE FROM antigrief_approved_bots WHERE guild_id = $1 AND bot_id = $2', guild_id, bot_id)
 
 
 async def get_all_antigrief_settings() -> list[dict]:

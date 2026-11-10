@@ -126,6 +126,15 @@ class IPC(commands.Cog):
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload vc_float settings: {e}")
 
+                        elif panel_type == "refresh_survey":
+                            try:
+                                from cogs.survey import refresh_survey_panel
+                                if req.get("panel_id"):
+                                    await refresh_survey_panel(guild, int(req["panel_id"]))
+                                print(f"[IPC] Refreshed survey panel {req.get('panel_id')} for guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to refresh survey panel: {e}")
+
                         elif panel_type == "reload_call_board":
                             try:
                                 print(f"[IPC] Processed reload_call_board for guild {guild_id}")
@@ -138,6 +147,37 @@ class IPC(commands.Cog):
                                 print(f"[IPC] Reloaded othello settings for guild {guild_id}")
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload othello settings: {e}")
+
+                        elif panel_type == "reload_server_templates":
+                            try:
+                                import server_template
+                                await server_template.publish_catalog(guild_id)
+                                print(f"[IPC] Published server template catalog for guild {guild_id}")
+                            except Exception as e:
+                                print(f"[IPC ERROR] Failed to publish server template catalog: {e}")
+
+                        elif panel_type.startswith("build_server_custom"):
+                            # ダッシュボード「サーバー作成」。build_server_custom:<設定に反映 0/1>:<権限を更新 0/1>
+                            import asyncio
+                            import server_template
+                            parts = panel_type.split(":")
+                            apply_settings = len(parts) < 2 or parts[1] != "0"
+                            sync_permissions = len(parts) > 2 and parts[2] == "1"
+                            building = self.bot.__dict__.setdefault("server_building_guilds", set())
+                            if guild_id in building:
+                                print(f"[IPC] build_server_custom skipped (already running) for guild {guild_id}")
+                            else:
+                                building.add(guild_id)
+
+                                async def _run(g=guild, a=apply_settings, s=sync_permissions):
+                                    try:
+                                        await server_template.run_dashboard_build(self.bot, g, a, s)
+                                    finally:
+                                        building.discard(g.id)
+
+                                # 作成に時間がかかるので、他のリクエストを止めないよう別タスクで動かす
+                                asyncio.create_task(_run())
+                                print(f"[IPC] build_server_custom started for guild {guild_id}")
 
                         elif panel_type.startswith("apply_room_access_deny:") or panel_type.startswith("apply_room_access_allow:"):
                             try:
@@ -253,6 +293,41 @@ class IPC(commands.Cog):
                     
                     if not channel:
                         print(f"[IPC ERROR] Channel {channel_id} not found in guild {guild_id}.")
+                        await database.delete_panel_request(req_id, guild_id)
+                        continue
+
+                    if panel_type in ("survey", "survey_results"):
+                        try:
+                            from cogs.survey import post_survey_panel, post_survey_results
+                            if req.get("panel_id"):
+                                if panel_type == "survey":
+                                    await post_survey_panel(guild, channel, int(req["panel_id"]))
+                                else:
+                                    await post_survey_results(guild, channel, int(req["panel_id"]))
+                        except discord.Forbidden:
+                            print(f"[IPC ERROR] Failed to send {panel_type} to {channel_id}: Forbidden (No permissions)")
+                        await database.delete_panel_request(req_id, guild_id)
+                        continue
+
+                    if panel_type in ("interview_entry", "interview_announce"):
+                        try:
+                            if panel_type == "interview_entry":
+                                from cogs.interview import post_interview_entry_panel
+                                await post_interview_entry_panel(guild, channel)
+                            else:
+                                from cogs.interview_announce import post_announce_panel
+                                await post_announce_panel(self.bot, guild, channel)
+                        except discord.Forbidden:
+                            print(f"[IPC ERROR] Failed to send {panel_type} panel to {channel_id}: Forbidden (No permissions)")
+                        await database.delete_panel_request(req_id, guild_id)
+                        continue
+
+                    if panel_type == "eval_report":
+                        try:
+                            from cogs.eval_report import post_eval_report_panel
+                            await post_eval_report_panel(guild, channel, int(req["panel_id"]) if req.get("panel_id") else None)
+                        except discord.Forbidden:
+                            print(f"[IPC ERROR] Failed to send eval_report panel to {channel_id}: Forbidden (No permissions)")
                         await database.delete_panel_request(req_id, guild_id)
                         continue
 
@@ -434,6 +509,13 @@ class IPC(commands.Cog):
     @check_panel_requests.before_loop
     async def before_check(self):
         await self.bot.wait_until_ready()
+        # ダッシュボード「サーバー作成」のテンプレート一覧を最新のテンプレートで書き直す
+        import server_template
+        for guild in self.bot.guilds:
+            try:
+                await server_template.publish_catalog(guild.id)
+            except Exception as e:
+                print(f"[IPC] Failed to publish server template catalog for guild {guild.id}: {e}")
 
     @tasks.loop(seconds=30.0)
     async def heartbeat(self):

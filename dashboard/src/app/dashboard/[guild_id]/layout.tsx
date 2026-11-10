@@ -22,6 +22,7 @@ import {
   Terminal,
   ScrollText,
   UserCheck,
+  UserCog,
   UserPlus,
   ShieldAlert,
   LayoutPanelTop,
@@ -41,6 +42,9 @@ import {
   Pickaxe,
   KeyRound,
   MapPin,
+  Hammer,
+  ClipboardList,
+  BadgeCheck,
 } from 'lucide-react';
 
 
@@ -134,10 +138,12 @@ export default function DashboardLayout({
         { label: '評価関連設定', path: `/dashboard/${guildId}/eval-sheet`, roles: ['admin', 'subadmin'], icon: ClipboardCheck, group: '評価鯖' },
         { label: '役職給与設定', path: `/dashboard/${guildId}/role-salary`, roles: ['admin', 'subadmin'], icon: Banknote, group: '評価鯖' },
         { label: '経済・レベリング設定', path: `/dashboard/${guildId}/economy`, roles: ['admin', 'subadmin'], icon: Coins, group: '評価鯖' },
+        { label: '初期発行自動', path: `/dashboard/${guildId}/auto-initial-issue`, roles: ['admin', 'subadmin'], icon: BadgeCheck, group: '評価鯖' },
         { label: 'メンバー残高一覧', path: `/dashboard/${guildId}/member-list`, roles: ['admin', 'subadmin'], icon: ListOrdered, group: '評価鯖' },
         { label: 'ギャンブル設定', path: `/dashboard/${guildId}/gambling`, roles: ['admin', 'gambling', 'subadmin'], icon: Dices, group: '評価鯖' },
         { label: 'レベル到達報酬', path: `/dashboard/${guildId}/level-rewards`, roles: ['admin', 'subadmin'], icon: Gift, group: '評価鯖' },
         { label: '福引ガチャ設定', path: `/dashboard/${guildId}/gacha`, roles: ['admin', 'subadmin'], icon: Gift, group: '雑談鯖' },
+        { label: 'アンケート', path: `/dashboard/${guildId}/surveys`, roles: ['admin', 'subadmin'], icon: ClipboardList, group: '雑談鯖' },
       ],
     },
     {
@@ -164,6 +170,7 @@ export default function DashboardLayout({
         { label: 'コマンド設定', path: `/dashboard/${guildId}/commands`, roles: ['admin', 'subadmin'], icon: Terminal, group: 'その他' },
         { label: 'ログ出力設定', path: `/dashboard/${guildId}/logs`, roles: ['admin', 'subadmin'], icon: ScrollText, group: 'その他' },
         { label: '面接官設定', path: `/dashboard/${guildId}/interviewer`, roles: ['admin', 'subadmin'], icon: UserCheck, group: '評価鯖' },
+        { label: '入場許可ロール設定', path: `/dashboard/${guildId}/entry-roles`, roles: ['admin', 'subadmin'], icon: UserCog, group: '評価鯖' },
         { label: '条件ロール付与設定', path: `/dashboard/${guildId}/self-intro-role`, roles: ['admin', 'subadmin'], icon: UserPlus, group: '雑談鯖' },
         { label: '荒らし対策設定', path: `/dashboard/${guildId}/antigrief`, roles: ['admin', 'subadmin'], icon: ShieldAlert, group: '雑談鯖' },
         { label: '招待リンク設定', path: `/dashboard/${guildId}/invite-link`, roles: ['admin', 'subadmin'], icon: Link2, group: 'その他' },
@@ -175,6 +182,7 @@ export default function DashboardLayout({
       items: [
         { label: 'BOT機能接続状況', path: `/dashboard/${guildId}/bot-status`, roles: ['admin', 'subadmin'], icon: Activity, group: 'その他' },
         { label: 'データベース設定', path: `/dashboard/${guildId}/database`, roles: ['admin', 'subadmin'], icon: Database, group: 'その他' },
+        { label: 'サーバー作成', path: `/dashboard/${guildId}/server-build`, roles: ['admin'], icon: Hammer, group: 'その他' },
         { label: 'アカウント設定', path: `/dashboard/${guildId}/accounts`, roles: ['admin'], icon: Users, group: 'その他' },
       ],
     },

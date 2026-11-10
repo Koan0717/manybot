@@ -476,14 +476,24 @@ class AdminGroup(app_commands.Group):
     )
     @app_commands.choices(template=[
         app_commands.Choice(name=f"{t['name']}（{t['description']}）", value=k) for k, t in server_template.TEMPLATES.items()
-    ])
+    ] + [app_commands.Choice(name="📝 保存したテンプレート（ダッシュボード「サーバー作成」で保存）", value="custom")])
     @app_commands.rename(template="テンプレート", apply_settings="設定に反映", sync_permissions="権限を更新")
     @is_admin()
     async def build_server(self, interaction: discord.Interaction, template: app_commands.Choice[str], apply_settings: bool = True, sync_permissions: bool = False):
         me = interaction.guild.me.guild_permissions
         if not (me.manage_roles and me.manage_channels):
             return await interaction.response.send_message("❌ Bot に「ロールの管理」と「チャンネルの管理」の権限が必要です。", ephemeral=True)
-        tpl = server_template.TEMPLATES[template.value]
+        if template.value == "custom":
+            try:
+                tpl = await server_template.load_saved_template(interaction.guild.id)
+            except Exception as e:
+                return await interaction.response.send_message(f"❌ 保存したテンプレートを読み込めませんでした: {e}", ephemeral=True)
+            if not tpl:
+                return await interaction.response.send_message(
+                    "❌ 保存したテンプレートがありません。ダッシュボードの「サーバー作成」でロール名を入力して「テンプレ保存」を押してください。",
+                    ephemeral=True)
+        else:
+            tpl = server_template.TEMPLATES[template.value]
         embed = discord.Embed(
             title=f"🏗️ 「{tpl['name']}」を構築しますか？",
             description=(

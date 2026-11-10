@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import { ClipboardCheck } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import ChannelSelect from '@/components/ChannelSelect';
+import EvalReportSettings from '@/components/EvalReportSettings';
 
 export default function EvalSheetSettings({ params }: { params: { guild_id: string } }) {
   const guildId = params.guild_id;
@@ -208,6 +209,8 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
           {saving ? '保存中...' : '設定を保存'}
         </button>
       </div>
+
+      <EvalReportSettings guildId={guildId} channels={channels} />
     </div>
   );
 }

@@ -41,6 +41,22 @@ def normalize_image_url(url: str) -> str:
     return url
 
 
+async def _read_body_limited(resp, max_bytes: int):
+    """
+    レスポンス本文を最後まで読み込む。max_bytes を超えた場合はNoneを返す。
+    ※ resp.content.read(n) は「最大n バイト」しか保証せず、最初に届いた一部だけを
+      返すことがあるため（画像が途中で切れてアイコンが真っ暗になる原因）、必ずEOFまで読む。
+    """
+    chunks = []
+    total = 0
+    async for chunk in resp.content.iter_chunked(64 * 1024):
+        total += len(chunk)
+        if total > max_bytes:
+            return None
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 async def fetch_image_bytes(session, url: str, max_bytes: int = 10 * 1024 * 1024):
     """
     指定URLから画像バイト列を取得する。Googleドライブのウイルススキャン確認ページや
@@ -55,24 +71,27 @@ async def fetch_image_bytes(session, url: str, max_bytes: int = 10 * 1024 * 1024
             if resp.status != 200:
                 return None
             content_type = resp.headers.get("Content-Type", "")
-            data = await resp.content.read(max_bytes + 1)
+            data = await _read_body_limited(resp, max_bytes)
 
-            if len(data) > max_bytes:
+            if data is None:
                 return None
 
             # Google Driveの大容量ファイル確認ページ(HTML)対策:
-            # confirm=tトークンが必要な場合、再度リクエストする
+            # confirm/uuidトークンが必要な場合、再度リクエストする
             if "text/html" in content_type and "drive.google.com" in normalized:
                 text = data.decode("utf-8", errors="ignore")
-                m = re.search(r'confirm=([0-9A-Za-z_]+)', text)
+                m = re.search(r'name="confirm" value="([0-9A-Za-z_-]+)"', text) or re.search(r'confirm=([0-9A-Za-z_-]+)', text)
+                m_uuid = re.search(r'name="uuid" value="([0-9A-Za-z_-]+)"', text)
                 m_id = re.search(r'id=([a-zA-Z0-9_-]+)', normalized)
                 if m and m_id:
-                    confirm_url = f"https://drive.google.com/uc?export=download&confirm={m.group(1)}&id={m_id.group(1)}"
+                    confirm_url = f"https://drive.usercontent.google.com/download?export=download&id={m_id.group(1)}&confirm={m.group(1)}"
+                    if m_uuid:
+                        confirm_url += f"&uuid={m_uuid.group(1)}"
                     async with session.get(confirm_url, allow_redirects=True) as resp2:
                         if resp2.status != 200:
                             return None
-                        data = await resp2.content.read(max_bytes + 1)
-                        if len(data) > max_bytes:
+                        data = await _read_body_limited(resp2, max_bytes)
+                        if data is None:
                             return None
                         content_type = resp2.headers.get("Content-Type", "")
 
@@ -84,6 +103,38 @@ async def fetch_image_bytes(session, url: str, max_bytes: int = 10 * 1024 * 1024
             return data
     except Exception as e:
         print(f"[fetch_image_bytes] Failed to fetch image from {url}: {e}")
+        return None
+
+
+def prepare_avatar_bytes(data: bytes, max_size: int = 1024):
+    """
+    取得した画像がアイコンとして使えるか(途中で切れていないか等)をPillowで検証し、
+    Discordが確実に表示できるPNGに変換する。アニメーションGIF/WebPはそのまま返す。
+    壊れた画像の場合はNoneを返す。
+    """
+    import io
+    from PIL import Image, ImageOps
+
+    try:
+        with Image.open(io.BytesIO(data)) as img:
+            if getattr(img, "is_animated", False):
+                # 全フレームを読めるか確認だけして元データを使う
+                for i in range(img.n_frames):
+                    img.seek(i)
+                    img.load()
+                return data
+
+            img.load()  # 途中で切れた画像はここで例外になる
+            img = ImageOps.exif_transpose(img)
+            # CMYK等はDiscord側で黒く表示されることがあるためRGB(A)に統一
+            img = img.convert("RGBA" if ("A" in img.getbands() or "transparency" in img.info) else "RGB")
+            img.thumbnail((max_size, max_size), Image.LANCZOS)
+
+            out = io.BytesIO()
+            img.save(out, format="PNG", optimize=True)
+            return out.getvalue()
+    except Exception as e:
+        print(f"[prepare_avatar_bytes] Invalid image data: {e}")
         return None
 
 def get_room_settings(bot, guild_id: int = None) -> dict:
@@ -181,6 +232,13 @@ DEFAULT_SETTINGS = {
     "NEW_MEMBER_ROLE_IDS": [],
     "PENDING_MEMBER_ROLE_ID": 123456789012345678,
     "INTERVIEWER_ROLE_IDS": [],
+    "INTERVIEW_MANAGER_ROLE_IDS": [],
+    "INTERVIEW_SELF_APPLY_ENABLED": True,
+    "INTERVIEW_INTRO_SOURCE_CHANNEL_IDS": [],
+    "INTERVIEW_INTRO_OUTPUT_CHANNEL_ID": None,
+    "INTERVIEW_ANNOUNCE_CHANNEL_ID": None,
+    "INTERVIEW_ANNOUNCE_TIMES": ["20:30", "21:30", "22:30", "23:30"],
+    "INTERVIEW_MANAGER_NOTIFY_CHANNEL_ID": None,
     "FREE_INN_ROLE_IDS": [],
     "EMBLEM_MANAGER_ROLE_ID": 123456789012345678,
     "EMBLEM_MASTER_ROLE_ID": 123456789012345678,
@@ -193,6 +251,12 @@ DEFAULT_SETTINGS = {
     "EVALUATION_FORUM_CHANNEL_IDS": [],
     "CURRENCY_NAME": "コイン",
     "ALLOW_PAY_TO_BOT": True,
+    "AUTO_INITIAL_ISSUE_ENABLED": False,
+    "AUTO_INITIAL_ISSUE_CHANNEL_IDS": [],
+    "AUTO_INITIAL_ISSUE_KEYWORD": "初期発行お願いします",
+    "ENTRY_INITIAL_ISSUE_ENABLED": True,
+    "ENTRY_GRANT_ROLE_IDS": [],
+    "ENTRY_REMOVE_ROLE_IDS": [],
     "GAMBLE_EMPLOYEE_ROLE_IDS": [],
     "GAMBLE_MANAGER_ROLE_IDS": [],
     "GAMBLE_MAX_BET": 100000,
@@ -432,6 +496,18 @@ def has_interviewer_role(bot, user: discord.Member):
         return True
     return False
 
+def has_interview_staff_role(bot, user: discord.Member) -> bool:
+    """運営・面接官・面接官統括のいずれかなら True（入界パネルの設置などに使う）。"""
+    if isinstance(user, discord.User) or not hasattr(user, 'roles'):
+        return False
+    if has_interviewer_role(bot, user) or has_admin_role(bot, user):
+        return True
+    manager_role_ids = get_setting(bot, "INTERVIEW_MANAGER_ROLE_IDS", user.guild.id) or []
+    if not isinstance(manager_role_ids, list):
+        manager_role_ids = [manager_role_ids]
+    user_role_ids = {str(r.id) for r in user.roles}
+    return any(str(rid) in user_role_ids for rid in manager_role_ids)
+
 def has_event_manager_role(bot, user: discord.Member):
     event_manager_role_ids = get_setting(bot, "EVENT_MANAGER_ROLE_IDS")
     if not event_manager_role_ids:
@@ -610,6 +686,39 @@ def get_new_member_roles(bot, guild: discord.Guild) -> list:
         if r:
             roles.append(r)
     return roles
+
+def _roles_from_setting(bot, guild: discord.Guild, key: str) -> list:
+    """設定に保存されたロールID（単一・複数どちらでも）から、サーバーに存在するロールだけを返す。"""
+    roles = []
+    raw = get_setting(bot, key, guild.id) or []
+    if not isinstance(raw, (list, tuple)):
+        raw = [raw]
+    for rid in raw:
+        try:
+            r = guild.get_role(int(rid))
+        except (TypeError, ValueError):
+            r = None
+        if r and r not in roles:
+            roles.append(r)
+    return roles
+
+def get_entry_grant_roles(bot, guild: discord.Guild) -> list:
+    """
+    入界手続き（入界パネル・/面接官 入界許可実行）で付与するロール一覧を返す。
+    ダッシュボードの「入場許可ロール設定」(ENTRY_GRANT_ROLE_IDS) を使い、未設定・全て見つからない場合は仮メンバーロールにする。
+    """
+    return _roles_from_setting(bot, guild, "ENTRY_GRANT_ROLE_IDS") or get_new_member_roles(bot, guild)
+
+def get_entry_remove_roles(bot, guild: discord.Guild) -> list:
+    """
+    入界手続きで外す（剥奪する）ロール一覧を返す。
+    ダッシュボードの「入場許可ロール設定」(ENTRY_REMOVE_ROLE_IDS) を使い、未設定・全て見つからない場合は入界待機者ロールにする。
+    """
+    roles = _roles_from_setting(bot, guild, "ENTRY_REMOVE_ROLE_IDS")
+    if roles:
+        return roles
+    pending = get_role_by_setting(bot, guild, "PENDING_MEMBER_ROLE_ID", PENDING_MEMBER_ROLE_NAME)
+    return [pending] if pending else []
 
 def is_new_member(bot, user: discord.Member) -> bool:
     if isinstance(user, discord.User) or not hasattr(user, 'roles'):
@@ -1252,6 +1361,9 @@ async def apply_bot_nicknames(bot):
                 import aiohttp
                 async with aiohttp.ClientSession() as session:
                     image_bytes = await fetch_image_bytes(session, icon_url)
+
+                if image_bytes:
+                    image_bytes = prepare_avatar_bytes(image_bytes)
 
                 if not image_bytes:
                     print(f"[apply_bot_icons] Failed to fetch image for {guild.name} ({guild.id}): invalid URL or not an image")

@@ -76,6 +76,19 @@ export async function listAllGuilds(authorization: string): Promise<DiscordGuild
   return all;
 }
 
+/** サーバーの全メンバー（Botを含む）。1回 1000 人ずつ取る */
+export async function fetchAllGuildMembers(guildId: string): Promise<DiscordGuildMember[]> {
+  const all: DiscordGuildMember[] = [];
+  let after = '0';
+  for (let i = 0; i < 100; i++) {
+    const page = await botRequest<DiscordGuildMember[]>(`/guilds/${guildId}/members?limit=1000&after=${after}`);
+    all.push(...page);
+    if (page.length < 1000) break;
+    after = page[page.length - 1].user.id;
+  }
+  return all;
+}
+
 export const listBotGuilds = () => listAllGuilds(botAuthorization());
 export const listUserGuilds = (accessToken: string) => listAllGuilds(`Bearer ${accessToken}`);
 

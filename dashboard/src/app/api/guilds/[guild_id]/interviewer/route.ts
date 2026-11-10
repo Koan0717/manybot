@@ -80,6 +80,23 @@ export async function POST(
       return NextResponse.json({ success: true });
     }
 
+    // 入界パネル（interview_entry）・告知パネル（interview_announce）の設置をBotに依頼する
+    if (body.action === 'post_panel') {
+      const panelType = String(body.panel_type || '');
+      if (panelType !== 'interview_entry' && panelType !== 'interview_announce') {
+        return NextResponse.json({ error: 'パネルの種類が正しくありません' }, { status: 400 });
+      }
+      const channelId = String(body.channel_id || '');
+      if (!/^\d{6,}$/.test(channelId)) {
+        return NextResponse.json({ error: 'パネルを設置するチャンネルを選択してください' }, { status: 400 });
+      }
+      const req = await pool.query(
+        `INSERT INTO panel_requests (guild_id, channel_id, panel_type) VALUES ($1, $2, $3) RETURNING id`,
+        [guildId, channelId, panelType]
+      );
+      return NextResponse.json({ success: true, sync_request_id: req.rows[0]?.id ?? null });
+    }
+
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

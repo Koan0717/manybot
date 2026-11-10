@@ -102,10 +102,24 @@ export async function ensureAntigriefSettingsSchema(pool: any) {
       `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS exempt_role_ids BIGINT[] NOT NULL DEFAULT '{}'`,
       `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS ng_keywords TEXT[] NOT NULL DEFAULT '{}'`,
       `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS admin_channel_id BIGINT`,
+      `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS bot_guard_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+      `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS bot_guard_action TEXT NOT NULL DEFAULT 'kick'`,
+      `ALTER TABLE antigrief_settings ADD COLUMN IF NOT EXISTS bot_guard_allowed_user_ids BIGINT[] NOT NULL DEFAULT '{}'`,
     ];
-    for (const sql of cols) { 
-      try { await pool.query(sql); } catch {} 
+    for (const sql of cols) {
+      try { await pool.query(sql); } catch {}
     }
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS antigrief_approved_bots (
+        guild_id BIGINT NOT NULL,
+        bot_id BIGINT NOT NULL,
+        bot_name TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL DEFAULT 'manual',
+        approved_by BIGINT,
+        approved_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (guild_id, bot_id)
+      )
+    `);
   } catch (e) {
     console.error('Failed to ensure antigrief_settings schema:', e);
   }
@@ -208,6 +222,92 @@ export async function ensureVcCoinsSettingsSchema(pool: any) {
     `);
   } catch (e) {
     console.error('Failed to ensure vc_coins_settings schema:', e);
+  }
+}
+
+/**
+ * アンケート（surveys / survey_responses）テーブルを保証する。Bot側 cogs/survey.py と同じ定義。
+ */
+export async function ensureSurveySchema(pool: any) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS surveys (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        questions JSONB NOT NULL DEFAULT '[]'::jsonb,
+        is_anonymous BOOLEAN NOT NULL DEFAULT FALSE,
+        allow_edit BOOLEAN NOT NULL DEFAULT TRUE,
+        is_open BOOLEAN NOT NULL DEFAULT TRUE,
+        closes_at TIMESTAMPTZ,
+        button_label TEXT NOT NULL DEFAULT '回答する',
+        channel_id BIGINT,
+        message_id BIGINT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS survey_responses (
+        id SERIAL PRIMARY KEY,
+        survey_id INT NOT NULL,
+        guild_id BIGINT NOT NULL,
+        user_id BIGINT NOT NULL,
+        user_name TEXT NOT NULL DEFAULT '',
+        answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (survey_id, user_id)
+      )
+    `);
+    // パネル投稿・更新リクエストでアンケートIDを渡すために使う
+    await pool.query(`ALTER TABLE panel_requests ADD COLUMN IF NOT EXISTS panel_id BIGINT`);
+  } catch (e) {
+    console.error('Failed to ensure survey schema:', e);
+  }
+}
+
+/**
+ * 評価シート記入パネル（eval_report_settings）テーブルを保証する。Bot側 cogs/eval_report.py と同じ定義。
+ */
+export async function ensureEvalReportSchema(pool: any) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS eval_report_settings (
+        guild_id BIGINT PRIMARY KEY,
+        items JSONB NOT NULL DEFAULT '[]'::jsonb,
+        output_channel_id BIGINT,
+        panel_title TEXT NOT NULL DEFAULT '',
+        panel_description TEXT NOT NULL DEFAULT '',
+        button_label TEXT NOT NULL DEFAULT ''
+      )
+    `);
+    await pool.query(`ALTER TABLE eval_report_settings ADD COLUMN IF NOT EXISTS rating_scale INT NOT NULL DEFAULT 5`);
+    // シートは1サーバー複数件。パネルはシートごとに設置する
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS eval_report_sheets (
+        id SERIAL PRIMARY KEY,
+        guild_id BIGINT NOT NULL,
+        name TEXT NOT NULL DEFAULT '',
+        items JSONB NOT NULL DEFAULT '[]'::jsonb,
+        output_channel_id BIGINT,
+        panel_title TEXT NOT NULL DEFAULT '',
+        panel_description TEXT NOT NULL DEFAULT '',
+        button_label TEXT NOT NULL DEFAULT '',
+        rating_scale INT NOT NULL DEFAULT 5,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    // 旧設定（1サーバー1件）を最初のシートとして移す。DELETE ... RETURNING で取り出すので、Botと同時に動いても二重にならない
+    await pool.query(`
+      WITH moved AS (DELETE FROM eval_report_settings RETURNING *)
+      INSERT INTO eval_report_sheets (guild_id, name, items, output_channel_id, panel_title, panel_description, button_label, rating_scale)
+      SELECT guild_id, '評価シート', items, output_channel_id, panel_title, panel_description, button_label, rating_scale FROM moved
+    `);
+    // パネル設置リクエストでシートIDを渡すために使う
+    await pool.query(`ALTER TABLE panel_requests ADD COLUMN IF NOT EXISTS panel_id BIGINT`);
+  } catch (e) {
+    console.error('Failed to ensure eval_report_settings schema:', e);
   }
 }
 
@@ -361,6 +461,8 @@ export async function ensureAllSchemas(pool: any) {
     ensureAntigriefSettingsSchema(pool),
     ensureVcCoinsSettingsSchema(pool),
     ensureVcFloatSchema(pool),
+    ensureSurveySchema(pool),
+    ensureEvalReportSchema(pool),
     ensureRoomPanelsSchema(pool),
     ensureRoleSalarySettingsSchema(pool),
   ]);

@@ -155,11 +155,16 @@ class SelfIntroRoles(commands.Cog):
 
         # 案内メッセージ作成
         if template:
+            # スマホはインラインコード（``…``）をタップするとコピーできるので、スマホ用にも並べる
+            mobile_template = template.strip().replace("``", "`​`")
             guide_text = (
                 f"🎉 {member.mention} さん、ようこそ！\n\n"
                 f"まず {intro_mention} で以下のテンプレートを使って自己紹介をお願いします📝\n"
                 f"全ての項目を埋めて送信すると、ロールが付与されます！\n\n"
-                f"```\n{template}\n```"
+                f"💻 **PCの方**\n"
+                f"```\n{template}\n```\n"
+                f"📱 **スマホの方**（タップでコピーできます）\n"
+                f"``{mobile_template}``"
             )
         else:
             guide_text = (

@@ -203,6 +203,14 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL(`/dashboard/${guildId}/gambling`, request.url));
       }
 
+      // サーバー作成（ロール・チャンネルの一括作成）はアドミンだけ
+      if (role !== 'admin' && pathname.includes('/server-build')) {
+        if (pathname.startsWith('/api/')) {
+          return NextResponse.json({ error: 'サーバー作成はアドミンだけが使えます' }, { status: 403 });
+        }
+        return NextResponse.redirect(new URL(`/dashboard/${guildId}`, request.url));
+      }
+
       if (role === 'subadmin' && pathname.includes('/accounts')) {
         if (pathname.startsWith('/api/')) {
           return NextResponse.json({ error: 'アカウント管理の権限はありません' }, { status: 403 });
