@@ -9,7 +9,6 @@ import Shop, { ShopInfo } from './Shop';
 import Gacha, { GachaInfo } from './Gacha';
 import Games, { GamesInfo } from './Games';
 import MinecraftLink from './Minecraft';
-import { isCircleActivityGuild } from '@/lib/circle';
 import { guildIconUrl, isDiscordActivity, keepMemberSessionAlive, loadMemberState, memberFetch, getActivityContext } from '@/lib/memberClient';
 
 interface LevelStat { level: number; xp: number; next_xp: number }
@@ -476,11 +475,6 @@ export default function MemberGuildPage() {
   useEffect(() => {
     if (!loadMemberState()) {
       router.replace(`/login${window.location.search}`);
-      return;
-    }
-    // サークル用サーバーのアクティビティでは「ダッシュボード設定」「サークル報告書」の画面（/member）だけを使う
-    if (isCircleActivityGuild(guildId) && getActivityContext()?.guildId === guildId) {
-      router.replace('/member');
       return;
     }
     keepMemberSessionAlive();

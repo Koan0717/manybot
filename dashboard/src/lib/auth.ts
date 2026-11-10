@@ -12,7 +12,8 @@ const jwtSecret = new TextEncoder().encode(jwtSecretStr);
 
 export interface SessionPayload {
   username: string;
-  role: 'admin' | 'shop' | 'gambling' | 'subadmin' | 'botadmin';
+  /** circle: サークル用サーバーの一般メンバー（そのサーバーのサークル報告書だけ使える。Discordログインから発行） */
+  role: 'admin' | 'shop' | 'gambling' | 'subadmin' | 'botadmin' | 'circle';
   guild_id?: string;
   bot_id?: string;
   /** Discordログインから運営ロールで入ったサブアドミン（そのときのDiscord ID） */

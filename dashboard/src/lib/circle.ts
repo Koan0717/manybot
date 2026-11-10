@@ -9,16 +9,18 @@
  */
 
 /**
- * アクティビティで開いたとき「ダッシュボード設定」「サークル報告書」の2つのボタンだけを出すサーバー。
- * 追加するときは Vercel の環境変数 NEXT_PUBLIC_CIRCLE_ACTIVITY_GUILD_IDS（カンマ区切り）でも足せる。
+ * サークル用サーバー（今は OPENEssex だけ）。Discordログインでこのサーバーを選ぶと、
+ * 管理者ロールの人には「プロフィール・ダッシュボード設定・サークル報告書」、
+ * それ以外の人には「プロフィール・サークル報告書」のボタンを出す。サークル報告書は全員が使える。
+ * 追加するときは Vercel の環境変数 NEXT_PUBLIC_CIRCLE_GUILD_IDS（カンマ区切り）でも足せる。
  */
-const CIRCLE_ACTIVITY_GUILD_IDS = [
+const CIRCLE_GUILD_IDS = [
   '1498230531123318876',
-  ...(process.env.NEXT_PUBLIC_CIRCLE_ACTIVITY_GUILD_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  ...(process.env.NEXT_PUBLIC_CIRCLE_GUILD_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
 ];
 
-export const isCircleActivityGuild = (guildId: string | null | undefined) =>
-  !!guildId && CIRCLE_ACTIVITY_GUILD_IDS.includes(String(guildId));
+export const isCircleGuild = (guildId: string | null | undefined) =>
+  !!guildId && CIRCLE_GUILD_IDS.includes(String(guildId));
 
 /** PDF の最大サイズ（Vercel のリクエスト上限 4.5MB に収まるように） */
 export const MAX_PDF_BYTES = 4 * 1024 * 1024;

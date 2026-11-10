@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 import { ArrowLeft, FileText, GraduationCap, LayoutPanelTop, Users } from 'lucide-react';
-import { getActivityContext } from '@/lib/memberClient';
+import { getActivityContext, loadMemberState } from '@/lib/memberClient';
+import { useCircleSession } from '@/lib/useCircleSession';
 
 /**
  * 大学サークル用ダッシュボード（第2のダッシュボード）。
@@ -22,14 +23,22 @@ export default function CircleLayout({ children }: { children: React.ReactNode }
     setInActivity(!!getActivityContext());
   }, []);
 
+  const session = useCircleSession();
+
   useEffect(() => {
+    // 一般メンバー（Discordログイン）は /api/guilds を使えないので、ログイン時に保存したサーバー一覧から取る
+    const fromMemberState = () => {
+      const g = loadMemberState()?.guilds.find((x) => x.id === guildId);
+      if (g) setGuild({ name: g.name, icon: g.icon ?? null });
+    };
     fetch('/api/guilds')
       .then((r) => (r.ok ? r.json() : []))
       .then((list) => {
         const g = Array.isArray(list) ? list.find((x: any) => String(x.id) === guildId) : null;
         if (g) setGuild({ name: g.name, icon: g.icon });
+        else fromMemberState();
       })
-      .catch(() => {});
+      .catch(fromMemberState);
     fetch(`/api/guilds/${guildId}/circle/settings`)
       .then((r) => (r.ok ? r.json() : null))
       .then((s) => setCircleName(s?.circle_name || ''))
@@ -43,11 +52,13 @@ export default function CircleLayout({ children }: { children: React.ReactNode }
     return () => window.removeEventListener('circle-name-changed', onChange);
   }, []);
 
+  // 送信先設定・パネル設置は管理者だけ
   const nav = [
-    { href: `/circle/${guildId}`, label: 'サークル進捗状況', icon: FileText },
-    { href: `/circle/${guildId}/recipients`, label: '送信先設定', icon: Users },
-    { href: `/circle/${guildId}/panel`, label: 'パネル設置', icon: LayoutPanelTop },
-  ];
+    { href: `/circle/${guildId}`, label: 'サークル進捗状況', icon: FileText, adminOnly: false },
+    { href: `/circle/${guildId}/recipients`, label: '送信先設定', icon: Users, adminOnly: true },
+    { href: `/circle/${guildId}/panel`, label: 'パネル設置', icon: LayoutPanelTop, adminOnly: true },
+  ].filter((n) => !n.adminOnly || (session.loaded && !session.isMember));
+  const backToMember = inActivity || session.fromDiscord;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -56,11 +67,11 @@ export default function CircleLayout({ children }: { children: React.ReactNode }
       <header className={`relative z-10 ${inActivity ? 'pt-12 md:pt-0' : ''} border-b border-slate-800/80 bg-slate-950/80 backdrop-blur`}>
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center gap-3">
           <Link
-            href={inActivity ? '/member' : '/'}
+            href={backToMember ? '/member' : '/'}
             className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white rounded-md px-2 py-1.5 hover:bg-slate-800 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">{inActivity ? 'メニュー' : 'サーバー選択'}</span>
+            <span className="hidden sm:inline">{backToMember ? 'メニュー' : 'サーバー選択'}</span>
           </Link>
           <div className="w-px h-6 bg-slate-800" />
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-900/40 flex-shrink-0">
