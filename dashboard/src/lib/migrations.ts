@@ -453,10 +453,42 @@ export async function ensureRoleSalarySettingsSchema(pool: any) {
 }
 
 /**
+ * VCトリガー (auto_vc_triggers / auto_vc_config) テーブルを保証する
+ */
+export async function ensureAutoVcSchema(pool: any) {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS auto_vc_triggers (
+        channel_id BIGINT PRIMARY KEY
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS auto_vc_config (
+        channel_id BIGINT PRIMARY KEY,
+        base_name TEXT DEFAULT '',
+        allow_rename BOOLEAN DEFAULT TRUE,
+        include_owner_name BOOLEAN DEFAULT TRUE,
+        use_numbering BOOLEAN DEFAULT FALSE,
+        allow_limit_change BOOLEAN DEFAULT TRUE,
+        show_panel BOOLEAN DEFAULT TRUE,
+        is_invite_only BOOLEAN DEFAULT FALSE,
+        invite_visible_role_ids BIGINT[] DEFAULT '{}',
+        allowed_role_ids BIGINT[] DEFAULT '{}'
+      )
+    `);
+    // 画面共有の許可（Bot の database.py と同じ列）
+    await pool.query('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS allow_stream BOOLEAN DEFAULT TRUE');
+  } catch (e) {
+    console.error('Failed to ensure auto_vc schema:', e);
+  }
+}
+
+/**
  * すべての基本スキーマを一括保証する
  */
 export async function ensureAllSchemas(pool: any) {
   await Promise.allSettled([
+    ensureAutoVcSchema(pool),
     ensureRankSettingsSchema(pool),
     ensureEvaluationSettingsSchema(pool),
     ensureEvaluationPeriodsSchema(pool),
