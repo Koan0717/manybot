@@ -41,6 +41,109 @@ class EvaluatorSheetSelectView(discord.ui.View):
         super().__init__(timeout=180)
         self.add_item(EvaluatorSheetSelect(target_user, data))
 
+def get_period_duration_days(cfg: dict) -> int:
+    try:
+        return max(1, int(cfg.get("evaluation_duration_days", 14) or 14))
+    except (TypeError, ValueError):
+        return 14
+
+
+def build_period_embed(user: discord.abc.User, period: dict | None, duration_days: int) -> discord.Embed:
+    """評価期間の表示。period が None ならボタン押下待ちの案内を出す。"""
+    if period:
+        embed = discord.Embed(
+            title="📅 評価期間",
+            description=f"{user.mention} の評価期間です。",
+            color=discord.Color.green(),
+        )
+        embed.add_field(name="開始", value=format_evaluation_datetime(period["start_time"]), inline=True)
+        embed.add_field(name="終了予定", value=format_evaluation_datetime(period["end_time"]), inline=True)
+    else:
+        embed = discord.Embed(
+            title="📅 評価期間の開始待ち",
+            description=(
+                f"{user.mention} さん、準備ができたら下の **評価期間開始** ボタンを押してください。\n"
+                f"押した時点から **{duration_days}日間** が評価期間になります。"
+            ),
+            color=discord.Color.blurple(),
+        )
+    return embed
+
+
+class EvalPeriodStartButton(discord.ui.DynamicItem[discord.ui.Button], template=r"eval_period_start:(?P<user_id>[0-9]+)"):
+    """対象の仮メンが押すと評価期間を開始するボタン。custom_id に対象ユーザーIDを持つので再起動後も動く。"""
+
+    def __init__(self, user_id: int, disabled: bool = False):
+        super().__init__(discord.ui.Button(
+            label="評価期間開始済み" if disabled else "評価期間開始",
+            emoji="▶️",
+            style=discord.ButtonStyle.secondary if disabled else discord.ButtonStyle.success,
+            custom_id=f"eval_period_start:{user_id}",
+            disabled=disabled,
+        ))
+        self.user_id = user_id
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: discord.ui.Button, match, /):
+        return cls(int(match["user_id"]))
+
+    async def callback(self, interaction: discord.Interaction):
+        bot = interaction.client
+        guild = interaction.guild
+        if guild is None:
+            return
+        # 本人のほか、評価員が代わりに押すこともできる
+        if interaction.user.id != self.user_id and not has_evaluator_role(bot, interaction.user):
+            return await interaction.response.send_message(
+                f"このボタンは <@{self.user_id}> さん専用です。", ephemeral=True
+            )
+
+        cfg = bot.get_evaluation_config(guild.id)
+        duration_days = get_period_duration_days(cfg)
+        target = guild.get_member(self.user_id) or await bot.fetch_user(self.user_id)
+
+        period = await database.get_evaluation_period(guild.id, self.user_id)
+        already_started = period is not None
+        if not already_started:
+            start_time = datetime.datetime.now(JST)
+            end_time = start_time + datetime.timedelta(days=duration_days)
+            await database.add_evaluation_period(guild.id, self.user_id, start_time, end_time)
+            period = await database.get_evaluation_period(guild.id, self.user_id) or {
+                "start_time": start_time, "end_time": end_time,
+            }
+            print(f"[Evaluation] Period started by button for {self.user_id} ({duration_days} days) by {interaction.user.id}")
+
+        view = discord.ui.View(timeout=None)
+        view.add_item(EvalPeriodStartButton(self.user_id, disabled=True))
+        await interaction.response.edit_message(
+            embed=build_period_embed(target, period, duration_days), view=view
+        )
+        await interaction.followup.send(
+            "この人の評価期間はすでに始まっています。" if already_started else "✅ 評価期間を開始しました。",
+            ephemeral=True,
+        )
+
+
+def make_period_start_view(user_id: int) -> discord.ui.View:
+    view = discord.ui.View(timeout=None)
+    view.add_item(EvalPeriodStartButton(user_id))
+    return view
+
+
+def find_period_targets(bot, guild: discord.Guild, mentions: list) -> list:
+    """メンションから評価対象（仮メン）を拾う。仮メンが1人もいなければ、Botと評価員以外のメンションを対象にする。"""
+    members = []
+    for m in mentions:
+        member = m if isinstance(m, discord.Member) else guild.get_member(m.id)
+        if member and not member.bot and member not in members:
+            members.append(member)
+    temp_role_ids = {r.id for r in get_new_member_roles(bot, guild)}
+    temp_members = [m for m in members if any(r.id in temp_role_ids for r in m.roles)]
+    if temp_members:
+        return temp_members
+    return [m for m in members if not has_evaluator_role(bot, m)]
+
+
 class EvaluationGroup(app_commands.Group):
     def __init__(self, bot):
         super().__init__(name="評価員", description="評価員専用コマンド")
@@ -53,7 +156,7 @@ class EvaluationGroup(app_commands.Group):
             description="評価対象者の評価期間管理や進捗確認を行うことができます。",
             color=discord.Color.blue()
         )
-        embed.add_field(name="1. /評価員 開始 <ユーザー> [期間(日)]", value="指定ユーザーの評価期間（デフォルト14日）を開始します。", inline=False)
+        embed.add_field(name="1. /評価員 開始 <ユーザー> [期間(日)]", value="指定ユーザーの評価期間（省略時はダッシュボードで設定した日数）を開始します。", inline=False)
         embed.add_field(name="2. /評価員 確認 <ユーザー>", value="指定ユーザーの現在の評価状況（平均点、スタンプ数、評価浮上時間など）を確認します。", inline=False)
         embed.add_field(name="3. /評価員 期間変更 <ユーザー> <追加日数>", value="指定ユーザーの評価終了予定日時を変更します（マイナス値で短縮も可能）。", inline=False)
         embed.add_field(name="4. /評価シート 登録 <ユーザー> <点数(0-10)> <スタンプ数> [コメント]", value="対象メンバーの評価を登録します。", inline=False)
@@ -69,13 +172,15 @@ class EvaluationGroup(app_commands.Group):
         return app_commands.check(predicate)
 
     @app_commands.command(name="開始", description="【評価員専用】指定したユーザーの評価期間を開始します")
-    @app_commands.describe(user="評価対象のユーザー", duration_days="評価期間の日数 (デフォルト: 14)")
-    async def start_eval(self, interaction: discord.Interaction, user: discord.Member, duration_days: int = 14):
+    @app_commands.describe(user="評価対象のユーザー", duration_days="評価期間の日数 (省略時はダッシュボードの設定日数)")
+    async def start_eval(self, interaction: discord.Interaction, user: discord.Member, duration_days: int | None = None):
         bot = self.bot
         if not has_evaluator_role(bot, interaction.user):
             return await interaction.response.send_message("この操作を行う権限がありません。", ephemeral=True)
             
         await interaction.response.defer(ephemeral=True)
+        if duration_days is None or duration_days < 1:
+            duration_days = get_period_duration_days(bot.get_evaluation_config(interaction.guild.id))
         now = datetime.datetime.now(JST)
         start_time = now
         end_time = start_time + datetime.timedelta(days=duration_days)
@@ -218,11 +323,13 @@ class Evaluation(commands.Cog):
     async def cog_load(self):
         self.bot.tree.add_command(EvaluationGroup(self.bot))
         self.bot.tree.add_command(EvaluatorSheetGroup(self.bot))
+        self.bot.add_dynamic_items(EvalPeriodStartButton)
         self.check_evaluation_deadlines.start()
 
     async def cog_unload(self):
         self.bot.tree.remove_command("評価員")
         self.bot.tree.remove_command("評価シート")
+        self.bot.remove_dynamic_items(EvalPeriodStartButton)
         self.check_evaluation_deadlines.cancel()
 
     @tasks.loop(minutes=5)
@@ -311,8 +418,14 @@ class Evaluation(commands.Cog):
             if channel.id in cfg["self_intro_channel_ids"]:
                 cfg["self_intro_channel_ids"].discard(channel.id)
                 changed = True
+            if channel.id in cfg.get("period_channel_ids", set()):
+                cfg["period_channel_ids"].discard(channel.id)
+                changed = True
             if changed:
-                await database.set_evaluation_settings(channel.guild.id, list(cfg["forum_channel_ids"]), list(cfg["self_intro_channel_ids"]))
+                await database.set_evaluation_settings(
+                    channel.guild.id, list(cfg["forum_channel_ids"]), list(cfg["self_intro_channel_ids"]),
+                    list(cfg.get("period_channel_ids", set())),
+                )
 
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
@@ -324,7 +437,7 @@ class Evaluation(commands.Cog):
         
         if has_new_role and not had_new_role:
             eval_settings = await database.get_evaluation_settings(after.guild.id)
-            if eval_settings and eval_settings.get("auto_generate_period", True):
+            if eval_settings and eval_settings.get("auto_generate_period", True) and not eval_settings.get("period_button_enabled", False):
                 existing = await database.get_evaluation_period(after.guild.id, after.id)
                 if not existing:
                     now = datetime.datetime.now(JST)
@@ -372,6 +485,54 @@ class Evaluation(commands.Cog):
                 embed.add_field(name="理由", value=reason, inline=False)
                 embed.add_field(name="実行者", value=moderator.mention if moderator else "不明", inline=False)
                 await send_log(bot, after.guild, "evaluation_failure", embed)
+
+    @commands.Cog.listener("on_message")
+    async def watch_period_sheets(self, message: discord.Message):
+        """指定チャンネルに作られた評価シートのメンション先へ、評価期間の表示（または開始ボタン）を出す。"""
+        guild = message.guild
+        if not guild or message.author.id == self.bot.user.id:
+            return
+        cfg = self.bot.get_evaluation_config(guild.id)
+        watch_ids = {int(cid) for cid in cfg.get("period_channel_ids", set())}
+        if not watch_ids:
+            return
+
+        channel = message.channel
+        if isinstance(channel, discord.Thread):
+            # フォーラムは、新しく作られた投稿の最初のメッセージだけを見る
+            if channel.parent_id not in watch_ids or message.id != channel.id:
+                return
+        elif channel.id not in watch_ids:
+            return
+
+        targets = find_period_targets(self.bot, guild, message.mentions)
+        if not targets:
+            return
+
+        duration_days = get_period_duration_days(cfg)
+        button_mode = cfg.get("period_button_enabled", False)
+        for target in targets:
+            try:
+                period = await database.get_evaluation_period(guild.id, target.id)
+                if period:
+                    await message.reply(embed=build_period_embed(target, period, duration_days), mention_author=False)
+                elif button_mode:
+                    await message.reply(
+                        content=target.mention,
+                        embed=build_period_embed(target, None, duration_days),
+                        view=make_period_start_view(target.id),
+                        mention_author=False,
+                    )
+                elif cfg.get("auto_generate_period", True):
+                    # ボタンを使わない設定なら、シートができた時点で評価期間を開始する
+                    start_time = datetime.datetime.now(JST)
+                    end_time = start_time + datetime.timedelta(days=duration_days)
+                    await database.add_evaluation_period(guild.id, target.id, start_time, end_time)
+                    period = {"start_time": start_time, "end_time": end_time}
+                    await message.reply(embed=build_period_embed(target, period, duration_days), mention_author=False)
+                    print(f"[Evaluation] Period started from sheet for {target.display_name} ({duration_days} days)")
+            except Exception as e:
+                print(f"[Evaluation Period Sheet ERROR] {target}: {e}")
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -452,11 +613,15 @@ async def create_evaluation_thread_for_user(bot, guild: discord.Guild, user: dis
         print(f"[ERROR] Failed to fetch active threads: {e}")
         active_threads = list(guild.threads)
 
-    auto_generate_period = cfg.get("auto_generate_period", True)
-    duration_days = cfg.get("evaluation_duration_days", 14)
+    duration_days = get_period_duration_days(cfg)
+    button_mode = cfg.get("period_button_enabled", False)
+    auto_generate_period = cfg.get("auto_generate_period", True) and not button_mode
 
     period = None
-    if auto_generate_period:
+    if button_mode:
+        # 開始は本人のボタン押下で行う。すでに期間があればそれを表示する
+        period = await database.get_evaluation_period(guild.id, user.id)
+    elif auto_generate_period:
         # 評価期間の取得または自動生成
         period = await database.get_evaluation_period(guild.id, user.id)
         if not period:
@@ -479,7 +644,7 @@ async def create_evaluation_thread_for_user(bot, guild: discord.Guild, user: dis
     content_lines = [
         f"**対象者:** {user.mention}",
     ]
-    if auto_generate_period and period:
+    if period:
         start_str = format_evaluation_datetime(period.get('start_time'))
         end_str = format_evaluation_datetime(period.get('end_time'))
         content_lines.append(f"**評価期間:** {start_str} ～ {end_str}")
@@ -525,6 +690,9 @@ async def create_evaluation_thread_for_user(bot, guild: discord.Guild, user: dis
             "content": content_thread,
             "reason": f"Created evaluation thread for {user.display_name}"
         }
+        if button_mode and not period:
+            thread_kwargs["embed"] = build_period_embed(user, None, duration_days)
+            thread_kwargs["view"] = make_period_start_view(user.id)
         if hasattr(forum_channel, "available_tags") and forum_channel.available_tags:
             pref_tag = next((t for t in forum_channel.available_tags if any(k in t.name for k in ["評価", "審査", "進行", "対象", "新規"])), None)
             if pref_tag:

@@ -26,14 +26,14 @@ export async function POST(request: Request, { params }: { params: { guild_id: s
     const body = await request.json();
 
     const name = String(body.name || '').trim().slice(0, 100) || DEFAULT_SHEET_NAME;
-    const { items, error } = cleanItems(body.items);
+    const ratingScale = clampScale(body.rating_scale);
+    const { items, error } = cleanItems(body.items, ratingScale);
     if (error) return NextResponse.json({ error }, { status: 400 });
     if (items.length === 0) return NextResponse.json({ error: '評価項目を1つ以上追加してください' }, { status: 400 });
     const outputChannelId = /^\d{6,}$/.test(String(body.output_channel_id || '')) ? String(body.output_channel_id) : null;
     const panelTitle = String(body.panel_title || '').trim().slice(0, 256);
     const panelDescription = String(body.panel_description || '').slice(0, 2000);
     const buttonLabel = String(body.button_label || '').trim().slice(0, 80);
-    const ratingScale = clampScale(body.rating_scale);
     const values = [JSON.stringify(items), outputChannelId, panelTitle, panelDescription, buttonLabel, ratingScale, name];
 
     const id = Number(body.id) || null;

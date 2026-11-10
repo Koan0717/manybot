@@ -12,7 +12,7 @@ export async function GET(
   try {
     await ensureEvaluationSettingsSchema(pool);
     const result = await pool.query(
-      'SELECT is_enabled, auto_generate_period, auto_fail_on_deadline, evaluation_duration_days, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1',
+      'SELECT is_enabled, auto_generate_period, auto_fail_on_deadline, evaluation_duration_days, period_button_enabled, period_channel_ids, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1',
       [guildId]
     );
 
@@ -37,6 +37,8 @@ export async function GET(
         auto_generate_period: true,
         auto_fail_on_deadline: false,
         evaluation_duration_days: 14,
+        period_button_enabled: false,
+        period_channel_ids: [],
         forum_channel_ids: [],
         self_intro_channel_ids: [],
         ENABLE_MINUS_PENALTY: enableMinusPenalty,
@@ -77,6 +79,8 @@ export async function GET(
       auto_generate_period: row.auto_generate_period !== null ? row.auto_generate_period : true,
       auto_fail_on_deadline: row.auto_fail_on_deadline !== null ? row.auto_fail_on_deadline : false,
       evaluation_duration_days: row.evaluation_duration_days !== null && row.evaluation_duration_days !== undefined ? Number(row.evaluation_duration_days) : 14,
+      period_button_enabled: row.period_button_enabled ?? false,
+      period_channel_ids: cleanIds(row.period_channel_ids || []),
       forum_channel_ids: forumChannelIds,
       self_intro_channel_ids: selfIntroChannelIds,
       ENABLE_MINUS_PENALTY: enableMinusPenalty,
@@ -99,7 +103,8 @@ export async function POST(
     const isEnabled = body.is_enabled !== undefined ? body.is_enabled : true;
     const autoGeneratePeriod = body.auto_generate_period !== undefined ? body.auto_generate_period : true;
     const autoFailOnDeadline = body.auto_fail_on_deadline !== undefined ? body.auto_fail_on_deadline : false;
-    const evaluationDurationDays = body.evaluation_duration_days !== undefined && !isNaN(Number(body.evaluation_duration_days)) ? Math.max(1, Number(body.evaluation_duration_days)) : 14;
+    const evaluationDurationDays = body.evaluation_duration_days !== undefined && !isNaN(Number(body.evaluation_duration_days)) ? Math.min(365, Math.max(1, Math.floor(Number(body.evaluation_duration_days)))) : 14;
+    const periodButtonEnabled = !!body.period_button_enabled;
 
     const cleanIds = (arr: any[]) => {
       if (!Array.isArray(arr)) return [];
@@ -110,15 +115,16 @@ export async function POST(
 
     const forumChannelIds = cleanIds(body.forum_channel_ids || []);
     const selfIntroChannelIds = cleanIds(body.self_intro_channel_ids || []);
+    const periodChannelIds = cleanIds(body.period_channel_ids || []);
     const enableMinusPenalty = body.ENABLE_MINUS_PENALTY ? 'true' : 'false';
     const minusPunishmentType = body.MINUS_PUNISHMENT_TYPE || 'evaluation_failure';
 
     await pool.query(
-      `INSERT INTO evaluation_settings (guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled, auto_generate_period, auto_fail_on_deadline, evaluation_duration_days)
-       VALUES ($1, $2::bigint[], $3::bigint[], $4, $5, $6, $7)
+      `INSERT INTO evaluation_settings (guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled, auto_generate_period, auto_fail_on_deadline, evaluation_duration_days, period_button_enabled, period_channel_ids)
+       VALUES ($1, $2::bigint[], $3::bigint[], $4, $5, $6, $7, $8, $9::bigint[])
        ON CONFLICT (guild_id)
-       DO UPDATE SET forum_channel_ids = $2::bigint[], self_intro_channel_ids = $3::bigint[], is_enabled = $4, auto_generate_period = $5, auto_fail_on_deadline = $6, evaluation_duration_days = $7`,
-      [guildId, forumChannelIds, selfIntroChannelIds, isEnabled, autoGeneratePeriod, autoFailOnDeadline, evaluationDurationDays]
+       DO UPDATE SET forum_channel_ids = $2::bigint[], self_intro_channel_ids = $3::bigint[], is_enabled = $4, auto_generate_period = $5, auto_fail_on_deadline = $6, evaluation_duration_days = $7, period_button_enabled = $8, period_channel_ids = $9::bigint[]`,
+      [guildId, forumChannelIds, selfIntroChannelIds, isEnabled, autoGeneratePeriod, autoFailOnDeadline, evaluationDurationDays, periodButtonEnabled, periodChannelIds]
     );
 
     await pool.query(

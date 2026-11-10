@@ -1030,6 +1030,12 @@ async def setup_db_schema(p):
 
             await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_fail_on_deadline BOOLEAN DEFAULT FALSE')
 
+            await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS evaluation_duration_days INT DEFAULT 14')
+
+            await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS period_button_enabled BOOLEAN DEFAULT FALSE')
+
+            await conn.execute("ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS period_channel_ids BIGINT[] DEFAULT '{}'")
+
             await conn.execute("ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS is_invite_only BOOLEAN DEFAULT FALSE")
 
             await conn.execute("ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS invite_visible_role_ids BIGINT[] DEFAULT '{}'")
@@ -3680,38 +3686,37 @@ async def remove_log_channel(guild_id: int, log_type: str):
 
 # --- 閾E蟾E邏ｹ莉九E隧穂ｾE險E螳夂ｮE送EE畑髢E謨E ---
 
+def _evaluation_settings_row_to_dict(row) -> dict:
+    """evaluation_settings の行（SELECT *）を設定 dict に変換する。古いスキーマで列が無くても既定値で埋める。"""
+    r = dict(row)
+
+    def pick(key, default):
+        v = r.get(key)
+        return default if v is None else v
+
+    return {
+        "is_enabled": pick("is_enabled", True),
+        "auto_generate_period": pick("auto_generate_period", True),
+        "auto_fail_on_deadline": pick("auto_fail_on_deadline", False),
+        "evaluation_duration_days": max(1, int(pick("evaluation_duration_days", 14))),
+        "period_button_enabled": pick("period_button_enabled", False),
+        "period_channel_ids": list(pick("period_channel_ids", [])),
+        "forum_channel_ids": list(pick("forum_channel_ids", [])),
+        "self_intro_channel_ids": list(pick("self_intro_channel_ids", [])),
+    }
+
+
 async def get_evaluation_settings(guild_id: int) -> dict:
 
     p = await get_pool(guild_id)
 
     async with p.acquire() as conn:
 
-        try:
-            row = await conn.fetchrow('SELECT is_enabled, auto_generate_period, auto_fail_on_deadline, evaluation_duration_days, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
-        except Exception:
-            try:
-                await conn.execute('ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS evaluation_duration_days INT DEFAULT 14')
-                row = await conn.fetchrow('SELECT is_enabled, auto_generate_period, auto_fail_on_deadline, evaluation_duration_days, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
-            except Exception:
-                row = await conn.fetchrow('SELECT is_enabled, auto_generate_period, auto_fail_on_deadline, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings WHERE guild_id = $1', guild_id)
+        row = await conn.fetchrow('SELECT * FROM evaluation_settings WHERE guild_id = $1', guild_id)
 
         if row:
 
-            return {
-
-                "is_enabled": row["is_enabled"] if row["is_enabled"] is not None else True,
-
-                "auto_generate_period": row["auto_generate_period"] if row["auto_generate_period"] is not None else True,
-
-                "auto_fail_on_deadline": row["auto_fail_on_deadline"] if row["auto_fail_on_deadline"] is not None else False,
-
-                "evaluation_duration_days": row["evaluation_duration_days"] if ("evaluation_duration_days" in row and row["evaluation_duration_days"] is not None) else 14,
-
-                "forum_channel_ids": row["forum_channel_ids"] or [],
-
-                "self_intro_channel_ids": row["self_intro_channel_ids"] or []
-
-            }
+            return _evaluation_settings_row_to_dict(row)
 
         return None
 
@@ -3729,28 +3734,15 @@ async def get_all_evaluation_settings() -> list[dict]:
 
             async with p.acquire() as conn:
 
-                try:
-                    rows = await conn.fetch('SELECT guild_id, is_enabled, auto_generate_period, auto_fail_on_deadline, evaluation_duration_days, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings')
-                except Exception:
-                    rows = await conn.fetch('SELECT guild_id, is_enabled, auto_generate_period, auto_fail_on_deadline, forum_channel_ids, self_intro_channel_ids FROM evaluation_settings')
+                rows = await conn.fetch('SELECT * FROM evaluation_settings')
 
-                all_settings.extend([{
+                for r in rows:
 
-                    "guild_id": r["guild_id"], 
+                    d = _evaluation_settings_row_to_dict(r)
 
-                    "is_enabled": r["is_enabled"] if r["is_enabled"] is not None else True,
+                    d["guild_id"] = r["guild_id"]
 
-                    "auto_generate_period": r["auto_generate_period"] if r["auto_generate_period"] is not None else True,
-
-                    "auto_fail_on_deadline": r["auto_fail_on_deadline"] if r["auto_fail_on_deadline"] is not None else False,
-
-                    "evaluation_duration_days": r["evaluation_duration_days"] if ("evaluation_duration_days" in r and r["evaluation_duration_days"] is not None) else 14,
-
-                    "forum_channel_ids": r["forum_channel_ids"] or [],
-
-                    "self_intro_channel_ids": r["self_intro_channel_ids"] or []
-
-                } for r in rows])
+                    all_settings.append(d)
 
         except Exception as e:
 
@@ -3760,7 +3752,8 @@ async def get_all_evaluation_settings() -> list[dict]:
 
 
 
-async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], self_intro_channel_ids: list[int], is_enabled: bool = True, auto_generate_period: bool = True, auto_fail_on_deadline: bool = False):
+async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], self_intro_channel_ids: list[int], period_channel_ids: list[int] | None = None):
+    """チャンネル一覧だけを更新する（チャンネル削除時の掃除用）。他の設定は変えない。"""
 
     p = await get_pool(guild_id)
 
@@ -3768,15 +3761,19 @@ async def set_evaluation_settings(guild_id: int, forum_channel_ids: list[int], s
 
         await conn.execute('''
 
-            INSERT INTO evaluation_settings (guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled, auto_generate_period, auto_fail_on_deadline)
+            INSERT INTO evaluation_settings (guild_id, forum_channel_ids, self_intro_channel_ids)
 
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES ($1, $2, $3)
 
             ON CONFLICT (guild_id)
 
-            DO UPDATE SET forum_channel_ids = $2, self_intro_channel_ids = $3, is_enabled = $4, auto_generate_period = $5, auto_fail_on_deadline = $6
+            DO UPDATE SET forum_channel_ids = $2, self_intro_channel_ids = $3
 
-        ''', guild_id, forum_channel_ids, self_intro_channel_ids, is_enabled, auto_generate_period, auto_fail_on_deadline)
+        ''', guild_id, forum_channel_ids, self_intro_channel_ids)
+
+        if period_channel_ids is not None:
+
+            await conn.execute('UPDATE evaluation_settings SET period_channel_ids = $2 WHERE guild_id = $1', guild_id, period_channel_ids)
 
 
 

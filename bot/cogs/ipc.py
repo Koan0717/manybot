@@ -34,19 +34,7 @@ class IPC(commands.Cog):
                         # ... Reload logic ...
                         if panel_type == "reload_eval":
                             try:
-                                s = await database.get_evaluation_settings(guild_id)
-                                if s:
-                                    self.bot.evaluation_settings[guild_id] = {
-                                        "is_enabled": s.get("is_enabled", True),
-                                        "forum_channel_ids": set(s.get("forum_channel_ids", [])),
-                                        "self_intro_channel_ids": set(s.get("self_intro_channel_ids", []))
-                                    }
-                                else:
-                                    self.bot.evaluation_settings[guild_id] = {
-                                        "is_enabled": True,
-                                        "forum_channel_ids": set(),
-                                        "self_intro_channel_ids": set()
-                                    }
+                                await self.bot.fetch_and_cache_evaluation_config(guild_id)
                                 print(f"[IPC] Reloaded evaluation settings for guild {guild_id}: {self.bot.evaluation_settings[guild_id]}")
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to reload evaluation settings for guild {guild_id}: {e}")

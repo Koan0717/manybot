@@ -11,6 +11,8 @@ import {
   MAX_ITEMS,
   MIN_RATING_SCALE,
   MAX_RATING_SCALE,
+  DEFAULT_RATING_SCALE,
+  countModals,
   newSheetDraft,
 } from '@/lib/evalReport';
 
@@ -74,7 +76,7 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
     update({ items });
   };
   const removeItem = (index: number) => update({ items: settings.items.filter((_, i) => i !== index) });
-  const addItem = () => update({ items: [...settings.items, { id: newItemId(), label: '', placeholder: '', required: true }] });
+  const addItem = () => update({ items: [...settings.items, { id: newItemId(), label: '', placeholder: '', required: true, scale: DEFAULT_RATING_SCALE }] });
 
   /** 保存して、保存後のシートを返す（失敗したら null） */
   const save = async (): Promise<Sheet | null> => {
@@ -160,9 +162,8 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
 
   const textChannels = channels.filter(c => c.type === 0 || c.type === 5);
   const outputChannels = channels.filter(c => c.type === 0 || c.type === 5 || c.type === 15);
-  // 段階ありは1項目で「段階」と「内容」の2欄を使うので1画面2項目、段階なしなら5項目まで（Bot側と同じ）
-  const perModal = settings.rating_scale ? 2 : 5;
-  const modalCount = Math.max(1, Math.ceil(settings.items.length / perModal));
+  // 段階ありの項目は「段階」と「内容」の2欄、段階なしは1欄を使い、1画面5欄まで（Bot側と同じ）
+  const modalCount = countModals(settings.items);
   const tabs: Sheet[] = settings.id ? sheets : [...sheets, settings];
 
   return (
@@ -170,9 +171,7 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
       <div>
         <h2 className="text-lg font-semibold text-white flex items-center gap-2"><FileText size={20} /> 評価シート記入パネル</h2>
         <p className="text-sm text-zinc-400 mt-1">
-          シートは複数作れて、パネルもシートごとに設置できます。評価員がパネルのボタンから「仮メンを選択 → 総評（あり・保留・なし）を選択 → {settings.rating_scale
-            ? `各項目の段階（保留・1〜${settings.rating_scale}、${settings.rating_scale}が最高）と内容を記入`
-            : '各項目の内容を記入'}」して送信すると、
+          シートは複数作れて、パネルもシートごとに設置できます。評価員がパネルのボタンから「仮メンを選択 → 総評（あり・保留・なし）を選択 → 各項目の段階（項目ごとに設定した段階数）と内容を記入」して送信すると、
           送信先チャンネルに評価シートが投稿されます。投稿には相手のアイコンが右上に表示されます。
         </p>
       </div>
@@ -250,16 +249,31 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
                 placeholder="入力欄のヒント（任意）"
                 onChange={e => updateItem(i, { placeholder: e.target.value })}
               />
-              <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer select-none md:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={item.required}
-                  onChange={e => updateItem(i, { required: e.target.checked })}
-                  className="w-4 h-4 accent-blue-600"
-                />
-                記入欄を必須にする
-                <span className="text-xs text-zinc-500">{item.required ? '（空欄では送信できません）' : '（任意：空欄のままでも送信できます）'}</span>
-              </label>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 md:col-span-2">
+                <label className="flex items-center gap-2 text-sm text-zinc-300">
+                  段階
+                  <select
+                    className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1 text-white text-sm focus:outline-none focus:border-blue-500"
+                    value={item.scale}
+                    onChange={e => updateItem(i, { scale: Number(e.target.value) })}
+                  >
+                    <option value={0}>段階なし</option>
+                    {Array.from({ length: MAX_RATING_SCALE - MIN_RATING_SCALE + 1 }, (_, n) => MIN_RATING_SCALE + n).map(n => (
+                      <option key={n} value={n}>{n}段階</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={item.required}
+                    onChange={e => updateItem(i, { required: e.target.checked })}
+                    className="w-4 h-4 accent-blue-600"
+                  />
+                  記入欄を必須にする
+                  <span className="text-xs text-zinc-500">{item.required ? '（空欄では送信できません）' : '（任意：空欄のままでも送信できます）'}</span>
+                </label>
+              </div>
             </div>
             <div className="flex flex-shrink-0">
               <button type="button" onClick={() => moveItem(i, -1)} disabled={i === 0} className="p-2 text-zinc-400 hover:text-white disabled:opacity-30"><ArrowUp size={16} /></button>
@@ -276,30 +290,14 @@ export default function EvalReportSettings({ guildId, channels }: { guildId: str
         >
           <Plus size={16} /> 項目を追加
         </button>
-        {settings.items.length > perModal && (
+        <p className="text-xs text-zinc-500">
+          段階は各項目で「保留」と 1〜段階数 から選んでもらいます（段階数の値が最高）。「段階なし」の項目は内容だけを記入します。
+        </p>
+        {modalCount > 1 && (
           <p className="text-xs text-zinc-500">
-            Discordの入力画面は1回に{settings.rating_scale ? '2項目（段階と内容）' : '5項目'}までのため、記入画面は {modalCount} 回に分かれます。
+            Discordの入力画面は1回に5欄まで（段階ありの項目は段階と内容で2欄）のため、記入画面は {modalCount} 回に分かれます。
           </p>
         )}
-      </div>
-
-      <div className="space-y-2">
-        <label className="block text-sm font-semibold text-white">段階の数</label>
-        <p className="text-xs text-zinc-400">
-          {settings.rating_scale
-            ? `各項目で「保留」と 1〜${settings.rating_scale} から選んでもらいます（${settings.rating_scale} が最高）。このシートの全項目で共通です。`
-            : '段階は使いません。記入画面にも評価シートにも段階は表示されません。'}
-        </p>
-        <select
-          className={`${inputClass} md:w-48`}
-          value={settings.rating_scale}
-          onChange={e => update({ rating_scale: Number(e.target.value) })}
-        >
-          <option value={0}>段階なし</option>
-          {Array.from({ length: MAX_RATING_SCALE - MIN_RATING_SCALE + 1 }, (_, i) => MIN_RATING_SCALE + i).map(n => (
-            <option key={n} value={n}>{n}段階</option>
-          ))}
-        </select>
       </div>
 
       <div className="space-y-2">

@@ -17,7 +17,8 @@ VERDICTS = [
     ("保留", "🟡", discord.Color.gold()),
     ("なし", "🔴", discord.Color.red()),
 ]
-# 各項目の段階は「保留」と 1〜N（N が最高）。N はダッシュボードで決め、0 なら段階なし
+# 各項目の段階は「保留」と 1〜N（N が最高）。N は項目ごとにダッシュボードで決め、0 なら段階なし。
+# 項目に scale が無い古い設定は、シートの rating_scale を使う
 DEFAULT_RATING_SCALE = 5
 MIN_RATING_SCALE = 2
 MAX_RATING_SCALE = 10
@@ -70,6 +71,14 @@ async def ensure_eval_report_schema(guild_id: int):
     return p
 
 
+def _clamp_scale(scale) -> int:
+    try:
+        n = int(scale)
+    except (TypeError, ValueError):
+        return DEFAULT_RATING_SCALE
+    return 0 if n <= 0 else min(MAX_RATING_SCALE, max(MIN_RATING_SCALE, n))
+
+
 def _normalize_sheet(row) -> dict:
     s = dict(row)
     items = s["items"]
@@ -78,19 +87,21 @@ def _normalize_sheet(row) -> dict:
             items = json.loads(items)
         except Exception:
             items = []
+    scale = s.get("rating_scale")
+    s["rating_scale"] = _clamp_scale(DEFAULT_RATING_SCALE if scale is None else scale)
     s["items"] = [
-        # required が無い古い設定は必須として扱う
-        {**i, "required": i.get("required") is not False}
+        # required が無い古い設定は必須として扱う。scale が無ければシートの段階数を使う
+        {
+            **i,
+            "required": i.get("required") is not False,
+            "scale": _clamp_scale(s["rating_scale"] if i.get("scale") is None else i.get("scale")),
+        }
         for i in (items or []) if isinstance(i, dict) and i.get("id") and i.get("label")
     ][:MAX_ITEMS]
     s["name"] = s.get("name") or DEFAULT_SHEET_NAME
     s["panel_title"] = s.get("panel_title") or DEFAULT_PANEL_TITLE
     s["panel_description"] = s.get("panel_description") or DEFAULT_PANEL_DESCRIPTION
     s["button_label"] = s.get("button_label") or DEFAULT_BUTTON_LABEL
-    scale = s.get("rating_scale")
-    if scale is None:
-        scale = DEFAULT_RATING_SCALE
-    s["rating_scale"] = 0 if int(scale) <= 0 else min(MAX_RATING_SCALE, max(MIN_RATING_SCALE, int(scale)))
     return s
 
 
@@ -135,20 +146,34 @@ def format_rating(rating: str | None, scale: int) -> str:
     return f"{'★' * n}{'☆' * max(0, scale - n)} {n} / {scale}"
 
 
-def items_per_modal(scale: int) -> int:
-    # Discord のモーダルに置ける部品は5つまで。段階ありは1項目で「段階」と「内容」の2つを使うので2項目ずつ
-    return 2 if scale else 5
+MAX_MODAL_COMPONENTS = 5
 
 
-def format_item_value(item: dict, text: str | None, rating: str | None, scale: int) -> str:
-    """項目の表示。段階なしの設定なら段階の行は出さない。"""
+def chunk_items(items: list[dict]) -> list[list[dict]]:
+    """Discord のモーダルに置ける部品は5つまで。段階ありの項目は「段階」と「内容」の2つ、段階なしは1つ使うので、
+    順番を保ったまま5つに収まるだけ詰めて画面を分ける。"""
+    chunks: list[list[dict]] = []
+    used = MAX_MODAL_COMPONENTS
+    for item in items:
+        cost = 2 if item.get("scale") else 1
+        if used + cost > MAX_MODAL_COMPONENTS:
+            chunks.append([])
+            used = 0
+        chunks[-1].append(item)
+        used += cost
+    return chunks
+
+
+def format_item_value(item: dict, text: str | None, rating: str | None) -> str:
+    """項目の表示。段階なしの項目なら段階の行は出さない。"""
     body = text or ("（未記入）" if item.get("required", True) else "（記入なし）")
+    scale = item.get("scale", 0)
     if not scale:
         return body[:1024]
     return f"**段階:** {format_rating(rating, scale)}\n{body}"[:1024]
 
 
-def build_report_embeds(target: discord.Member, evaluator: discord.Member, verdict: str, items: list[dict], answers: dict, ratings: dict, scale: int, sheet_name: str = DEFAULT_SHEET_NAME) -> list[discord.Embed]:
+def build_report_embeds(target: discord.Member, evaluator: discord.Member, verdict: str, items: list[dict], answers: dict, ratings: dict, sheet_name: str = DEFAULT_SHEET_NAME) -> list[discord.Embed]:
     """提出内容の Embed。1メッセージの合計 6000 文字制限を超えないよう、必要に応じて複数に分ける。"""
     _, emoji, color = _verdict_meta(verdict)
     first = discord.Embed(
@@ -166,7 +191,7 @@ def build_report_embeds(target: discord.Member, evaluator: discord.Member, verdi
     embeds = [first]
     for item in items:
         name = item["label"][:256]
-        value = format_item_value(item, answers.get(item["id"]), ratings.get(item["id"]), scale)
+        value = format_item_value(item, answers.get(item["id"]), ratings.get(item["id"]))
         current = embeds[-1]
         if len(current) + len(name) + len(value) > 5800 or len(current.fields) >= 25:
             current = discord.Embed(title=f"📋 {sheet_name}（続き）"[:256], color=color)
@@ -181,8 +206,8 @@ class EvalReportModal(discord.ui.Modal):
         super().__init__(title="評価内容の記入", timeout=900)
         self.form = form
         self.inputs: list[tuple[dict, discord.ui.Select | None, discord.ui.TextInput]] = []
-        scale = form.scale
         for item in chunk:
+            scale = item.get("scale", 0)
             required = item.get("required", True)
             rating_select = None
             if scale:
@@ -279,7 +304,6 @@ class EvalReportFormView(discord.ui.View):
         self.bot = bot
         self.settings = settings
         self.items: list[dict] = settings["items"]
-        self.scale: int = settings.get("rating_scale", DEFAULT_RATING_SCALE)  # 0 は段階なし
         self.evaluator_id = evaluator_id
         self.target: discord.Member | None = None
         self.verdict: str | None = None
@@ -287,11 +311,10 @@ class EvalReportFormView(discord.ui.View):
         self.ratings: dict[str, str] = {}
 
     def _chunks(self) -> list[list[dict]]:
-        size = items_per_modal(self.scale)
-        return [self.items[i:i + size] for i in range(0, len(self.items), size)]
+        return chunk_items(self.items)
 
     def _is_item_done(self, item: dict) -> bool:
-        rating_ok = not self.scale or bool(self.ratings.get(item["id"]))
+        rating_ok = not item.get("scale") or bool(self.ratings.get(item["id"]))
         text_ok = bool(self.answers.get(item["id"])) or not item.get("required", True)
         return rating_ok and text_ok
 
@@ -335,8 +358,8 @@ class EvalReportFormView(discord.ui.View):
         embed = discord.Embed(
             title=f"📋 {self.settings['name']}の記入"[:256],
             description=(
-                f"仮メンを選び、総評と各項目の段階（保留・1〜{self.scale}）・内容を書いてから「送信する」を押してください。"
-                if self.scale else
+                "仮メンを選び、総評と各項目の段階・内容を書いてから「送信する」を押してください。"
+                if any(i.get("scale") for i in self.items) else
                 "仮メンを選び、総評と各項目の内容を書いてから「送信する」を押してください。"
             ),
             color=_verdict_meta(self.verdict)[2] if self.verdict else discord.Color.blue(),
@@ -351,7 +374,7 @@ class EvalReportFormView(discord.ui.View):
         )
         for item in self.items:
             name = item["label"] if item.get("required", True) else f"{item['label']}（任意）"
-            value = format_item_value(item, self.answers.get(item["id"]), self.ratings.get(item["id"]), self.scale)
+            value = format_item_value(item, self.answers.get(item["id"]), self.ratings.get(item["id"]))
             embed.add_field(name=name[:256], value=value, inline=False)
         return embed
 
@@ -389,7 +412,7 @@ class EvalReportFormView(discord.ui.View):
 
         await interaction.response.defer()
         name = self.settings["name"]
-        embeds = build_report_embeds(self.target, interaction.user, self.verdict, self.items, self.answers, self.ratings, self.scale, name)
+        embeds = build_report_embeds(self.target, interaction.user, self.verdict, self.items, self.answers, self.ratings, name)
         try:
             if isinstance(channel, discord.ForumChannel):
                 tags = [channel.available_tags[0]] if channel.flags.require_tag and channel.available_tags else []
