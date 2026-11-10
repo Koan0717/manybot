@@ -184,6 +184,12 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL(`/dashboard/${guildId}`, request.url));
       }
 
+      // 大学サークル用ダッシュボードも自分のサーバーだけ
+      const circleGuildMatch = pathname.match(/^\/circle\/([^\/]+)/);
+      if (circleGuildMatch && circleGuildMatch[1] !== guildId) {
+        return NextResponse.redirect(new URL(`/circle/${guildId}`, request.url));
+      }
+
       if (apiGuildMatch && apiGuildMatch[1] !== guildId) {
         return NextResponse.json({ error: '他のサーバーへアクセスする権限がありません' }, { status: 403 });
       }

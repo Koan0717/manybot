@@ -123,6 +123,15 @@ class IPC(commands.Cog):
                             except Exception as e:
                                 print(f"[IPC ERROR] Failed to refresh survey panel: {e}")
 
+                        elif panel_type == "circle_report_send":
+                            # 大学サークル用ダッシュボード: 進捗レポートを送信先の人へ DM で送る
+                            from cogs.circle_report import send_circle_report, mark_circle_report_failed
+                            if req.get("panel_id"):
+                                try:
+                                    await send_circle_report(self.bot, guild, int(req["panel_id"]))
+                                except Exception as e:
+                                    print(f"[IPC ERROR] Failed to send circle report {req['panel_id']}: {e}")
+                                    await mark_circle_report_failed(guild_id, int(req["panel_id"]), "Botの送信処理でエラーが起きました")
                         elif panel_type == "reload_call_board":
                             try:
                                 print(f"[IPC] Processed reload_call_board for guild {guild_id}")

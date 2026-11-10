@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Search,
   Pickaxe,
+  GraduationCap,
 } from 'lucide-react';
 
 const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || '';
@@ -62,6 +63,9 @@ export default function Home() {
   const [mcOverview, setMcOverview] = useState<McOverview | null>(null);
   const [mcLoading, setMcLoading] = useState(false);
   const [mcError, setMcError] = useState('');
+
+  // 大学サークル用（選択するとサーバーを選んで第2のダッシュボード /circle/[guild_id] へ）
+  const [circleOpen, setCircleOpen] = useState(false);
 
   useEffect(() => {
     fetch('/api/system/status')
@@ -439,6 +443,72 @@ export default function Home() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ============================================
+            大学サークル用 セクション
+        ============================================ */}
+        <div className="mt-8 mb-10">
+          <div className="mb-4">
+            <div className="font-tech text-[10px] tracking-[0.2em] text-sky-400/80 uppercase mb-0.5">
+              Circle System // Report
+            </div>
+            <h2 className="font-mecha text-base font-bold text-white flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+              大学サークル用
+            </h2>
+          </div>
+
+          <button
+            onClick={() => setCircleOpen((v) => !v)}
+            className={`w-full mecha-clip-sm flex items-center gap-4 p-4 text-left border transition-all ${
+              circleOpen
+                ? 'bg-sky-950/30 border-sky-700/60'
+                : 'bg-black/40 border-zinc-800 hover:border-sky-800/60 hover:bg-sky-950/20'
+            }`}
+          >
+            <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-sky-600/60 to-indigo-900/60 border border-sky-700/40 flex items-center justify-center flex-shrink-0">
+              <GraduationCap className="w-5 h-5 text-sky-100" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-mecha font-bold text-sm text-white">サークル報告書ダッシュボード</div>
+              <div className="font-tech text-[11px] text-zinc-500">
+                サークル進捗状況（題名・内容・PDF）/ 指定した人へ Discord で送信
+              </div>
+            </div>
+            <ChevronRight className={`w-4 h-4 text-zinc-500 transition-transform flex-shrink-0 ${circleOpen ? 'rotate-90' : ''}`} />
+          </button>
+
+          {circleOpen && (
+            <div className="mt-3 bg-neutral-900/80 border border-sky-900/30 mecha-clip shadow-[0_0_25px_-10px_rgba(14,165,233,0.3)] p-5">
+              <div className="font-tech text-[11px] text-zinc-500 mb-3">サークルのサーバーを選んでください</div>
+              {loading ? (
+                <div className="text-center py-6 text-zinc-500 flex items-center justify-center gap-2 font-tech text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin text-sky-500" /> 読み込み中...
+                </div>
+              ) : guilds.length === 0 ? (
+                <div className="font-tech text-sm text-zinc-500 text-center py-4">参加しているサーバーが見つかりません。</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {guilds.map((g) => (
+                    <button
+                      key={g.id}
+                      onClick={() => router.push(`/circle/${g.id}`)}
+                      className="group flex items-center gap-3 rounded-lg bg-black/40 hover:bg-sky-950/30 border border-zinc-800 hover:border-sky-700/50 px-3 py-2.5 text-left transition-all"
+                    >
+                      {g.icon ? (
+                        <img src={`https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png`} alt="" className="w-8 h-8 rounded-full flex-shrink-0" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold flex-shrink-0">{g.name.charAt(0)}</div>
+                      )}
+                      <span className="font-mecha text-sm font-bold text-zinc-200 group-hover:text-white truncate flex-1">{g.name}</span>
+                      <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-sky-400 flex-shrink-0" />
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
