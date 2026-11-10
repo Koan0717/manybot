@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { isCircleActivityGuild } from '@/lib/circle';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
@@ -377,9 +378,12 @@ export default function DashboardLayout({
 
           <div className="pt-4 border-t border-zinc-800/80 mt-auto flex-shrink-0 space-y-2">
             {fromDiscord && (
-              <Link href={`/member/${guildId}`} className="font-tech text-xs text-zinc-500 hover:text-cyan-400 flex items-center gap-2 transition-colors">
+              <Link
+                href={isCircleActivityGuild(guildId) ? '/member' : `/member/${guildId}`}
+                className="font-tech text-xs text-zinc-500 hover:text-cyan-400 flex items-center gap-2 transition-colors"
+              >
                 <ChevronLeft className="w-4 h-4" />
-                プロフィールに戻る
+                {isCircleActivityGuild(guildId) ? 'メニューに戻る' : 'プロフィールに戻る'}
               </Link>
             )}
             {!isSubAccount && (

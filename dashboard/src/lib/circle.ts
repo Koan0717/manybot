@@ -8,6 +8,18 @@
  * Bot 側（bot/cogs/circle_report.py）が送信先の人に DM で送る。テーブル定義は Bot 側と同じ。
  */
 
+/**
+ * アクティビティで開いたとき「ダッシュボード設定」「サークル報告書」の2つのボタンだけを出すサーバー。
+ * 追加するときは Vercel の環境変数 NEXT_PUBLIC_CIRCLE_ACTIVITY_GUILD_IDS（カンマ区切り）でも足せる。
+ */
+const CIRCLE_ACTIVITY_GUILD_IDS = [
+  '1498230531123318876',
+  ...(process.env.NEXT_PUBLIC_CIRCLE_ACTIVITY_GUILD_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
+];
+
+export const isCircleActivityGuild = (guildId: string | null | undefined) =>
+  !!guildId && CIRCLE_ACTIVITY_GUILD_IDS.includes(String(guildId));
+
 /** PDF の最大サイズ（Vercel のリクエスト上限 4.5MB に収まるように） */
 export const MAX_PDF_BYTES = 4 * 1024 * 1024;
 export const MAX_TITLE = 200;
@@ -43,6 +55,16 @@ export async function ensureCircleSchema(pool: any) {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_circle_reports_guild ON circle_reports (guild_id, id DESC)`);
+  // 報告書パネルの表示内容 / パネルから書かれた報告書の作成者（Bot 側と同じ）
+  for (const sql of [
+    `ALTER TABLE circle_settings ADD COLUMN IF NOT EXISTS panel_title TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE circle_settings ADD COLUMN IF NOT EXISTS panel_description TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE circle_settings ADD COLUMN IF NOT EXISTS panel_button_label TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE circle_reports ADD COLUMN IF NOT EXISTS author_id BIGINT`,
+    `ALTER TABLE circle_reports ADD COLUMN IF NOT EXISTS author_name TEXT`,
+  ]) {
+    await pool.query(sql);
+  }
   // 送信リクエストでレポートIDを渡すために使う（アンケートと同じ列）
   await pool.query(`
     CREATE TABLE IF NOT EXISTS panel_requests (
@@ -67,13 +89,20 @@ export const toCircleReportJson = (row: any) => ({
   send_status: (row.send_status || 'none') as 'none' | 'pending' | 'sent' | 'partial' | 'failed',
   send_results: Array.isArray(row.send_results) ? row.send_results : [],
   last_sent_at: row.last_sent_at ? new Date(row.last_sent_at).toISOString() : null,
+  author_id: row.author_id ? String(row.author_id) : null,
+  author_name: row.author_name || null,
   created_at: row.created_at ? new Date(row.created_at).toISOString() : null,
   updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : null,
 });
 
 /** SELECT で pdf_data（重い）を除いた列 */
 export const REPORT_COLUMNS =
-  'id, guild_id, title, content, pdf_name, pdf_size, send_status, send_results, last_sent_at, created_at, updated_at';
+  'id, guild_id, title, content, pdf_name, pdf_size, send_status, send_results, last_sent_at, created_at, updated_at, author_id, author_name';
+
+/** 報告書パネルの既定の文言（Bot 側 cogs/circle_report.py と同じ） */
+export const DEFAULT_PANEL_TITLE = '📝 サークル進捗報告';
+export const DEFAULT_PANEL_DESCRIPTION = '下のボタンから、サークルの進捗状況の報告書（題名・内容・PDF）を書いて提出できます。';
+export const DEFAULT_PANEL_BUTTON_LABEL = '報告書を書く';
 
 /** PDF かどうかをファイル先頭のマジックナンバーで確認する */
 export const isPdf = (buf: Buffer) => buf.length >= 5 && buf.subarray(0, 5).toString('latin1') === '%PDF-';

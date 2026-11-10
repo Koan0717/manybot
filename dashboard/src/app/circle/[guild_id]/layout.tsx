@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
-import { ArrowLeft, FileText, GraduationCap, Users } from 'lucide-react';
+import { ArrowLeft, FileText, GraduationCap, LayoutPanelTop, Users } from 'lucide-react';
+import { getActivityContext } from '@/lib/memberClient';
 
 /**
  * 大学サークル用ダッシュボード（第2のダッシュボード）。
@@ -14,6 +15,12 @@ export default function CircleLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const [guild, setGuild] = useState<{ name: string; icon: string | null } | null>(null);
   const [circleName, setCircleName] = useState('');
+  // Discord アクティビティから来たときは、サーバー選択ではなく「ダッシュボード設定 / サークル報告書」の画面へ戻る
+  const [inActivity, setInActivity] = useState(false);
+
+  useEffect(() => {
+    setInActivity(!!getActivityContext());
+  }, []);
 
   useEffect(() => {
     fetch('/api/guilds')
@@ -39,20 +46,21 @@ export default function CircleLayout({ children }: { children: React.ReactNode }
   const nav = [
     { href: `/circle/${guildId}`, label: 'サークル進捗状況', icon: FileText },
     { href: `/circle/${guildId}/recipients`, label: '送信先設定', icon: Users },
+    { href: `/circle/${guildId}/panel`, label: 'パネル設置', icon: LayoutPanelTop },
   ];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.10),transparent_60%)]" />
 
-      <header className="relative z-10 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur">
+      <header className={`relative z-10 ${inActivity ? 'pt-12 md:pt-0' : ''} border-b border-slate-800/80 bg-slate-950/80 backdrop-blur`}>
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center gap-3">
           <Link
-            href="/"
+            href={inActivity ? '/member' : '/'}
             className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white rounded-md px-2 py-1.5 hover:bg-slate-800 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">サーバー選択</span>
+            <span className="hidden sm:inline">{inActivity ? 'メニュー' : 'サーバー選択'}</span>
           </Link>
           <div className="w-px h-6 bg-slate-800" />
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-900/40 flex-shrink-0">

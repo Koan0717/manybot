@@ -27,6 +27,7 @@ interface Report {
   send_status: SendStatus;
   send_results: SendResult[];
   last_sent_at: string | null;
+  author_name: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -405,6 +406,7 @@ export default function CircleReportsPage() {
                   </div>
                   <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5">
                     <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3" /> 作成 {formatDate(r.created_at)}</span>
+                    {r.author_name && <span>作成者 {r.author_name}（パネルから提出）</span>}
                     {r.last_sent_at && <span>最終送信 {formatDate(r.last_sent_at)}</span>}
                   </div>
                   {r.content && (

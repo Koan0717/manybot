@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Loader2, LogOut, Server, Settings, User } from 'lucide-react';
+import { ChevronRight, GraduationCap, Loader2, LogOut, Server, Settings, User } from 'lucide-react';
 import { MemberState, clearMemberState, getActivityContext, guildIconUrl, keepMemberSessionAlive, loadMemberState, markLoggedOut, memberFetch } from '@/lib/memberClient';
+import { isCircleActivityGuild } from '@/lib/circle';
 
 export default function MemberHome() {
   const router = useRouter();
@@ -14,6 +15,9 @@ export default function MemberHome() {
   const [adminCache, setAdminCache] = useState<Record<string, boolean>>({});
   const [entering, setEntering] = useState(false);
   const [error, setError] = useState('');
+  // サークル用サーバーでアクティビティを開いたとき: 「ダッシュボード設定」「サークル報告書」の2つだけを出す
+  const [circleGuildId, setCircleGuildId] = useState<string | null>(null);
+  const [entered, setEntered] = useState<'dashboard' | 'circle' | null>(null);
 
   useEffect(() => {
     const s = loadMemberState();
@@ -27,6 +31,10 @@ export default function MemberHome() {
     // サーバーの通話で開いたならそのサーバーの画面へそのまま進む
     const ctx = getActivityContext();
     if (!ctx) return;
+    if (isCircleActivityGuild(ctx.guildId)) {
+      setCircleGuildId(ctx.guildId);
+      return;
+    }
     // 自動で進むのはアクティビティを開いた最初の1回だけ（「別のサーバーを選ぶ」で戻ってきたときは進まない）
     try {
       if (sessionStorage.getItem('member_activity_autonav')) return;
@@ -81,10 +89,11 @@ export default function MemberHome() {
     else router.push(`/member/${guildId}`);
   };
 
-  // 管理ダッシュボードへ（そのサーバーだけのサブアドミンとして入る）
-  const enterDashboard = async (guildId: string) => {
+  // 管理ダッシュボードへ（そのサーバーだけのサブアドミンとして入る）。target が 'circle' ならサークル報告書へ
+  const enterDashboard = async (guildId: string, target: 'dashboard' | 'circle' = 'dashboard') => {
     setError('');
     setEntering(true);
+    setEntered(target);
     try {
       const res = await memberFetch(`/api/member/guilds/${guildId}/admin`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
@@ -97,7 +106,10 @@ export default function MemberHome() {
         localStorage.setItem('dashboard_session', data.token);
       } catch {}
       // Cookie が使えない環境でも入れるよう、専用ログインと同じくトークンをURLでも渡す
-      const url = new URL(data.redirect || `/dashboard/${guildId}`, window.location.href);
+      const url = new URL(
+        target === 'circle' ? `/circle/${guildId}` : data.redirect || `/dashboard/${guildId}`,
+        window.location.href
+      );
       url.searchParams.set('session_token', data.token);
       window.location.href = url.pathname + url.search;
     } catch {
@@ -114,6 +126,64 @@ export default function MemberHome() {
 
   if (!state) {
     return <main className="min-h-screen bg-zinc-950" />;
+  }
+
+  if (circleGuildId) {
+    const guild = state.guilds.find((g) => g.id === circleGuildId);
+    const icon = guild ? guildIconUrl(guild) : null;
+    return (
+      <main className="min-h-screen bg-zinc-950 text-white p-4 md:p-8 flex flex-col">
+        <div className="max-w-md w-full mx-auto">
+          <header className="flex items-center gap-3 mb-10">
+            <img src={state.user.avatar_url} alt="" className="w-11 h-11 rounded-full ring-2 ring-zinc-800" />
+            <div className="min-w-0 flex-1">
+              <div className="text-xs text-zinc-500">Discordでログイン中</div>
+              <div className="font-bold truncate">{state.user.name}</div>
+            </div>
+            <button
+              onClick={logout}
+              className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg px-3 py-2 transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" /> ログアウト
+            </button>
+          </header>
+
+          <div className="flex flex-col items-center text-center mb-8">
+            {icon ? (
+              <img src={icon} alt="" className="w-16 h-16 rounded-full ring-2 ring-zinc-800 mb-3" />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 flex items-center justify-center text-2xl font-bold mb-3">
+                {(guild?.name || '?').charAt(0)}
+              </div>
+            )}
+            <h1 className="text-xl font-bold">{guild?.name || 'サーバー'}</h1>
+          </div>
+
+          {error && (
+            <div className="bg-red-950/60 border border-red-800/60 text-red-300 px-4 py-3 rounded-xl text-sm mb-4">{error}</div>
+          )}
+
+          <div className="grid gap-3">
+            <button
+              onClick={() => enterDashboard(circleGuildId, 'dashboard')}
+              disabled={entering}
+              className="flex items-center justify-center gap-2 py-4 rounded-xl font-semibold bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-50 transition-colors"
+            >
+              {entering && entered === 'dashboard' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Settings className="w-4 h-4" />}
+              ダッシュボード設定
+            </button>
+            <button
+              onClick={() => enterDashboard(circleGuildId, 'circle')}
+              disabled={entering}
+              className="flex items-center justify-center gap-2 py-4 rounded-xl font-semibold bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 disabled:opacity-50 transition-colors"
+            >
+              {entering && entered === 'circle' ? <Loader2 className="w-4 h-4 animate-spin" /> : <GraduationCap className="w-4 h-4" />}
+              サークル報告書
+            </button>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
