@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { ensureAutoVcSchema } from '@/lib/migrations';
 
 // Discordのチャンネルを取得するヘルパー関数
 async function getGuildChannels(guildId: string, token: string) {
@@ -27,8 +28,8 @@ export async function GET(
     const channelIds = channels.map((c: any) => c.id);
 
     const pool = await getPool(guildId); // DBプール取得 (Postgres)
-    // 画面共有の許可（Bot の database.py と同じ列。Botが古くても使えるようにここでも追加する）
-    await pool.query('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS allow_stream BOOLEAN DEFAULT TRUE').catch(() => {});
+    // テーブルや画面共有の許可列が無ければ作る（Botが未起動・古くても使えるように）
+    await ensureAutoVcSchema(pool);
     
     // DBから全トリガーを取得
     const triggersRes = await pool.query('SELECT channel_id FROM auto_vc_triggers');
@@ -88,7 +89,7 @@ export async function POST(
   try {
     const data = await request.json(); // Array of triggers
     const pool = await getPool(guildId);
-    await pool.query('ALTER TABLE auto_vc_config ADD COLUMN IF NOT EXISTS allow_stream BOOLEAN DEFAULT TRUE').catch(() => {});
+    await ensureAutoVcSchema(pool);
 
     // 古いトリガーを削除するために、まずこのサーバーの現在のトリガーを取得
     const token = process.env.DISCORD_BOT_TOKEN;
