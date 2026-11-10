@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { CheckCircle2, Hash, Loader2, Save, Send } from 'lucide-react';
+import { Check, CheckCircle2, Hash, Loader2, Megaphone, MessagesSquare, Save, Search, Send, Volume2, X } from 'lucide-react';
 
 interface Channel {
   id: string;
@@ -13,8 +13,17 @@ interface Channel {
   parent_id: string | null;
 }
 
-// テキストチャンネル・アナウンスチャンネルだけに置ける
-const POSTABLE_TYPES = [0, 5];
+// メッセージを送れるチャンネル: テキスト(0)・アナウンス(5)・ボイス(2)・ステージ(13)のチャット
+const POSTABLE_TYPES = [0, 5, 2, 13];
+// 一覧には出すが選べないもの: フォーラム(15)・メディア(16)は投稿（スレッド）を作らないと書き込めない
+const UNPOSTABLE_TYPES: Record<number, string> = { 15: 'フォーラムには設置できません', 16: 'メディアチャンネルには設置できません' };
+
+const channelIcon = (type: number) => {
+  if (type === 2 || type === 13) return <Volume2 className="w-4 h-4 flex-shrink-0" />;
+  if (type === 5) return <Megaphone className="w-4 h-4 flex-shrink-0" />;
+  if (type === 15 || type === 16) return <MessagesSquare className="w-4 h-4 flex-shrink-0" />;
+  return <Hash className="w-4 h-4 flex-shrink-0" />;
+};
 
 export default function CirclePanelPage() {
   const { guild_id: guildId } = useParams<{ guild_id: string }>();
@@ -23,6 +32,7 @@ export default function CirclePanelPage() {
   const [buttonLabel, setButtonLabel] = useState('');
   const [channels, setChannels] = useState<Channel[]>([]);
   const [channelId, setChannelId] = useState('');
+  const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<'save' | 'post' | null>(null);
   const [posted, setPosted] = useState<'pending' | 'done' | 'timeout' | null>(null);
@@ -43,12 +53,18 @@ export default function CirclePanelPage() {
       .finally(() => setLoading(false));
   }, [guildId]);
 
-  // カテゴリごとに並べる
+  // 検索に一致するチャンネルをカテゴリごとに並べる（カテゴリ名で検索すると、その中のチャンネルが全部出る）
   const grouped = useMemo(() => {
     const categories = new Map(channels.filter((c) => c.type === 4).map((c) => [c.id, c]));
-    const postable = channels.filter((c) => POSTABLE_TYPES.includes(c.type));
+    const q = query.trim().toLowerCase();
+    const listed = channels.filter((c) => {
+      if (!POSTABLE_TYPES.includes(c.type) && !(c.type in UNPOSTABLE_TYPES)) return false;
+      if (!q) return true;
+      const cat = c.parent_id ? categories.get(c.parent_id) : undefined;
+      return c.name.toLowerCase().includes(q) || c.id === q || !!cat?.name.toLowerCase().includes(q);
+    });
     const groups = new Map<string, { name: string; position: number; items: Channel[] }>();
-    for (const c of postable) {
+    for (const c of listed) {
       const cat = c.parent_id ? categories.get(c.parent_id) : undefined;
       const key = cat?.id ?? '';
       if (!groups.has(key)) groups.set(key, { name: cat?.name ?? 'カテゴリなし', position: cat ? cat.position : -1, items: [] });
@@ -56,8 +72,18 @@ export default function CirclePanelPage() {
     }
     return Array.from(groups.values())
       .sort((a, b) => a.position - b.position)
-      .map((g) => ({ ...g, items: g.items.sort((a, b) => a.position - b.position) }));
-  }, [channels]);
+      // 同じカテゴリ内では Discord と同じく、テキスト系 → ボイス系の順
+      .map((g) => ({
+        ...g,
+        items: g.items.sort((a, b) => {
+          const va = a.type === 2 || a.type === 13 ? 1 : 0;
+          const vb = b.type === 2 || b.type === 13 ? 1 : 0;
+          return va - vb || a.position - b.position;
+        }),
+      }));
+  }, [channels, query]);
+
+  const selected = channels.find((c) => c.id === channelId) || null;
 
   // Bot がパネルを置き終わるのを待つ（最大30秒）
   const waitForBot = async (requestId: number) => {
@@ -174,22 +200,69 @@ export default function CirclePanelPage() {
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-3">
             <h2 className="text-sm font-semibold">設置先チャンネル</h2>
+            {selected ? (
+              <div className="flex items-center gap-2 rounded-lg bg-sky-500/10 ring-1 ring-sky-500/40 px-3 py-2.5 text-sm">
+                <span className="text-sky-300">{channelIcon(selected.type)}</span>
+                <span className="flex-1 truncate font-semibold">{selected.name}</span>
+                <button
+                  onClick={() => setChannelId('')}
+                  aria-label="選択を解除"
+                  className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:text-white hover:bg-slate-700"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">下の一覧から選んでください（チャンネル名・カテゴリ名で検索できます）</p>
+            )}
+
             <div className="relative">
-              <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <select
-                value={channelId}
-                onChange={(e) => setChannelId(e.target.value)}
-                className={`${inputCls} pl-9 appearance-none`}
-              >
-                <option value="">チャンネルを選択...</option>
-                {grouped.map((g) => (
-                  <optgroup key={g.name + g.position} label={g.name}>
-                    {g.items.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="チャンネル名・カテゴリ名で検索"
+                className={`${inputCls} pl-9`}
+              />
+            </div>
+
+            <div className="max-h-80 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 p-1">
+              {grouped.length === 0 ? (
+                <div className="text-center text-xs text-slate-500 py-6">
+                  {channels.length === 0 ? 'チャンネルを取得できませんでした' : `「${query}」に一致するチャンネルはありません`}
+                </div>
+              ) : (
+                grouped.map((g) => (
+                  <div key={g.name + g.position} className="mb-1">
+                    <div className="px-2 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500 truncate">{g.name}</div>
+                    {g.items.map((c) => {
+                      const blocked = UNPOSTABLE_TYPES[c.type];
+                      const active = c.id === channelId;
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => !blocked && setChannelId(c.id)}
+                          disabled={!!blocked}
+                          title={blocked || undefined}
+                          className={`w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
+                            active
+                              ? 'bg-sky-500/20 text-sky-100'
+                              : blocked
+                                ? 'text-slate-600 cursor-not-allowed'
+                                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          <span className={active ? 'text-sky-300' : 'text-slate-500'}>{channelIcon(c.type)}</span>
+                          <span className="flex-1 truncate">{c.name}</span>
+                          {blocked && <span className="text-[10px] text-slate-600 flex-shrink-0">{blocked}</span>}
+                          {active && <Check className="w-4 h-4 text-sky-300 flex-shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))
+              )}
             </div>
             <button
               onClick={() => submit(true)}

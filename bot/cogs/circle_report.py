@@ -213,6 +213,15 @@ class CircleReportPanelView(discord.ui.View):
             return
         await interaction.response.send_modal(CircleReportModal())
 
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item):
+        # 入力画面を開けなかったときも、押した本人にだけ知らせる
+        print(f"[CircleReport] failed to open form: {error}")
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ 入力画面を開けませんでした。時間をおいてもう一度お試しください。", ephemeral=True)
+        except Exception:
+            pass
+
 
 class CircleReportModal(discord.ui.Modal, title="サークル進捗報告"):
     def __init__(self):
