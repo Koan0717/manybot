@@ -40,40 +40,34 @@ class EconomyBot(commands.Bot):
         self.antigrief_settings_cache = {} # {guild_id: {"categories": set, "channels": set, "exempt_roles": set, "admin_channel_id": int|None, "ng_rules": list(未読込なら無し), "bot_guard_enabled": bool(未読込なら無し), "bot_guard_action": str, "bot_guard_allowed_users": set, "approved_bots": set}}
         self.bot_guard_reviews = {}    # {(guild_id, bot_id): asyncio.Task}（審査中・処分済みのBot）
 
+    @staticmethod
+    def build_evaluation_cache(data: dict | None) -> dict:
+        """DB の評価設定（無ければ None）からキャッシュ用の dict を作る。"""
+        data = data or {}
+        return {
+            "is_enabled": data.get("is_enabled", True),
+            "auto_generate_period": data.get("auto_generate_period", True),
+            "auto_fail_on_deadline": data.get("auto_fail_on_deadline", False),
+            "evaluation_duration_days": data.get("evaluation_duration_days", 14),
+            "period_button_enabled": data.get("period_button_enabled", False),
+            "period_channel_ids": set(data.get("period_channel_ids", []) or []),
+            "forum_channel_ids": set(data.get("forum_channel_ids", []) or []),
+            "self_intro_channel_ids": set(data.get("self_intro_channel_ids", []) or []),
+        }
+
     def get_evaluation_config(self, guild_id: int) -> dict:
         if guild_id not in self.evaluation_settings:
             forum_vals = get_setting(self, "EVALUATION_FORUM_CHANNEL_IDS") or []
             forum_ids = forum_vals if isinstance(forum_vals, list) else ([forum_vals] if forum_vals else [])
-            self.evaluation_settings[guild_id] = {
-                "is_enabled": True,
-                "auto_generate_period": True,
-                "auto_fail_on_deadline": False,
-                "evaluation_duration_days": 14,
-                "forum_channel_ids": set(forum_ids),
-                "self_intro_channel_ids": set(get_setting(self, "SELF_INTRO_CHANNEL_IDS") or [])
-            }
+            self.evaluation_settings[guild_id] = self.build_evaluation_cache({
+                "forum_channel_ids": forum_ids,
+                "self_intro_channel_ids": get_setting(self, "SELF_INTRO_CHANNEL_IDS") or [],
+            })
         return self.evaluation_settings[guild_id]
 
     async def fetch_and_cache_evaluation_config(self, guild_id: int) -> dict:
         data = await database.get_evaluation_settings(guild_id)
-        if data:
-            self.evaluation_settings[guild_id] = {
-                "is_enabled": data.get("is_enabled", True),
-                "auto_generate_period": data.get("auto_generate_period", True),
-                "auto_fail_on_deadline": data.get("auto_fail_on_deadline", False),
-                "evaluation_duration_days": data.get("evaluation_duration_days", 14),
-                "forum_channel_ids": set(data.get("forum_channel_ids", [])),
-                "self_intro_channel_ids": set(data.get("self_intro_channel_ids", []))
-            }
-        else:
-            self.evaluation_settings[guild_id] = {
-                "is_enabled": True,
-                "auto_generate_period": True,
-                "auto_fail_on_deadline": False,
-                "evaluation_duration_days": 14,
-                "forum_channel_ids": set(),
-                "self_intro_channel_ids": set()
-            }
+        self.evaluation_settings[guild_id] = self.build_evaluation_cache(data)
         return self.evaluation_settings[guild_id]
 
     def get_rank_config(self, guild_id: int) -> dict:
@@ -226,11 +220,7 @@ class EconomyBot(commands.Bot):
         try:
             db_eval_settings = await database.get_all_evaluation_settings()
             for s in db_eval_settings:
-                self.evaluation_settings[s["guild_id"]] = {
-                    "is_enabled": s.get("is_enabled", True),
-                    "forum_channel_ids": set(s["forum_channel_ids"]),
-                    "self_intro_channel_ids": set(s["self_intro_channel_ids"])
-                }
+                self.evaluation_settings[s["guild_id"]] = self.build_evaluation_cache(s)
         except Exception as e:
             print(f"[ERROR] Failed to load evaluation settings from DB: {e}")
 

@@ -74,6 +74,8 @@ export async function ensureEvaluationSettingsSchema(pool: any) {
       `ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_generate_period BOOLEAN DEFAULT TRUE`,
       `ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS auto_fail_on_deadline BOOLEAN DEFAULT FALSE`,
       `ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS evaluation_duration_days INT DEFAULT 14`,
+      `ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS period_button_enabled BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE evaluation_settings ADD COLUMN IF NOT EXISTS period_channel_ids BIGINT[] DEFAULT '{}'`,
     ];
     for (const sql of cols) { 
       try { await pool.query(sql); } catch {} 

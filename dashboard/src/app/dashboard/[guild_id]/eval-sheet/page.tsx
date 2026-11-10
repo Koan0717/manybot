@@ -13,6 +13,9 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
     is_enabled: true,
     auto_generate_period: true,
     auto_fail_on_deadline: false,
+    evaluation_duration_days: 14,
+    period_button_enabled: false,
+    period_channel_ids: [],
     forum_channel_ids: [],
     self_intro_channel_ids: [],
     ENABLE_MINUS_PENALTY: false,
@@ -32,6 +35,9 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
           is_enabled: settingsData.is_enabled ?? true,
           auto_generate_period: settingsData.auto_generate_period ?? true,
           auto_fail_on_deadline: settingsData.auto_fail_on_deadline ?? false,
+          evaluation_duration_days: settingsData.evaluation_duration_days ?? 14,
+          period_button_enabled: settingsData.period_button_enabled ?? false,
+          period_channel_ids: settingsData.period_channel_ids ?? [],
           forum_channel_ids: settingsData.forum_channel_ids ?? [],
           self_intro_channel_ids: settingsData.self_intro_channel_ids ?? [],
           ENABLE_MINUS_PENALTY: settingsData.ENABLE_MINUS_PENALTY ?? false,
@@ -195,6 +201,68 @@ export default function EvalSheetSettings({ params }: { params: { guild_id: stri
               multiple={true}
             />
           </div>
+        </div>
+      </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold text-white">評価期間開始設定</h2>
+          <p className="text-sm text-zinc-400">評価期間の長さと、評価期間をいつ始めるかを設定します。</p>
+        </div>
+
+        <div className="flex flex-col p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50 space-y-2">
+          <label className="text-base font-semibold text-white">評価期間（日数）</label>
+          <p className="text-sm text-zinc-400">評価期間を開始してから終了するまでの日数です（1〜365日、初期値は14日＝2週間）。</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={settings.evaluation_duration_days}
+              onChange={(e) => handleChange('evaluation_duration_days', e.target.value === '' ? '' : Number(e.target.value))}
+              onBlur={() => {
+                const n = Math.floor(Number(settings.evaluation_duration_days));
+                handleChange('evaluation_duration_days', Number.isFinite(n) ? Math.min(365, Math.max(1, n)) : 14);
+              }}
+              className="w-28 bg-zinc-900 border border-zinc-700 rounded-lg p-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
+            />
+            <span className="text-zinc-300">日間</span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+          <div>
+            <h3 className="text-base font-semibold text-white">「評価期間開始」ボタンで開始する</h3>
+            <p className="text-sm text-zinc-400">
+              ONにすると、評価シートに「評価期間開始」ボタンを出し、仮メン本人（または評価員）が押した時点から評価期間が始まります。
+              ONの間は、仮メンロール付与時やシート作成時の自動開始は行いません。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleChange('period_button_enabled', !settings.period_button_enabled)}
+            className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${settings.period_button_enabled ? 'bg-blue-600' : 'bg-zinc-700'}`}
+          >
+            <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${settings.period_button_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-white">
+            評価シートのチャンネル (テキスト・フォーラム、複数選択可)
+          </label>
+          <p className="text-xs text-zinc-400 mb-2">
+            ここで選んだテキストチャンネルへの投稿や、フォーラムの新しい投稿でメンションされた仮メンに、評価期間を表示します。
+            まだ評価期間が始まっていなければ、ボタンがONなら「評価期間開始」ボタンを出し、OFFなら「評価期間の自動設定」がONのときにその場で評価期間を開始して表示します。
+          </p>
+          <ChannelSelect
+            label="評価シートのチャンネル"
+            placeholder="チャンネルを選択..."
+            value={settings.period_channel_ids}
+            onChange={(val: any) => handleChange('period_channel_ids', val)}
+            channels={channels.filter(c => c.type === 0 || c.type === 5 || c.type === 15)}
+            multiple={true}
+          />
         </div>
       </div>
 
