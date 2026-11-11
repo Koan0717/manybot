@@ -139,6 +139,33 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      <Card title="🍃 どう森機能" description="このサーバーで ManyBot のどう森機能（/釣り・/ショップ・浮上チケットなど）を動かすかどうかです。">
+        {(() => {
+          const on = settings.doumori_enabled === true || settings.doumori_enabled === 'true';
+          return (
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm">
+                {on ? (
+                  <span className="font-bold text-leaf-700">✅ 有効：このサーバーでどう森のコマンドと浮上計測が動きます</span>
+                ) : (
+                  <span className="font-bold text-amber-600">⏸ 無効：コマンドを使うと「有効になっていません」と表示されます</span>
+                )}
+                <p className="text-xs text-leaf-500 mt-1">切り替えたら「保存する」を押してください。</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => update('doumori_enabled', !on)}
+                className={`relative w-14 h-8 rounded-full transition-colors flex-shrink-0 ${on ? 'bg-leaf-500' : 'bg-gray-300'}`}
+                aria-pressed={on}
+                aria-label="どう森機能を有効にする"
+              >
+                <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-all ${on ? 'left-7' : 'left-1'}`} />
+              </button>
+            </div>
+          );
+        })()}
+      </Card>
+
       <Card title="🎫 浮上・チケット獲得" description="VC・チャットの浮上時間を計測して図鑑チケットを付与する条件です。">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -233,7 +260,7 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      <Card title="🪙 生き物売却 (ベル換算)" description="/売却 コマンドでの重複生き物の売却額です。">
+      <Card title="🪙 生き物売却 (鯖内通貨)" description="/売却 コマンドでの重複生き物の売却額です（ManyBot の鯖内通貨で受け取ります）。">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
             <label className="text-xs text-leaf-600 block mb-1">COMMON</label>

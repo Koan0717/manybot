@@ -1,22 +1,20 @@
 import { NextResponse } from 'next/server';
 import { getDoumoriPool, errorStatus } from '@/lib/doumori/db';
 import { DEFAULT_RANKS } from '@/lib/doumori/settings';
-import { isSuperAdmin } from '@/lib/doumori/auth';
 
 export const dynamic = 'force-dynamic';
 
 type Ctx = { params: { guild_id: string } };
 
-// 階級マスタ（doumori_ranks_master）には guild_id が無く、そのDBを使う全サーバーで共通。
-// サーバー専用DBならそのサーバーだけの設定になるが、旧どう森DB（共有）の場合は全サーバーに影響する。
+// 階級マスタ（doumori_ranks_master）には guild_id が無いが、サーバー専用DBに置くのでサーバーごとの設定になる。
 
 export async function GET(_request: Request, { params }: Ctx) {
   try {
-    const { pool, source } = await getDoumoriPool(params.guild_id);
+    const { pool } = await getDoumoriPool(params.guild_id);
     const result = await pool.query(
       'SELECT level, name, required_miles, color, role_name FROM doumori_ranks_master ORDER BY level ASC'
     );
-    return NextResponse.json({ ranks: result.rows.length === 0 ? DEFAULT_RANKS : result.rows, source });
+    return NextResponse.json({ ranks: result.rows.length === 0 ? DEFAULT_RANKS : result.rows });
   } catch (error: any) {
     console.error('GET doumori/ranks error:', error);
     return NextResponse.json({ error: error.message, ranks: DEFAULT_RANKS }, { status: errorStatus(error) });
@@ -25,14 +23,7 @@ export async function GET(_request: Request, { params }: Ctx) {
 
 export async function POST(request: Request, { params }: Ctx) {
   try {
-    const { pool, source } = await getDoumoriPool(params.guild_id);
-    // 共有DBのときは全サーバーに影響するので、サーバー単位のサブアカウントには変更させない
-    if (source === 'legacy' && !(await isSuperAdmin(request))) {
-      return NextResponse.json(
-        { error: 'このサーバーは共有の旧どう森DBを使っているため、階級設定は全体管理者だけが変更できます' },
-        { status: 403 }
-      );
-    }
+    const { pool } = await getDoumoriPool(params.guild_id);
     const { ranks } = await request.json();
     if (!Array.isArray(ranks)) {
       return NextResponse.json({ error: 'ranks配列が必要です' }, { status: 400 });

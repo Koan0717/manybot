@@ -27,7 +27,7 @@ export async function POST(request: Request) {
         },
         {
           name: '📖 🔀 💰 図鑑・両替・売却',
-          value: '・**【魚図鑑】/【虫図鑑】**: 各図鑑と完成率を確認\n・**【両替】**: マイルを図鑑チケットに両替 (100pt ➔ 1枚)\n・**【ダブり売却】**: 重複した生き物をまとめてベルに換金',
+          value: '・**【魚図鑑】/【虫図鑑】**: 各図鑑と完成率を確認\n・**【両替】**: マイルを図鑑チケットに両替\n・**【ダブり売却】**: 重複した生き物をまとめて鯖内通貨に換金',
           inline: false,
         },
         {
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
           inline: false,
         },
       ],
-      footer: { text: '🍃 どうぶつの森林 Bot | Dashboard連携' },
+      footer: { text: '🍃 どうぶつの森林' },
       timestamp: new Date().toISOString(),
     };
 
@@ -44,36 +44,36 @@ export async function POST(request: Request) {
       {
         type: 1,
         components: [
-          { type: 2, style: 1, custom_id: 'btn_fish', label: '🎣 魚を釣る' },
-          { type: 2, style: 3, custom_id: 'btn_bug', label: '🦋 虫を捕まえる' },
-          { type: 2, style: 2, custom_id: 'btn_shop', label: '🏪 タヌキショップ' },
+          { type: 2, style: 1, custom_id: 'doumori:panel:fish', label: '🎣 魚を釣る' },
+          { type: 2, style: 3, custom_id: 'doumori:panel:bug', label: '🦋 虫を捕まえる' },
+          { type: 2, style: 2, custom_id: 'doumori:panel:shop', label: '🏪 タヌキショップ' },
         ],
       },
       {
         type: 1,
         components: [
-          { type: 2, style: 1, custom_id: 'btn_miles', label: '🌟 マイル確認' },
-          { type: 2, style: 3, custom_id: 'btn_mission', label: '📅 ミッション' },
-          { type: 2, style: 2, custom_id: 'btn_diy', label: '🛠️ DIY作業台' },
-          { type: 2, style: 4, custom_id: 'btn_rankup', label: '⬆️ 階級アップ' },
+          { type: 2, style: 1, custom_id: 'doumori:panel:miles', label: '🌟 マイル確認' },
+          { type: 2, style: 3, custom_id: 'doumori:panel:mission', label: '📅 ミッション' },
+          { type: 2, style: 2, custom_id: 'doumori:panel:diy', label: '🛠️ DIY作業台' },
+          { type: 2, style: 4, custom_id: 'doumori:panel:rankup', label: '⬆️ 階級アップ' },
         ],
       },
       {
         type: 1,
         components: [
-          { type: 2, style: 1, custom_id: 'btn_fishbook', label: '📖 魚図鑑' },
-          { type: 2, style: 3, custom_id: 'btn_bugbook', label: '📖 虫図鑑' },
-          { type: 2, style: 2, custom_id: 'btn_exchange', label: '🔀 両替' },
-          { type: 2, style: 4, custom_id: 'btn_sell', label: '💰 ダブり売却 (ベル)' },
+          { type: 2, style: 1, custom_id: 'doumori:panel:fishbook', label: '📖 魚図鑑' },
+          { type: 2, style: 3, custom_id: 'doumori:panel:bugbook', label: '📖 虫図鑑' },
+          { type: 2, style: 2, custom_id: 'doumori:panel:exchange', label: '🔀 両替' },
+          { type: 2, style: 4, custom_id: 'doumori:panel:sell', label: '💰 ダブり売却' },
         ],
       },
       {
         type: 1,
         components: [
-          { type: 2, style: 1, custom_id: 'btn_card', label: '🃏 住民カード' },
-          { type: 2, style: 2, custom_id: 'btn_profile', label: '📊 プロフィール' },
-          { type: 2, style: 2, custom_id: 'btn_leaderboard', label: '🏆 ランキング' },
-          { type: 2, style: 2, custom_id: 'btn_help', label: '❓ ヘルプ' },
+          { type: 2, style: 1, custom_id: 'doumori:panel:card', label: '🃏 住民カード' },
+          { type: 2, style: 2, custom_id: 'doumori:panel:profile', label: '📊 プロフィール' },
+          { type: 2, style: 2, custom_id: 'doumori:panel:leaderboard', label: '🏆 ランキング' },
+          { type: 2, style: 2, custom_id: 'doumori:panel:help', label: '❓ ヘルプ' },
         ],
       },
     ];

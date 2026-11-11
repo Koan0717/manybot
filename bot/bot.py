@@ -6,7 +6,6 @@ import datetime
 import asyncio
 from dotenv import load_dotenv
 import database
-from command_sync import sync_guild_commands, doumori_guild_ids
 from keep_alive import keep_alive
 from helpers import (
     JST,
@@ -291,6 +290,7 @@ class EconomyBot(commands.Bot):
             "cogs.eval_report",
             "cogs.interview_announce",
             "cogs.circle_report",
+            "cogs.doumori",
         ]
         for cog in cogs_to_load:
             try:
@@ -303,7 +303,8 @@ class EconomyBot(commands.Bot):
             # Sync to the specific guild to avoid the 50240 Entry Point global error
             sync_guild_id = int(os.getenv("SYNC_GUILD_ID", "1500185499929804983"))
             guild = discord.Object(id=sync_guild_id)
-            await sync_guild_commands(self, guild)
+            self.tree.copy_global_to(guild=guild)
+            await self.tree.sync(guild=guild)
             print(f"[OK] Synced commands to guild {sync_guild_id} successfully.")
         except Exception as e:
             print(f"[ERROR] Failed to sync slash commands: {e}")
@@ -344,10 +345,6 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             "・必要な権限（ロールの管理、メッセージの管理、チャンネルの管理等）がBotに付与されているか確認してください。"
         )
     elif isinstance(error, app_commands.CommandNotFound):
-        # どう森サーバーでは、ManyBot に無いコマンドは同じアプリで動くどう森BOTのもの。
-        # ここで返信するとどう森BOTの返信とぶつかるので、何もしない。
-        if interaction.guild_id in doumori_guild_ids():
-            return
         guild_cmds = list(interaction.client.tree._guild_commands.get(interaction.guild_id, {}).keys())
         global_cmds = list(interaction.client.tree._global_commands.keys())
         error_msg = f"❌ コマンドが見つかりませんでした: `{error}`\n\n[DEBUG DATA]\nGuild ID: {interaction.guild_id}\nGuild keys: {guild_cmds}\nGlobal keys: {global_cmds}"
@@ -391,7 +388,8 @@ async def check_command_enabled(interaction: discord.Interaction):
 async def on_guild_join(guild: discord.Guild):
     """新規サーバーに参加した際、自動的にスラッシュコマンドを同期します"""
     try:
-        synced = await sync_guild_commands(bot, guild)
+        bot.tree.copy_global_to(guild=guild)
+        synced = await bot.tree.sync(guild=guild)
         print(f"[OK] Automatically synced {len(synced)} commands to new guild: {guild.name} ({guild.id})")
     except Exception as e:
         print(f"[ERROR] Failed to auto-sync commands to new guild {guild.name} ({guild.id}): {e}")
@@ -422,7 +420,8 @@ async def on_ready():
     synced_count = 0
     for guild in bot.guilds:
         try:
-            await sync_guild_commands(bot, guild)
+            bot.tree.copy_global_to(guild=guild)
+            await bot.tree.sync(guild=guild)
             synced_count += 1
         except Exception as e:
             print(f"[ERROR] Failed to sync commands to guild {guild.name} ({guild.id}): {e}")
@@ -499,7 +498,8 @@ async def on_voice_state_update(member, before, after):
 async def sync_guild(ctx):
     """【運営用】スラッシュコマンドを現在のサーバー限定で即時同期します"""
     try:
-        synced = await sync_guild_commands(bot, ctx.guild)
+        bot.tree.copy_global_to(guild=ctx.guild)
+        synced = await bot.tree.sync(guild=ctx.guild)
         await ctx.send(f"✅ このサーバー限定でコマンドを {len(synced)} 個同期しました。\n（※すぐに使えるようになります。念のためCtrl+Rで再読み込みしてください）")
     except Exception as e:
         await ctx.send(f"❌ エラーが発生しました: {e}")

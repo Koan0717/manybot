@@ -21,7 +21,7 @@ import {
 /**
  * どう森BOT用ダッシュボード（第2のダッシュボード）。
  * サーバー選択画面の「どう森BOT」から入る。メインの /dashboard とは別のレイアウト・配色にしている。
- * データはどう森BOT本体と同じDB（DOUMORI_DATABASE_URL）を直接読み書きする。
+ * データはメインダッシュボードで登録したサーバー専用DBに置き、ManyBot のどう森機能（bot/cogs/doumori.py）も同じDBを使う。
  */
 export default function DoumoriLayout({ children }: { children: React.ReactNode }) {
   const { guild_id: guildId } = useParams<{ guild_id: string }>();
@@ -30,7 +30,7 @@ export default function DoumoriLayout({ children }: { children: React.ReactNode 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [guildName, setGuildName] = useState('');
   const [isSubAccount, setIsSubAccount] = useState(false);
-  const [config, setConfig] = useState<{ db_source: 'guild' | 'legacy' | null; bot_active: boolean } | null>(null);
+  const [config, setConfig] = useState<{ db_source: 'guild' | null } | null>(null);
   const [configLoaded, setConfigLoaded] = useState(false);
 
   useEffect(() => {
@@ -78,7 +78,7 @@ export default function DoumoriLayout({ children }: { children: React.ReactNode 
           <h1 className="text-xl font-black mb-3">初期設定が必要です</h1>
           <p className="text-sm text-leaf-600 leading-relaxed mb-6">
             {guildName ? <strong>{guildName}</strong> : 'このサーバー'} にはまだデータベースが登録されていません。<br />
-            メインダッシュボードの「データベース設定」で、このサーバー専用のデータベースを登録してください。登録すると、どう森BOTもそのデータベースを使います。
+            メインダッシュボードの「データベース設定」で、このサーバー専用のデータベースを登録してください。どう森の設定とデータはそのデータベースに保存されます。
           </p>
           <div className="flex flex-col gap-2">
             <Link
@@ -149,14 +149,8 @@ export default function DoumoriLayout({ children }: { children: React.ReactNode 
             <div className="mb-4 flex-shrink-0 space-y-1.5">
               <div className="flex items-center gap-2 text-[11px] text-leaf-600 bg-leaf-50 border border-leaf-200 rounded-lg px-2.5 py-1.5">
                 <Database className="w-3.5 h-3.5 flex-shrink-0" />
-                {config.db_source === 'guild' ? 'サーバー専用DBを使用中' : '旧どう森DB（共有）を使用中'}
+                サーバー専用DBを使用中
               </div>
-              {!config.bot_active && (
-                <div className="flex items-start gap-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
-                  このサーバーではどう森BOTが動いていません（DOUMORI_GUILD_ID に未登録）
-                </div>
-              )}
             </div>
           )}
 

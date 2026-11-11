@@ -1,8 +1,6 @@
 /**
- * どう森BOT用の Discord API 呼び出し。
- *
- * どう森BOTは ManyBot と同じトークン（同じアプリ）で動かすので、ManyBot のトークンを使う。
- * 総合操作パネルのボタン（btn_fish など）は ManyBot と同じアプリに届き、どう森BOTのプロセスが処理する。
+ * どう森機能用の Discord API 呼び出し（ManyBot のトークンを使う）。
+ * 総合操作パネルのボタン（doumori:panel:*）は ManyBot のどう森機能（bot/cogs/doumori.py）が処理する。
  */
 const API = 'https://discord.com/api/v10';
 
@@ -22,16 +20,6 @@ async function getList(path: string): Promise<any[]> {
 
 export const fetchGuildChannels = (guildId: string) => getList(`/guilds/${guildId}/channels`);
 export const fetchGuildRoles = (guildId: string) => getList(`/guilds/${guildId}/roles`);
-
-/**
- * どう森の機能を動かすサーバー。どう森BOT本体・ManyBot と同じ環境変数 DOUMORI_GUILD_ID（カンマ区切り）で、
- * 未設定ならどう森サーバー。
- */
-export const doumoriGuildIds = () =>
-  (process.env.DOUMORI_GUILD_ID || '1526696870724894780')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => /^\d+$/.test(s));
 
 export async function sendChannelMessage(channelId: string, payload: any) {
   const token = botToken();

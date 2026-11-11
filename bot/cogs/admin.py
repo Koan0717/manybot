@@ -5,7 +5,6 @@ import datetime
 import asyncio
 import re
 import database
-from command_sync import sync_guild_commands
 import server_template
 from helpers import (
     JST, get_setting, get_role_by_setting, get_new_member_roles, has_admin_role, is_admin, is_admin_or_interviewer, is_admin_or_banker, send_log,
@@ -1032,7 +1031,8 @@ class Admin(commands.Cog):
     async def sync_commands(self, ctx):
         await ctx.send("コマンドを同期しています...")
         try:
-            synced = await sync_guild_commands(self.bot, ctx.guild)
+            self.bot.tree.copy_global_to(guild=ctx.guild)
+            synced = await self.bot.tree.sync(guild=ctx.guild)
             await ctx.send(f"このサーバーに {len(synced)} 個のコマンドを同期しました！\n※これで即座にDiscordへ反映されるはずです。")
         except Exception as e:
             await ctx.send(f"同期中にエラーが発生しました: {e}")

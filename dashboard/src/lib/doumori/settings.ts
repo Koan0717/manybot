@@ -1,4 +1,7 @@
 export const DEFAULT_SETTINGS: Record<string, any> = {
+  // 0. このサーバーでどう森機能を使うか（ManyBot の bot/doumori/db.py と同じ既定値）
+  doumori_enabled: false,
+
   // 1. 浮上・チケット獲得システム
   ticket_required_minutes: 60,
   ticket_chat_activity_seconds: 60,

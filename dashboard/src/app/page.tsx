@@ -43,12 +43,8 @@ interface McOverview {
 }
 
 interface DoumoriOverview {
-  /** どう森BOTが動くサーバー（環境変数 DOUMORI_GUILD_ID） */
-  active_guild_ids: string[];
   /** メインダッシュボードでサーバー専用DBが登録済みのサーバー */
   dedicated_db_guild_ids: string[];
-  /** 旧どう森DB（DOUMORI_DATABASE_URL）があるか */
-  legacy_db_configured: boolean;
 }
 
 export default function Home() {
@@ -98,7 +94,7 @@ export default function Home() {
       .finally(() => setDoumoriLoading(false));
   }, [doumoriOpen, doumoriOverview]);
 
-  // サーバー一覧（サークルと同じく ManyBot が参加している全サーバー）。どう森BOTが動くサーバーを先頭に
+  // サーバー一覧（サークルと同じく ManyBot が参加している全サーバー）。専用DB登録済みのサーバーを先頭に
   const doumoriGuilds = guilds
     .map((g) => {
       const id = String(g.id);
@@ -106,11 +102,10 @@ export default function Home() {
         id,
         name: g.name as string,
         icon: (g.icon ?? null) as string | null,
-        active: !!doumoriOverview?.active_guild_ids.includes(id),
         dedicatedDb: !!doumoriOverview?.dedicated_db_guild_ids.includes(id),
       };
     })
-    .sort((a, b) => Number(b.active) - Number(a.active));
+    .sort((a, b) => Number(b.dedicatedDb) - Number(a.dedicatedDb));
 
   useEffect(() => {
     fetch('/api/system/status')
@@ -625,11 +620,8 @@ export default function Home() {
                           <div className="min-w-0 flex-1">
                             <div className="font-mecha text-sm font-bold text-zinc-200 group-hover:text-white truncate">{g.name}</div>
                             <div className="flex flex-wrap gap-1.5 mt-0.5 font-tech text-[10px]">
-                              {g.active && <span className="text-lime-400">● BOT稼働中</span>}
                               {g.dedicatedDb ? (
-                                <span className="text-zinc-400">専用DB</span>
-                              ) : doumoriOverview?.legacy_db_configured ? (
-                                <span className="text-zinc-500">旧どう森DB</span>
+                                <span className="text-lime-400">● 専用DB登録済み</span>
                               ) : (
                                 <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> DB未設定</span>
                               )}

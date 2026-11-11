@@ -69,8 +69,7 @@ export default function RanksPage() {
             階級・ランクアップ設定
           </h1>
           <p className="text-sm text-leaf-500 mt-1">住民が昇格する階級ステップとその条件を設定します。</p>
-          <p className="text-xs text-amber-600 mt-1">※ 階級設定はデータベース単位です。サーバー専用DBならこのサーバーだけ、旧どう森DB（共有）なら共有している全サーバー共通になります。</p>
-        </div>
+                  </div>
         <div className="flex items-center gap-2">
           <button onClick={fetchRanks} disabled={loading || saving} className="bg-white border border-leaf-200 hover:bg-leaf-50 text-leaf-700 px-4 py-2.5 rounded-xl text-sm flex items-center gap-2">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
