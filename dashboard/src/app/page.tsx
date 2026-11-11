@@ -17,6 +17,8 @@ import {
   Search,
   Pickaxe,
   GraduationCap,
+  Leaf,
+  AlertTriangle,
 } from 'lucide-react';
 
 const clientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID || '';
@@ -38,6 +40,11 @@ interface McOverview {
     last_heartbeat_at: string | null;
     join_leave_log: boolean;
   }[];
+}
+
+interface DoumoriOverview {
+  /** メインダッシュボードでサーバー専用DBが登録済みのサーバー */
+  dedicated_db_guild_ids: string[];
 }
 
 export default function Home() {
@@ -66,6 +73,39 @@ export default function Home() {
 
   // 大学サークル用（選択するとサーバーを選んで第2のダッシュボード /circle/[guild_id] へ）
   const [circleOpen, setCircleOpen] = useState(false);
+
+  // どう森BOT用（選択するとサーバーを選んで第2のダッシュボード /doumori/[guild_id] へ）
+  const [doumoriOpen, setDoumoriOpen] = useState(false);
+  const [doumoriOverview, setDoumoriOverview] = useState<DoumoriOverview | null>(null);
+  const [doumoriLoading, setDoumoriLoading] = useState(false);
+  const [doumoriError, setDoumoriError] = useState('');
+
+  useEffect(() => {
+    if (!doumoriOpen || doumoriOverview) return;
+    setDoumoriLoading(true);
+    fetch('/api/doumori-overview', { cache: 'no-store' })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        setDoumoriOverview(data);
+        setDoumoriError('');
+      })
+      .catch((e) => setDoumoriError(`設定状況を取得できませんでした: ${e.message}`))
+      .finally(() => setDoumoriLoading(false));
+  }, [doumoriOpen, doumoriOverview]);
+
+  // サーバー一覧（サークルと同じく ManyBot が参加している全サーバー）。専用DB登録済みのサーバーを先頭に
+  const doumoriGuilds = guilds
+    .map((g) => {
+      const id = String(g.id);
+      return {
+        id,
+        name: g.name as string,
+        icon: (g.icon ?? null) as string | null,
+        dedicatedDb: !!doumoriOverview?.dedicated_db_guild_ids.includes(id),
+      };
+    })
+    .sort((a, b) => Number(b.dedicatedDb) - Number(a.dedicatedDb));
 
   useEffect(() => {
     fetch('/api/system/status')
@@ -452,7 +492,7 @@ export default function Home() {
         {/* ============================================
             大学サークル用 セクション
         ============================================ */}
-        <div className="mt-8 mb-10">
+        <div className="mt-8">
           <div className="mb-4">
             <div className="font-tech text-[10px] tracking-[0.2em] text-sky-400/80 uppercase mb-0.5">
               Circle System // Report
@@ -510,6 +550,89 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ============================================
+            どう森BOT セクション
+        ============================================ */}
+        <div className="mt-8 mb-10">
+          <div className="mb-4">
+            <div className="font-tech text-[10px] tracking-[0.2em] text-lime-400/80 uppercase mb-0.5">
+              Doumori System // Island
+            </div>
+            <h2 className="font-mecha text-base font-bold text-white flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-lime-500"></span>
+              どう森BOT
+            </h2>
+          </div>
+
+          <button
+            onClick={() => setDoumoriOpen((v) => !v)}
+            className={`w-full mecha-clip-sm flex items-center gap-4 p-4 text-left border transition-all ${
+              doumoriOpen
+                ? 'bg-lime-950/30 border-lime-700/60'
+                : 'bg-black/40 border-zinc-800 hover:border-lime-800/60 hover:bg-lime-950/20'
+            }`}
+          >
+            <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-lime-600/60 to-green-900/60 border border-lime-700/40 flex items-center justify-center flex-shrink-0">
+              <Leaf className="w-5 h-5 text-lime-100" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-mecha font-bold text-sm text-white">どう森BOT ダッシュボード</div>
+              <div className="font-tech text-[11px] text-zinc-500">
+                浮上特典・採集 / デイリーミッション / 階級 / マイル手動操作 / 総合パネル送信
+              </div>
+            </div>
+            <ChevronRight className={`w-4 h-4 text-zinc-500 transition-transform flex-shrink-0 ${doumoriOpen ? 'rotate-90' : ''}`} />
+          </button>
+
+          {doumoriOpen && (
+            <div className="mt-3 bg-neutral-900/80 border border-lime-900/30 mecha-clip shadow-[0_0_25px_-10px_rgba(132,204,22,0.3)] p-5">
+              {doumoriLoading || loading ? (
+                <div className="text-center py-6 text-zinc-500 flex items-center justify-center gap-2 font-tech text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin text-lime-500" /> 読み込み中...
+                </div>
+              ) : doumoriError ? (
+                <div className="font-tech text-sm text-red-300">{doumoriError}</div>
+              ) : (
+                <>
+                  <div className="font-tech text-[11px] text-zinc-500 mb-3">
+                    どう森の設定をするサーバーを選んでください（メインダッシュボードの「データベース設定」で登録したDBを使います）
+                  </div>
+                  {doumoriGuilds.length === 0 ? (
+                    <div className="font-tech text-sm text-zinc-500 text-center py-4">参加しているサーバーが見つかりません。</div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {doumoriGuilds.map((g) => (
+                        <button
+                          key={g.id}
+                          onClick={() => router.push(`/doumori/${g.id}`)}
+                          className="group flex items-center gap-3 rounded-lg bg-black/40 hover:bg-lime-950/30 border border-zinc-800 hover:border-lime-700/50 px-3 py-2.5 text-left transition-all"
+                        >
+                          {g.icon ? (
+                            <img src={`https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png`} alt="" className="w-8 h-8 rounded-full flex-shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold flex-shrink-0">{g.name.charAt(0)}</div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="font-mecha text-sm font-bold text-zinc-200 group-hover:text-white truncate">{g.name}</div>
+                            <div className="flex flex-wrap gap-1.5 mt-0.5 font-tech text-[10px]">
+                              {g.dedicatedDb ? (
+                                <span className="text-lime-400">● 専用DB登録済み</span>
+                              ) : (
+                                <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> DB未設定</span>
+                              )}
+                            </div>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-lime-400 flex-shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

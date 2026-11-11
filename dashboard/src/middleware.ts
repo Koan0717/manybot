@@ -213,6 +213,12 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL(`/circle/${guildId}`, request.url));
       }
 
+      // どう森BOT用ダッシュボードも自分のサーバーだけ
+      const doumoriGuildMatch = pathname.match(/^\/doumori\/([^\/]+)/);
+      if (doumoriGuildMatch && doumoriGuildMatch[1] !== guildId) {
+        return NextResponse.redirect(new URL(`/doumori/${guildId}`, request.url));
+      }
+
       if (apiGuildMatch && apiGuildMatch[1] !== guildId) {
         return NextResponse.json({ error: '他のサーバーへアクセスする権限がありません' }, { status: 403 });
       }

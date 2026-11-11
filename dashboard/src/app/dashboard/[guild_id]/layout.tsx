@@ -210,7 +210,14 @@ export default function DashboardLayout({
       .filter(section => section.items.length > 0),
   })).filter(g => g.sections.length > 0);
 
+  // マイクラシステムはサーバー選択画面の「マイクラシステム」から入る独立した画面にする。
+  // メインのダッシュボードのメニューには出さず、マイクラの画面にいるときはマイクラのメニューだけを出す。
+  // （サーバー単位のサブアカウントはサーバー選択画面を使えないので、従来どおり全部出す）
+  const isMinecraftArea = pathname === `/dashboard/${guildId}/minecraft` || pathname.startsWith(`/dashboard/${guildId}/minecraft/`);
+  const separateMinecraft = !isSubAccount;
+
   const filteredGroups = groupedNavGroups
+    .filter(g => !separateMinecraft || (isMinecraftArea ? g.group === 'マイクラ' : g.group !== 'マイクラ'))
     .map(g => ({
       ...g,
       sections: g.sections
