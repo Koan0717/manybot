@@ -1,19 +1,15 @@
 /**
- * どう森BOTのトークンで Discord API を呼ぶ。
+ * どう森BOT用の Discord API 呼び出し。
  *
- * 総合操作パネルのボタン（btn_fish など）は、パネルを送信した Bot にしか届かない。
- * そのため、パネル送信は必ずどう森BOTのトークン（DOUMORI_BOT_TOKEN）で行う。
- * チャンネル・ロール一覧の取得だけは、未設定なら ManyBot のトークンで代用する。
+ * どう森BOTは ManyBot と同じトークン（同じアプリ）で動かすので、ManyBot のトークンを使う。
+ * 総合操作パネルのボタン（btn_fish など）は ManyBot と同じアプリに届き、どう森BOTのプロセスが処理する。
  */
 const API = 'https://discord.com/api/v10';
 
-const doumoriToken = () => process.env.DOUMORI_BOT_TOKEN || '';
-const anyToken = () => doumoriToken() || process.env.DISCORD_BOT_TOKEN || process.env.BOT_TOKEN || '';
-
-export const isDoumoriBotConfigured = () => !!doumoriToken();
+const botToken = () => process.env.DISCORD_BOT_TOKEN || process.env.BOT_TOKEN || '';
 
 async function getList(path: string): Promise<any[]> {
-  const token = anyToken();
+  const token = botToken();
   if (!token) return [];
   const res = await fetch(`${API}${path}`, {
     headers: { Authorization: `Bot ${token}` },
@@ -27,29 +23,19 @@ async function getList(path: string): Promise<any[]> {
 export const fetchGuildChannels = (guildId: string) => getList(`/guilds/${guildId}/channels`);
 export const fetchGuildRoles = (guildId: string) => getList(`/guilds/${guildId}/roles`);
 
-/** どう森BOTが参加しているサーバー一覧（トークン未設定なら null） */
-export async function listDoumoriGuilds(): Promise<{ id: string; name: string; icon: string | null }[] | null> {
-  const token = doumoriToken();
-  if (!token) return null;
-  const all: { id: string; name: string; icon: string | null }[] = [];
-  let after = '';
-  for (let page = 0; page < 10; page++) {
-    const res = await fetch(`${API}/users/@me/guilds?limit=200${after ? `&after=${after}` : ''}`, {
-      headers: { Authorization: `Bot ${token}` },
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error(`Discord API error: ${res.status}`);
-    const batch = await res.json();
-    all.push(...batch.map((g: any) => ({ id: String(g.id), name: g.name, icon: g.icon ?? null })));
-    if (batch.length < 200) break;
-    after = batch[batch.length - 1].id;
-  }
-  return all;
-}
+/**
+ * どう森の機能を動かすサーバー。どう森BOT本体・ManyBot と同じ環境変数 DOUMORI_GUILD_ID（カンマ区切り）で、
+ * 未設定ならどう森サーバー。
+ */
+export const doumoriGuildIds = () =>
+  (process.env.DOUMORI_GUILD_ID || '1526696870724894780')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => /^\d+$/.test(s));
 
 export async function sendChannelMessage(channelId: string, payload: any) {
-  const token = doumoriToken();
-  if (!token) return { ok: false, error: 'DOUMORI_BOT_TOKEN（どう森BOTのトークン）が設定されていません' };
+  const token = botToken();
+  if (!token) return { ok: false, error: 'DISCORD_BOT_TOKEN が設定されていません' };
 
   const res = await fetch(`${API}/channels/${channelId}/messages`, {
     method: 'POST',

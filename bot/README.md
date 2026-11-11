@@ -51,7 +51,13 @@ DATABASE_URL=postgresql://ユーザー名:パスワード@ホスト:ポート/DB
 ANONYMOUS_SALT=任意の文字列
 SYNC_GUILD_ID=同期対象のサーバーID
 PORT=8080
+# どう森BOTを同じトークンで動かすサーバーID（カンマ区切りで複数可。省略時はどう森サーバー）
+DOUMORI_GUILD_ID=どう森の機能を動かすサーバーID
 ```
+
+> **どう森BOTとの共存**: どう森BOT（別リポジトリ `doumori`）は ManyBot と同じトークンで動きます。
+> `DOUMORI_GUILD_ID` のサーバーでは、ManyBot のコマンド同期がどう森のスラッシュコマンドを消さないように残したまま同期し（`command_sync.py`）、
+> ManyBot に無いコマンド（＝どう森のコマンド）が来ても「コマンドが見つかりませんでした」と返信しません。
 
 起動（`bot/` の中で実行）:
 
@@ -143,7 +149,7 @@ JWT_SECRET=任意のランダムな秘密文字列
 
 # どう森BOT（任意。サーバー選択画面の「どう森BOT」を使う場合）
 DOUMORI_DATABASE_URL=どう森BOT本体と同じSupabaseの接続文字列
-DOUMORI_BOT_TOKEN=どう森BOTのトークン（総合操作パネルの送信・参加サーバー一覧に使用）
+# DOUMORI_GUILD_ID=どう森の機能を動かすサーバーID（カンマ区切りで複数可。未設定ならどう森サーバー）
 ```
 
 ### サーバー選択画面の独立した項目

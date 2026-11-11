@@ -29,7 +29,7 @@ export default function DoumoriLayout({ children }: { children: React.ReactNode 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [guildName, setGuildName] = useState('');
   const [isSubAccount, setIsSubAccount] = useState(false);
-  const [config, setConfig] = useState<{ db_configured: boolean; bot_configured: boolean } | null>(null);
+  const [config, setConfig] = useState<{ db_configured: boolean } | null>(null);
 
   useEffect(() => {
     fetch(`/api/guilds/${guildId}/status`)
@@ -145,21 +145,12 @@ export default function DoumoriLayout({ children }: { children: React.ReactNode 
         </aside>
 
         <main className="flex-1 p-4 md:p-8 overflow-y-auto w-full h-full">
-          {config && (!config.db_configured || !config.bot_configured) && (
+          {config && !config.db_configured && (
             <div className="max-w-5xl mx-auto mb-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-4 text-sm flex gap-3">
               <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-500" />
-              <div className="space-y-1">
-                {!config.db_configured && (
-                  <p>
-                    どう森BOTのデータベースが未設定です。ダッシュボードの環境変数 <code className="font-mono">DOUMORI_DATABASE_URL</code> を設定してください。
-                  </p>
-                )}
-                {!config.bot_configured && (
-                  <p>
-                    どう森BOTのトークンが未設定のため、総合操作パネルを送信できません。環境変数 <code className="font-mono">DOUMORI_BOT_TOKEN</code> を設定してください。
-                  </p>
-                )}
-              </div>
+              <p>
+                どう森BOTのデータベースが未設定です。ダッシュボードの環境変数 <code className="font-mono">DOUMORI_DATABASE_URL</code> を設定してください。
+              </p>
             </div>
           )}
           {children}

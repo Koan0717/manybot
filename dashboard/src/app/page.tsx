@@ -44,10 +44,8 @@ interface McOverview {
 
 interface DoumoriOverview {
   db_configured: boolean;
-  bot_configured: boolean;
-  /** どう森BOTが参加しているサーバーのID（トークン未設定なら null） */
-  guild_ids: string[] | null;
-  guild_error: string | null;
+  /** どう森の機能を動かすサーバーのID（環境変数 DOUMORI_GUILD_ID） */
+  guild_ids: string[];
 }
 
 export default function Home() {
@@ -97,10 +95,9 @@ export default function Home() {
       .finally(() => setDoumoriLoading(false));
   }, [doumoriOpen, doumoriOverview]);
 
-  // どう森BOTが参加しているサーバー（分からないときは ManyBot のサーバー一覧をそのまま出す）
+  // どう森の機能を動かすサーバー（ManyBot と同じアプリで、DOUMORI_GUILD_ID のサーバーだけで動く）
   const doumoriGuilds: { id: string; name: string; icon: string | null }[] = (() => {
-    const ids = doumoriOverview?.guild_ids;
-    if (!ids) return guilds.map((g) => ({ id: String(g.id), name: g.name, icon: g.icon ?? null }));
+    const ids = doumoriOverview?.guild_ids ?? [];
     return ids.map((id) => {
       const g = guilds.find((x) => String(x.id) === id);
       return { id, name: g?.name ?? `サーバー ${id}`, icon: g?.icon ?? null };
@@ -599,22 +596,14 @@ export default function Home() {
                 <div className="font-tech text-sm text-red-300">{doumoriError}</div>
               ) : (
                 <>
-                  {doumoriOverview && (!doumoriOverview.db_configured || !doumoriOverview.bot_configured || doumoriOverview.guild_error) && (
-                    <div className="mb-4 rounded-lg bg-amber-950/30 border border-amber-900/50 px-3 py-2.5 font-tech text-xs text-amber-300 space-y-1">
-                      {!doumoriOverview.db_configured && (
-                        <div className="flex items-start gap-2"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" /> 環境変数 DOUMORI_DATABASE_URL が未設定です（設定の読み書きができません）</div>
-                      )}
-                      {!doumoriOverview.bot_configured && (
-                        <div className="flex items-start gap-2"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" /> 環境変数 DOUMORI_BOT_TOKEN が未設定です（パネル送信ができず、サーバーは ManyBot の一覧から表示しています）</div>
-                      )}
-                      {doumoriOverview.guild_error && (
-                        <div className="flex items-start gap-2"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" /> {doumoriOverview.guild_error}</div>
-                      )}
+                  {doumoriOverview && !doumoriOverview.db_configured && (
+                    <div className="mb-4 rounded-lg bg-amber-950/30 border border-amber-900/50 px-3 py-2.5 font-tech text-xs text-amber-300 flex items-start gap-2">
+                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" /> 環境変数 DOUMORI_DATABASE_URL が未設定です（設定の読み書きができません）
                     </div>
                   )}
-                  <div className="font-tech text-[11px] text-zinc-500 mb-3">どう森BOTを使うサーバーを選んでください</div>
+                  <div className="font-tech text-[11px] text-zinc-500 mb-3">どう森の機能を動かすサーバー</div>
                   {doumoriGuilds.length === 0 ? (
-                    <div className="font-tech text-sm text-zinc-500 text-center py-4">どう森BOTが参加しているサーバーが見つかりません。</div>
+                    <div className="font-tech text-sm text-zinc-500 text-center py-4">どう森の機能を動かすサーバーが設定されていません（環境変数 DOUMORI_GUILD_ID）。</div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {doumoriGuilds.map((g) => (
