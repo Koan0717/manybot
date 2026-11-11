@@ -43,9 +43,12 @@ interface McOverview {
 }
 
 interface DoumoriOverview {
-  db_configured: boolean;
-  /** どう森の機能を動かすサーバーのID（環境変数 DOUMORI_GUILD_ID） */
-  guild_ids: string[];
+  /** どう森BOTが動くサーバー（環境変数 DOUMORI_GUILD_ID） */
+  active_guild_ids: string[];
+  /** メインダッシュボードでサーバー専用DBが登録済みのサーバー */
+  dedicated_db_guild_ids: string[];
+  /** 旧どう森DB（DOUMORI_DATABASE_URL）があるか */
+  legacy_db_configured: boolean;
 }
 
 export default function Home() {
@@ -95,14 +98,19 @@ export default function Home() {
       .finally(() => setDoumoriLoading(false));
   }, [doumoriOpen, doumoriOverview]);
 
-  // どう森の機能を動かすサーバー（ManyBot と同じアプリで、DOUMORI_GUILD_ID のサーバーだけで動く）
-  const doumoriGuilds: { id: string; name: string; icon: string | null }[] = (() => {
-    const ids = doumoriOverview?.guild_ids ?? [];
-    return ids.map((id) => {
-      const g = guilds.find((x) => String(x.id) === id);
-      return { id, name: g?.name ?? `サーバー ${id}`, icon: g?.icon ?? null };
-    });
-  })();
+  // サーバー一覧（サークルと同じく ManyBot が参加している全サーバー）。どう森BOTが動くサーバーを先頭に
+  const doumoriGuilds = guilds
+    .map((g) => {
+      const id = String(g.id);
+      return {
+        id,
+        name: g.name as string,
+        icon: (g.icon ?? null) as string | null,
+        active: !!doumoriOverview?.active_guild_ids.includes(id),
+        dedicatedDb: !!doumoriOverview?.dedicated_db_guild_ids.includes(id),
+      };
+    })
+    .sort((a, b) => Number(b.active) - Number(a.active));
 
   useEffect(() => {
     fetch('/api/system/status')
@@ -596,14 +604,11 @@ export default function Home() {
                 <div className="font-tech text-sm text-red-300">{doumoriError}</div>
               ) : (
                 <>
-                  {doumoriOverview && !doumoriOverview.db_configured && (
-                    <div className="mb-4 rounded-lg bg-amber-950/30 border border-amber-900/50 px-3 py-2.5 font-tech text-xs text-amber-300 flex items-start gap-2">
-                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" /> 環境変数 DOUMORI_DATABASE_URL が未設定です（設定の読み書きができません）
-                    </div>
-                  )}
-                  <div className="font-tech text-[11px] text-zinc-500 mb-3">どう森の機能を動かすサーバー</div>
+                  <div className="font-tech text-[11px] text-zinc-500 mb-3">
+                    どう森の設定をするサーバーを選んでください（メインダッシュボードの「データベース設定」で登録したDBを使います）
+                  </div>
                   {doumoriGuilds.length === 0 ? (
-                    <div className="font-tech text-sm text-zinc-500 text-center py-4">どう森の機能を動かすサーバーが設定されていません（環境変数 DOUMORI_GUILD_ID）。</div>
+                    <div className="font-tech text-sm text-zinc-500 text-center py-4">参加しているサーバーが見つかりません。</div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {doumoriGuilds.map((g) => (
@@ -617,7 +622,19 @@ export default function Home() {
                           ) : (
                             <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold flex-shrink-0">{g.name.charAt(0)}</div>
                           )}
-                          <span className="font-mecha text-sm font-bold text-zinc-200 group-hover:text-white truncate flex-1">{g.name}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-mecha text-sm font-bold text-zinc-200 group-hover:text-white truncate">{g.name}</div>
+                            <div className="flex flex-wrap gap-1.5 mt-0.5 font-tech text-[10px]">
+                              {g.active && <span className="text-lime-400">● BOT稼働中</span>}
+                              {g.dedicatedDb ? (
+                                <span className="text-zinc-400">専用DB</span>
+                              ) : doumoriOverview?.legacy_db_configured ? (
+                                <span className="text-zinc-500">旧どう森DB</span>
+                              ) : (
+                                <span className="text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> DB未設定</span>
+                              )}
+                            </div>
+                          </div>
                           <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-lime-400 flex-shrink-0" />
                         </button>
                       ))}

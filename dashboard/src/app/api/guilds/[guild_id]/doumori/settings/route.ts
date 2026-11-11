@@ -10,7 +10,7 @@ type Ctx = { params: { guild_id: string } };
 export async function GET(_request: Request, { params }: Ctx) {
   try {
     const guildId = params.guild_id;
-    const pool = getDoumoriPool();
+    const { pool } = await getDoumoriPool(guildId);
     const settingsRows = await pool
       .query('SELECT setting_key, setting_value FROM doumori_settings WHERE guild_id = $1', [guildId])
       .then((res) => res.rows)
@@ -41,7 +41,7 @@ export async function GET(_request: Request, { params }: Ctx) {
 export async function POST(request: Request, { params }: Ctx) {
   try {
     const guildId = params.guild_id;
-    const pool = getDoumoriPool();
+    const { pool } = await getDoumoriPool(guildId);
     const { settings } = await request.json();
     if (!settings || typeof settings !== 'object') {
       return NextResponse.json({ error: '設定データが不正です' }, { status: 400 });

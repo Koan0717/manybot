@@ -7,7 +7,7 @@ type Ctx = { params: { guild_id: string } };
 
 export async function GET(_request: Request, { params }: Ctx) {
   try {
-    const pool = getDoumoriPool();
+    const { pool } = await getDoumoriPool(params.guild_id);
     const mileLogs = await pool
       .query(
         `SELECT id, user_id, admin_id, amount, action, reason, created_at
@@ -27,7 +27,7 @@ export async function GET(_request: Request, { params }: Ctx) {
 export async function POST(request: Request, { params }: Ctx) {
   try {
     const guildId = params.guild_id;
-    const pool = getDoumoriPool();
+    const { pool } = await getDoumoriPool(guildId);
     const { user_id, amount, op_type, reason } = await request.json();
     const numericAmount = Math.abs(parseInt(amount, 10) || 0);
 

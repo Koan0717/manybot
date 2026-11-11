@@ -8,7 +8,7 @@ type Ctx = { params: { guild_id: string } };
 export async function GET(_request: Request, { params }: Ctx) {
   try {
     const guildId = params.guild_id;
-    const pool = getDoumoriPool();
+    const { pool } = await getDoumoriPool(guildId);
     let missionsRes = await pool
       .query(`SELECT * FROM doumori_missions_master WHERE guild_id = $1 ORDER BY is_active DESC, id ASC`, [guildId])
       .catch(() => ({ rows: [] as any[] }));
@@ -67,7 +67,7 @@ export async function GET(_request: Request, { params }: Ctx) {
 export async function POST(request: Request, { params }: Ctx) {
   try {
     const guildId = params.guild_id;
-    const pool = getDoumoriPool();
+    const { pool } = await getDoumoriPool(guildId);
     const { action, mission } = await request.json();
 
     if (action === 'create' && mission) {

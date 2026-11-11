@@ -15,6 +15,7 @@ import {
   Gamepad2,
   ChevronLeft,
   AlertTriangle,
+  Database,
 } from 'lucide-react';
 
 /**
@@ -29,7 +30,8 @@ export default function DoumoriLayout({ children }: { children: React.ReactNode 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [guildName, setGuildName] = useState('');
   const [isSubAccount, setIsSubAccount] = useState(false);
-  const [config, setConfig] = useState<{ db_configured: boolean } | null>(null);
+  const [config, setConfig] = useState<{ db_source: 'guild' | 'legacy' | null; bot_active: boolean } | null>(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
 
   useEffect(() => {
     fetch(`/api/guilds/${guildId}/status`)
@@ -43,7 +45,8 @@ export default function DoumoriLayout({ children }: { children: React.ReactNode 
     fetch(`/api/guilds/${guildId}/doumori/status`)
       .then((r) => (r.ok ? r.json() : null))
       .then(setConfig)
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setConfigLoaded(true));
   }, [guildId]);
 
   const base = `/doumori/${guildId}`;
@@ -63,6 +66,38 @@ export default function DoumoriLayout({ children }: { children: React.ReactNode 
     router.push('/login');
     router.refresh();
   };
+
+  // メインダッシュボードと同じく、DBが無いサーバーでは初期設定（データベース設定）を先にしてもらう
+  if (configLoaded && config && config.db_source === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-leaf-50 text-leaf-900 p-6">
+        <div className="max-w-lg w-full bg-white border border-leaf-200 rounded-2xl shadow-sm p-8 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-leaf-100 text-leaf-600 flex items-center justify-center mx-auto mb-5">
+            <Database className="w-7 h-7" />
+          </div>
+          <h1 className="text-xl font-black mb-3">初期設定が必要です</h1>
+          <p className="text-sm text-leaf-600 leading-relaxed mb-6">
+            {guildName ? <strong>{guildName}</strong> : 'このサーバー'} にはまだデータベースが登録されていません。<br />
+            メインダッシュボードの「データベース設定」で、このサーバー専用のデータベースを登録してください。登録すると、どう森BOTもそのデータベースを使います。
+          </p>
+          <div className="flex flex-col gap-2">
+            <Link
+              href={`/dashboard/${guildId}/database`}
+              className="inline-flex items-center justify-center gap-2 bg-leaf-600 hover:bg-leaf-700 text-white font-bold py-3 px-6 rounded-xl transition-colors"
+            >
+              <Database className="w-4 h-4" />
+              データベース設定へ進む
+            </Link>
+            {!isSubAccount && (
+              <Link href="/" className="text-xs text-leaf-500 hover:text-leaf-800 py-2">
+                サーバー選択に戻る
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col md:flex-row h-screen min-h-screen bg-leaf-50 text-leaf-900 overflow-hidden">
@@ -110,6 +145,21 @@ export default function DoumoriLayout({ children }: { children: React.ReactNode 
             </button>
           </div>
 
+          {config?.db_source && (
+            <div className="mb-4 flex-shrink-0 space-y-1.5">
+              <div className="flex items-center gap-2 text-[11px] text-leaf-600 bg-leaf-50 border border-leaf-200 rounded-lg px-2.5 py-1.5">
+                <Database className="w-3.5 h-3.5 flex-shrink-0" />
+                {config.db_source === 'guild' ? 'サーバー専用DBを使用中' : '旧どう森DB（共有）を使用中'}
+              </div>
+              {!config.bot_active && (
+                <div className="flex items-start gap-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+                  このサーバーではどう森BOTが動いていません（DOUMORI_GUILD_ID に未登録）
+                </div>
+              )}
+            </div>
+          )}
+
           <nav className="flex-1 space-y-1 overflow-y-auto">
             {navItems.map((item) => {
               const isActive = pathname === item.path;
@@ -145,15 +195,7 @@ export default function DoumoriLayout({ children }: { children: React.ReactNode 
         </aside>
 
         <main className="flex-1 p-4 md:p-8 overflow-y-auto w-full h-full">
-          {config && !config.db_configured && (
-            <div className="max-w-5xl mx-auto mb-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-4 text-sm flex gap-3">
-              <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-500" />
-              <p>
-                どう森BOTのデータベースが未設定です。ダッシュボードの環境変数 <code className="font-mono">DOUMORI_DATABASE_URL</code> を設定してください。
-              </p>
-            </div>
-          )}
-          {children}
+          {configLoaded ? children : null}
         </main>
       </div>
     </div>
