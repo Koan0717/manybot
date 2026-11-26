@@ -246,7 +246,7 @@ ZERO_TENGETSU = {
             {"name": "運営会議", "type": "voice"},
         ]},
         {"name": "📂 ── ログ ──", "access": {"staff": WRITE}, "channels": [
-            {"name": "📥｜入退室ログ", "logs": ["member_join_leave"]},
+            {"name": "📥｜入退室ログ", "logs": ["member_join_leave", "invite_create"]},
             {"name": "✏️｜メッセージログ", "logs": ["message_edit", "message_delete"]},
             {"name": "🔊｜vcログ", "logs": ["vc_join_leave"]},
             {"name": "🧾｜通貨ログ", "logs": ["currency", "role_salary", "member_transfer"]},
@@ -476,7 +476,7 @@ DEPPA_SUSHI = {
             {"name": "運営会議", "type": "voice"},
         ]},
         {"name": "📂 ── ログ ──", "access": {"staff": WRITE}, "channels": [
-            {"name": "📥｜入退室ログ", "logs": ["member_join_leave"]},
+            {"name": "📥｜入退室ログ", "logs": ["member_join_leave", "invite_create"]},
             {"name": "✏️｜メッセージログ", "logs": ["message_edit", "message_delete"]},
             {"name": "🔊｜vcログ", "logs": ["vc_join_leave"]},
             {"name": "🧾｜通貨ログ", "logs": ["currency", "role_salary", "member_transfer"]},
@@ -635,7 +635,7 @@ def _custom_categories(has) -> list:
             ch("運営会議", type="voice"),
         ]},
         "logs": {"name": "📂 ── ログ ──", "access": {"staff": WRITE}, "channels": [
-            ch("📥｜入退室ログ", logs=["member_join_leave"]),
+            ch("📥｜入退室ログ", logs=["member_join_leave", "invite_create"]),
             ch("✏️｜メッセージログ", logs=["message_edit", "message_delete"]),
             ch("🔊｜vcログ", logs=["vc_join_leave"]),
             ch("🧾｜通貨ログ", logs=["currency", "role_salary", "member_transfer"]),
