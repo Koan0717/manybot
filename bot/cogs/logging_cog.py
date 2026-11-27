@@ -494,6 +494,76 @@ class Logging(commands.Cog):
             self.bot.invite_cache[guild.id] = {}
         self.bot.invite_cache[guild.id][invite.code] = invite.uses
 
+        try:
+            await self.send_invite_create_log(invite)
+        except Exception as e:
+            print(f"[Invite Log] Failed to send invite create log for {invite.code}: {e}")
+
+    async def send_invite_create_log(self, invite):
+        """招待リンクが作成されたときに、作成者と設定内容をログに送る"""
+        guild = invite.guild
+        if not isinstance(guild, discord.Guild):
+            return
+
+        creator_val = "不明"
+        if invite.inviter and invite.inviter.id == self.bot.user.id:
+            # 招待リンクパネル経由はBot名義で作成される。発行者の記録はイベント受信と
+            # ほぼ同時に保存されるため、少し待ってから記録を引く
+            issuer_id = None
+            for _ in range(5):
+                try:
+                    issuer_id = await database.get_invite_issuer(guild.id, invite.code)
+                except Exception:
+                    issuer_id = None
+                if issuer_id:
+                    break
+                await asyncio.sleep(1)
+            if issuer_id:
+                member = guild.get_member(issuer_id)
+                who = f"{member.mention} ({member.name})" if member else f"<@{issuer_id}> (ID: {issuer_id})"
+                creator_val = f"{who}\n（招待リンクパネルから発行）"
+            else:
+                creator_val = "招待リンクパネル（発行者不明）"
+        elif invite.inviter:
+            creator_val = f"{invite.inviter.mention} ({invite.inviter.name})"
+
+        max_uses = invite.max_uses or 0
+        max_age = invite.max_age or 0
+        uses_text = f"{max_uses}回" if max_uses > 0 else "無制限"
+        if max_age <= 0:
+            age_text = "無期限"
+        elif max_age < 3600:
+            age_text = f"{max_age // 60}分"
+        elif max_age < 86400:
+            age_text = f"{max_age // 3600}時間"
+        else:
+            age_text = f"{max_age // 86400}日"
+
+        embed = discord.Embed(
+            description=f"招待リンクが作成されました\n**{invite.url}**",
+            color=discord.Color.blurple()
+        )
+        if invite.inviter and invite.inviter.id != self.bot.user.id:
+            embed.set_author(name=invite.inviter.name, icon_url=invite.inviter.display_avatar.url)
+        embed.add_field(name="作成者", value=creator_val, inline=False)
+        channel = invite.channel
+        channel_val = getattr(channel, "mention", None) or (f"#{channel.name}" if getattr(channel, "name", None) else "不明")
+        embed.add_field(name="チャンネル", value=channel_val, inline=True)
+        embed.add_field(name="有効期限", value=age_text, inline=True)
+        embed.add_field(name="使用回数上限", value=uses_text, inline=True)
+        if invite.temporary:
+            embed.add_field(name="メンバーシップ", value="一時的メンバー", inline=False)
+
+        now = datetime.datetime.now(config.JST)
+        embed.set_footer(text=f"🔗 {guild.name} • {self.format_footer_time(now)}")
+        embed.timestamp = now
+
+        # 専用のログ先が未設定・OFFなら、入退室ログに送る
+        log_type = "invite_create"
+        if not await database.get_log_channel(guild.id, "invite_create"):
+            log_type = "member_join_leave"
+        await config.send_log(guild, log_type, embed)
+
     @commands.Cog.listener()
     async def on_invite_delete(self, invite):
         guild = invite.guild
