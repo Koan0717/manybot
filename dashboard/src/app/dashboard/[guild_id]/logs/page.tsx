@@ -15,6 +15,7 @@ interface DiscordChannel {
 
 const LOG_TYPES = [
   { id: 'member_join_leave', label: 'メンバーの参加・退出・キック・BAN' },
+  { id: 'invite_create', label: '招待リンクの作成（作成者・設定。未設定・OFFなら「メンバーの参加・退出」に送信）' },
   { id: 'message_edit', label: 'メッセージの編集' },
   { id: 'message_delete', label: 'メッセージの削除' },
   { id: 'vc_join_leave', label: 'VCの入退室' },
