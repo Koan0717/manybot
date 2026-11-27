@@ -28,6 +28,7 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
   const [roles, setRoles] = useState<any[]>([]);
   const [members, setMembers] = useState<MemberOption[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
+  const [membersError, setMembersError] = useState<string | null>(null);
   const [approvedRefreshKey, setApprovedRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -65,9 +66,15 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
 
     // メンバー一覧は大きなサーバーだと時間がかかるので、ページの表示を待たせない
     fetch(`/api/guilds/${guildId}/member-list`)
-      .then(res => res.ok ? res.json() : { members: [] })
-      .then(data => setMembers(data.members || []))
-      .catch(err => console.error(err))
+      .then(async res => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'メンバー一覧を取得できませんでした');
+        setMembers(data.members || []);
+      })
+      .catch(err => {
+        console.error(err);
+        setMembersError(err?.message || 'メンバー一覧を取得できませんでした');
+      })
       .finally(() => setMembersLoading(false));
   }, [guildId]);
 
@@ -177,6 +184,7 @@ export default function AntigriefSettingsPage({ params }: { params: { guild_id: 
                 onChange={(ids) => setSettings({...settings, bot_guard_allowed_user_ids: ids})}
                 members={members}
                 loading={membersLoading}
+                error={membersError}
               />
             </div>
 

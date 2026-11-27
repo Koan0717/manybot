@@ -20,7 +20,12 @@ export async function GET(request: Request, { params }: { params: { guild_id: st
                 COALESCE(vc_level, 1) AS vc_level, COALESCE(tc_level, 1) AS tc_level
            FROM users WHERE guild_id = $1`,
         [guildId]
-      ),
+      )
+        // 残高が読めなくてもメンバー一覧（BOT導入許可の選択など）は出せるようにする
+        .catch((e) => {
+          console.error('member-list users query failed:', e);
+          return { rows: [] as any[] };
+        }),
       pool
         .query("SELECT setting_value FROM bot_settings WHERE guild_id = $1 AND setting_key = 'CURRENCY_NAME'", [guildId])
         .catch(() => ({ rows: [] as any[] })),

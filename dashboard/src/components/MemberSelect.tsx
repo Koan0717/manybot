@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 
 export interface MemberOption {
@@ -14,29 +14,38 @@ interface MemberSelectProps {
   onChange: (ids: string[]) => void;
   members: MemberOption[];
   loading?: boolean;
+  error?: string | null;
   placeholder?: string;
 }
 
 // 候補の表示件数（大きなサーバーでも一覧が重くならないように絞る）
-const MAX_RESULTS = 20;
+const MAX_RESULTS = 50;
 
 /** サーバーメンバーを検索して複数選択する */
-export default function MemberSelect({ value, onChange, members, loading = false, placeholder = '名前・IDで検索...' }: MemberSelectProps) {
+export default function MemberSelect({ value, onChange, members, loading = false, error = null, placeholder = '名前・IDで検索...' }: MemberSelectProps) {
   const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
+  // 何も入力していなくても、入力欄を選んだ時点で候補を出す（名前順）
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return members
-      .filter(m => !value.includes(m.id))
-      .filter(m => m.display_name.toLowerCase().includes(q) || m.username.toLowerCase().includes(q) || m.id === q)
-      .slice(0, MAX_RESULTS);
+    const candidates = members.filter(m => !value.includes(m.id));
+    const matched = q
+      ? candidates.filter(m => m.display_name.toLowerCase().includes(q) || m.username.toLowerCase().includes(q) || m.id === q)
+      : [...candidates].sort((a, b) => a.display_name.localeCompare(b.display_name, 'ja'));
+    return matched.slice(0, MAX_RESULTS);
   }, [members, query, value]);
 
   const memberMap = useMemo(() => new Map(members.map(m => [m.id, m])), [members]);
 
   return (
-    <div>
+    <div
+      ref={rootRef}
+      onBlur={e => {
+        if (!rootRef.current?.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
           {value.map(id => {
@@ -46,10 +55,10 @@ export default function MemberSelect({ value, onChange, members, loading = false
                 key={id}
                 title={`ID: ${id}`}
                 className={`text-xs px-2.5 py-1 rounded border font-bold flex items-center gap-1 ${
-                  member || loading ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-amber-950/60 border-amber-800 text-amber-300'
+                  member || loading || error ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-amber-950/60 border-amber-800 text-amber-300'
                 }`}
               >
-                {member ? member.display_name : loading ? id : `⚠ サーバーにいないユーザー (${id})`}
+                {member ? member.display_name : loading || error ? id : `⚠ サーバーにいないユーザー (${id})`}
                 <button
                   type="button"
                   aria-label="選択を解除"
@@ -69,17 +78,28 @@ export default function MemberSelect({ value, onChange, members, loading = false
         <input
           type="text"
           value={query}
-          onChange={e => setQuery(e.target.value)}
+          onChange={e => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={e => {
+            if (e.key === 'Escape') setOpen(false);
+          }}
           placeholder={loading ? 'メンバー読み込み中...' : placeholder}
           disabled={loading}
           className="w-full bg-zinc-900 border border-zinc-700 rounded-lg pl-9 pr-3 py-2.5 text-[16px] text-white focus:outline-none focus:border-red-500 transition-colors placeholder:text-zinc-500 disabled:opacity-50"
         />
       </div>
 
-      {query.trim() && (
+      {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+
+      {open && !loading && !error && (
         <div className="mt-1 max-h-64 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded-lg p-1 space-y-0.5">
           {results.length === 0 ? (
-            <p className="px-3 py-3 text-sm text-zinc-500">一致するメンバーが見つかりません</p>
+            <p className="px-3 py-3 text-sm text-zinc-500">
+              {members.length === 0 ? 'メンバーを取得できませんでした' : query.trim() ? '一致するメンバーが見つかりません' : '選べるメンバーがいません'}
+            </p>
           ) : (
             results.map(m => (
               <button
@@ -89,6 +109,7 @@ export default function MemberSelect({ value, onChange, members, loading = false
                   onChange([...value, m.id]);
                   setQuery('');
                 }}
+                onMouseDown={e => e.preventDefault()}
                 className="w-full flex items-center gap-2.5 px-3 py-2 rounded text-left hover:bg-zinc-800"
               >
                 {m.avatar_url && <img src={m.avatar_url} alt="" className="w-6 h-6 rounded-full flex-shrink-0" />}
